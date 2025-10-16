@@ -1,0 +1,19 @@
+# Node / web
+node_modules/
+dist/
+build/
+.next/
+coverage/
+
+# Java / Maven
+target/
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+
+# Logs & env
+*.log
+logs/
+.env*
