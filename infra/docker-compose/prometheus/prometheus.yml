@@ -1,22 +1,32 @@
-﻿global:
+global:
   scrape_interval: 15s
-  evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'prometheus'
+  - job_name: prometheus
     static_configs:
       - targets: ['localhost:9090']
 
-  - job_name: 'reports-service'
-    metrics_path: '/actuator/prometheus'
+  - job_name: api-gateway
+    metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['host.docker.internal:8084']
-        labels:
-          service: 'reports-service'
-          
-  - job_name: 'users-service'
-    metrics_path: '/actuator/prometheus'
+      - targets: ['host.docker.internal:19080']
+
+  - job_name: users-service
+    metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['host.docker.internal:8081']
-        labels:
-          service: 'users-service'
+      - targets: ['host.docker.internal:19081']
+
+  - job_name: transactions-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['host.docker.internal:19082']
+
+  - job_name: alerts-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['host.docker.internal:19083']
+
+  - job_name: reports-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['host.docker.internal:19084']

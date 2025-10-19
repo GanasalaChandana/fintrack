@@ -1,3 +1,4 @@
+
 -- Create transactions table
 CREATE TABLE IF NOT EXISTS transactions.transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

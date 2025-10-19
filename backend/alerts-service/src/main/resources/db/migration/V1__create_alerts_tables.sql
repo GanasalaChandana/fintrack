@@ -1,3 +1,6 @@
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE SCHEMA IF NOT EXISTS alerts;
 
 -- Alert Rules Table
