@@ -8,6 +8,3 @@
       ddl-auto: create-drop
   flyway:
     enabled: false
-  redis:
-    host: ${SPRING_REDIS_HOST:localhost}
-    port: ${SPRING_REDIS_PORT:6379}

@@ -6,8 +6,14 @@
   jpa:
     hibernate:
       ddl-auto: create-drop
+    show-sql: false
   flyway:
     enabled: false
   redis:
     host: ${SPRING_REDIS_HOST:localhost}
     port: ${SPRING_REDIS_PORT:6379}
+
+logging:
+  level:
+    org.springframework: WARN
+    com.fintrack: INFO
