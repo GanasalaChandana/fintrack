@@ -1,0 +1,88 @@
+﻿services:
+  # PostgreSQL Database
+  - type: pserv
+    name: fintrack-postgres
+    env: docker
+    plan: free
+    dockerfilePath: ./infra/postgres/Dockerfile
+
+  # API Gateway
+  - type: web
+    name: fintrack-api-gateway
+    env: docker
+    dockerfilePath: ./backend/api-gateway/Dockerfile
+    dockerContext: ./backend/api-gateway
+    plan: free
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fintrack-postgres
+          property: connectionString
+
+  # Users Service
+  - type: web
+    name: fintrack-users-service
+    env: docker
+    dockerfilePath: ./backend/users-service/Dockerfile
+    dockerContext: ./backend/users-service
+    plan: free
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fintrack-postgres
+          property: connectionString
+
+  # Transactions Service
+  - type: web
+    name: fintrack-transactions-service
+    env: docker
+    dockerfilePath: ./backend/transactions-service/Dockerfile
+    dockerContext: ./backend/transactions-service
+    plan: free
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fintrack-postgres
+          property: connectionString
+
+  # Alerts Service
+  - type: web
+    name: fintrack-alerts-service
+    env: docker
+    dockerfilePath: ./backend/alerts-service/Dockerfile
+    dockerContext: ./backend/alerts-service
+    plan: free
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fintrack-postgres
+          property: connectionString
+
+  # Reports Service
+  - type: web
+    name: fintrack-reports-service
+    env: docker
+    dockerfilePath: ./backend/reports-service/Dockerfile
+    dockerContext: ./backend/reports-service
+    plan: free
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fintrack-postgres
+          property: connectionString
+
+databases:
+  - name: fintrack-postgres
+    databaseName: fintrack
+    user: fintrack_user
+    plan: free
