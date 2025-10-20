@@ -4,13 +4,12 @@
 FROM maven:3.9.9-eclipse-temurin-17 AS build
 WORKDIR /workspace
 
-# Copy pom.xml
-COPY backend/transactions-service/pom.xml ./pom.xml
-RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline -B
+# Context is backend/transactions-service, so use local paths:
+COPY pom.xml ./pom.xml
+RUN --mount=type=cache,target=/root/.m2 mvn -q -B dependency:go-offline
 
-# Copy source code
-COPY backend/transactions-service/src ./src
-RUN --mount=type=cache,target=/root/.m2 mvn package -DskipTests -B
+COPY src ./src
+RUN --mount=type=cache,target=/root/.m2 mvn -q -B -DskipTests package
 
 ########## RUNTIME ##########
 FROM eclipse-temurin:17-jre-jammy
