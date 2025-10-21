@@ -1,89 +1,82 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
-import { Upload, FileText, CheckCircle, XCircle } from 'lucide-react';
 
-export default function UploadPage() {
+export default function Upload() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [message, setMessage] = useState('');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
-      setResult(null);
+      setMessage('');
     }
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file) {
+      setMessage('Please select a file first');
+      return;
+    }
 
     setUploading(true);
-    setResult(null);
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('userId', '123e4567-e89b-12d3-a456-426614174000'); // Replace with actual user ID
+    setMessage('');
 
     try {
-      const response = await fetch('http://localhost:8082/api/transactions/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setResult({
-          success: true,
-          message: `Successfully uploaded ${data.processedCount || 0} transactions!`,
-        });
-        setFile(null);
-      } else {
-        setResult({
-          success: false,
-          message: data.message || 'Upload failed',
-        });
-      }
+      // TODO: Implement actual file upload to your backend
+      // const formData = new FormData();
+      // formData.append('file', file);
+      // const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload`, {
+      //   method: 'POST',
+      //   body: formData
+      // });
+      
+      // Simulated upload
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      setMessage('✅ File uploaded successfully! (Demo mode)');
+      setFile(null);
     } catch (error) {
-      setResult({
-        success: false,
-        message: 'Network error. Please ensure the backend is running.',
-      });
+      setMessage('❌ Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
   };
 
+  const downloadSample = () => {
+    const csv = 'date,description,amount,category\n2025-10-01,Coffee Shop,-4.50,Food\n2025-10-02,Grocery Store,-45.20,Food\n2025-10-03,Salary,2500.00,Income';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sample_transactions.csv';
+    a.click();
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Upload Transactions</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">Upload Transactions</h1>
           <p className="text-gray-600">Upload a CSV file containing your transaction data</p>
         </div>
 
         {/* Upload Card */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
+        <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
           {/* Drag and Drop Area */}
-          <div
-            className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
-              file
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'
-            }`}
-          >
-            <Upload className="mx-auto mb-4 text-gray-400" size={48} />
-
-            {!file ? (
-              <>
-                <label
-                  htmlFor="file-upload"
-                  className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium"
-                >
+          <div className="border-3 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-blue-500 transition-colors mb-6">
+            <div className="flex flex-col items-center">
+              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </div>
+              <label htmlFor="file-upload" className="cursor-pointer">
+                <span className="text-lg font-semibold text-blue-600 hover:text-blue-700">
                   Choose a file
-                </label>
+                </span>
+                <span className="text-gray-600"> or drag and drop</span>
                 <input
                   id="file-upload"
                   type="file"
@@ -91,91 +84,79 @@ export default function UploadPage() {
                   onChange={handleFileChange}
                   className="hidden"
                 />
-                <p className="text-gray-500 mt-2">or drag and drop</p>
-                <p className="text-sm text-gray-400 mt-1">CSV files only</p>
-              </>
-            ) : (
-              <div className="flex items-center justify-center gap-3">
-                <FileText className="text-blue-600" size={24} />
-                <div className="text-left">
-                  <p className="font-medium text-gray-900">{file.name}</p>
-                  <p className="text-sm text-gray-500">
-                    {(file.size / 1024).toFixed(2)} KB
-                  </p>
+              </label>
+              <p className="text-sm text-gray-500 mt-2">CSV files only</p>
+              
+              {file && (
+                <div className="mt-4 px-6 py-3 bg-blue-50 rounded-lg">
+                  <p className="text-sm font-medium text-blue-900">Selected: {file.name}</p>
                 </div>
-                <button
-                  onClick={() => setFile(null)}
-                  className="ml-4 text-red-600 hover:text-red-700"
-                >
-                  <XCircle size={20} />
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* CSV Format Info */}
-          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="font-semibold text-blue-900 mb-2">CSV Format Requirements:</h3>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li>• Headers: date, description, amount, category (optional)</li>
-              <li>• Date format: YYYY-MM-DD</li>
-              <li>• Amount: Negative for expenses, positive for income</li>
-              <li>• Example: 2025-10-01,Coffee Shop,-4.50,Food</li>
-            </ul>
+              )}
+            </div>
           </div>
 
           {/* Upload Button */}
           <button
             onClick={handleUpload}
             disabled={!file || uploading}
-            className={`w-full mt-6 py-3 px-4 rounded-lg font-medium transition-colors ${
-              !file || uploading
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
+            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-xl font-semibold text-lg hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
           >
             {uploading ? 'Uploading...' : 'Upload Transactions'}
           </button>
 
-          {/* Result Message */}
-          {result && (
-            <div
-              className={`mt-4 p-4 rounded-lg flex items-center gap-3 ${
-                result.success
-                  ? 'bg-green-50 text-green-800 border border-green-200'
-                  : 'bg-red-50 text-red-800 border border-red-200'
-              }`}
-            >
-              {result.success ? (
-                <CheckCircle className="flex-shrink-0" size={20} />
-              ) : (
-                <XCircle className="flex-shrink-0" size={20} />
-              )}
-              <p>{result.message}</p>
+          {/* Message */}
+          {message && (
+            <div className={`mt-4 p-4 rounded-lg ${message.includes('✅') ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+              <p className="font-medium">{message}</p>
             </div>
           )}
         </div>
 
-        {/* Sample CSV Download */}
-        <div className="mt-6 text-center">
+        {/* Instructions */}
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">CSV Format Requirements</h2>
+          
+          <div className="space-y-4 mb-6">
+            <div className="flex items-start">
+              <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-bold mr-3 mt-0.5">1</div>
+              <div>
+                <p className="font-semibold text-gray-900">Headers Required</p>
+                <p className="text-gray-600">date, description, amount, category (optional)</p>
+              </div>
+            </div>
+            
+            <div className="flex items-start">
+              <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-bold mr-3 mt-0.5">2</div>
+              <div>
+                <p className="font-semibold text-gray-900">Date Format</p>
+                <p className="text-gray-600">YYYY-MM-DD (e.g., 2025-10-01)</p>
+              </div>
+            </div>
+            
+            <div className="flex items-start">
+              <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-bold mr-3 mt-0.5">3</div>
+              <div>
+                <p className="font-semibold text-gray-900">Amount Format</p>
+                <p className="text-gray-600">Negative for expenses, positive for income (e.g., -4.50 or 2500.00)</p>
+              </div>
+            </div>
+            
+            <div className="flex items-start">
+              <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-bold mr-3 mt-0.5">4</div>
+              <div>
+                <p className="font-semibold text-gray-900">Example Row</p>
+                <p className="text-gray-600 font-mono text-sm bg-gray-100 p-2 rounded mt-1">
+                  2025-10-01,Coffee Shop,-4.50,Food
+                </p>
+              </div>
+            </div>
+          </div>
+
           <button
-            onClick={() => {
-              const csv = `date,description,amount,category
-2025-10-01,Coffee Shop,-4.50,Food
-2025-10-01,Grocery Store,-45.00,Food
-2025-10-02,Salary,3000.00,Income
-2025-10-02,Gas Station,-35.00,Transport`;
-              
-              const blob = new Blob([csv], { type: 'text/csv' });
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = 'sample_transactions.csv';
-              a.click();
-            }}
-            className="text-blue-600 hover:text-blue-700 font-medium"
+            onClick={downloadSample}
+            className="w-full bg-white border-2 border-blue-600 text-blue-600 py-3 rounded-xl font-semibold hover:bg-blue-50 transition-colors"
           >
-            Download Sample CSV
+            📥 Download Sample CSV
           </button>
         </div>
       </div>
