@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   User,
@@ -62,8 +62,8 @@ interface Category {
 const isTab = (v: string | null): v is TabKey =>
   v === 'profile' || v === 'security' || v === 'preferences' || v === 'categories' || v === 'data';
 
-/* ===================== Component ===================== */
-const ProfileSettings: React.FC = () => {
+/* ===================== Main Content Component ===================== */
+const ProfileSettingsContent: React.FC = () => {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -527,6 +527,24 @@ const ProfileSettings: React.FC = () => {
         )}
       </div>
     </div>
+  );
+};
+
+/* ===================== Main Page Component with Suspense ===================== */
+const ProfileSettings: React.FC = () => {
+  return (
+    <Suspense 
+      fallback={
+        <div className="min-h-screen bg-gray-50 p-6">
+          <div className="max-w-6xl mx-auto">
+            <div className="bg-white rounded-lg shadow-sm mb-6 h-16 animate-pulse" />
+            <div className="bg-white rounded-lg shadow-sm h-[60vh] animate-pulse" />
+          </div>
+        </div>
+      }
+    >
+      <ProfileSettingsContent />
+    </Suspense>
   );
 };
 
