@@ -1,25 +1,29 @@
-﻿import "./globals.css";
+﻿import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+// @ts-ignore - allow CSS side-effect import without type declarations
+import "@/app/globals.css";
+import Navigation from "@/components/Navigation";
 
-export const metadata = {
-  title: "FinTrack",
-  description: "Intelligent financial management",
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "FinTrack - Personal Finance Tracker",
+  description:
+    "Track your expenses, manage budgets, and visualize your financial health",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-50">
-        <header className="bg-white border-b">
-          <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <a href="/" className="font-bold text-xl">FinTrack</a>
-            <div className="flex items-center gap-4 text-sm">
-              <a href="/dashboard" className="hover:text-blue-600">Dashboard</a>
-              <a href="/upload" className="hover:text-blue-600">Upload</a>
-              <a href="/reports" className="hover:text-blue-600">Reports</a>
-            </div>
-          </nav>
-        </header>
+      <body className={inter.className}>
+        <Navigation />
         <main>{children}</main>
+
+        {/* Optional: a portal target if you prefer rendering overlays via portal */}
+        <div id="overlay-root" />
       </body>
     </html>
   );

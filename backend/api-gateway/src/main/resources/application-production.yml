@@ -1,4 +1,4 @@
-
+﻿
 spring:
   cloud:
     gateway:
@@ -19,3 +19,4 @@ spring:
             allowedHeaders: "*"
             allowCredentials: true
             maxAge: 3600
+

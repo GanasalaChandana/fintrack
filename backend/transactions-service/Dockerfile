@@ -1,19 +1,16 @@
-﻿# syntax=docker/dockerfile:1.7
-
-########## BUILD ##########
-FROM maven:3.9.9-eclipse-temurin-17 AS build
+﻿FROM maven:3.9.10-eclipse-temurin-21 AS build
 WORKDIR /workspace
-
-# Context is backend/transactions-service, so use local paths:
-COPY pom.xml ./pom.xml
-RUN --mount=type=cache,target=/root/.m2 mvn -q -B dependency:go-offline
-
+COPY pom.xml .
+RUN --mount=type=cache,target=/root/.m2 mvn -q -B -DskipTests dependency:go-offline
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 mvn -q -B -DskipTests package
 
-########## RUNTIME ##########
-FROM eclipse-temurin:17-jre-jammy
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-COPY --from=build /workspace/target/*.jar /app/app.jar
+
+# Install wget for healthcheck
+RUN apk add --no-cache wget
+
+COPY --from=build /workspace/target/*.jar app.jar
 EXPOSE 8082
 ENTRYPOINT ["java","-jar","/app/app.jar"]

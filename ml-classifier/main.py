@@ -1,56 +1,162 @@
 ﻿from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import joblib
 import os
 from typing import Optional
+import re
 
 app = FastAPI(title="FinTrack ML Classifier")
 
-# Load model (create a dummy one if it doesn't exist)
-MODEL_PATH = "category_classifier.pkl"
+# CORS Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class TransactionInput(BaseModel):
     description: str
     amount: float
+    merchant: Optional[str] = ""
 
-class ClassificationOutput(BaseModel):
+class TransactionOutput(BaseModel):
     category: str
     confidence: float
 
-# Simple rule-based classifier (replace with trained model later)
-def classify_transaction(description: str, amount: float) -> dict:
-    description_lower = description.lower()
+# Rule-based classification (works without ML model)
+CATEGORY_RULES = {
+    "Groceries": {
+        "keywords": ["grocery", "groceries", "walmart", "kroger", "target", "whole foods", 
+                     "trader joe", "costco", "safeway", "food", "supermarket"],
+        "confidence": 0.85
+    },
+    "Dining": {
+        "keywords": ["restaurant", "cafe", "coffee", "starbucks", "mcdonald", "burger", 
+                     "pizza", "chipotle", "subway", "dunkin", "dining", "food"],
+        "confidence": 0.88
+    },
+    "Transportation": {
+        "keywords": ["gas", "fuel", "shell", "exxon", "chevron", "bp", "mobil", 
+                     "uber", "lyft", "taxi", "parking", "toll", "transit"],
+        "confidence": 0.82
+    },
+    "Entertainment": {
+        "keywords": ["netflix", "spotify", "hulu", "disney", "amazon prime", "movie", 
+                     "theater", "cinema", "concert", "ticket", "game", "entertainment"],
+        "confidence": 0.90
+    },
+    "Shopping": {
+        "keywords": ["amazon", "ebay", "shop", "store", "mall", "clothing", "shoes", 
+                     "electronics", "best buy", "purchase"],
+        "confidence": 0.75
+    },
+    "Bills & Utilities": {
+        "keywords": ["electric", "water", "gas bill", "internet", "phone", "utility", 
+                     "bill", "payment", "insurance", "rent", "mortgage"],
+        "confidence": 0.92
+    },
+    "Healthcare": {
+        "keywords": ["pharmacy", "doctor", "hospital", "medical", "health", "cvs", 
+                     "walgreens", "clinic", "prescription", "medicine"],
+        "confidence": 0.87
+    },
+    "Travel": {
+        "keywords": ["hotel", "airline", "flight", "airbnb", "booking", "expedia", 
+                     "travel", "vacation", "trip"],
+        "confidence": 0.83
+    },
+    "Fitness": {
+        "keywords": ["gym", "fitness", "yoga", "sports", "athletic", "workout", 
+                     "exercise", "health club"],
+        "confidence": 0.86
+    }
+}
+
+def classify_by_rules(description: str, merchant: str) -> tuple[str, float]:
+    """Rule-based classification"""
+    text = f"{description} {merchant}".lower()
     
-    # Simple rules
-    if any(word in description_lower for word in ['starbucks', 'coffee', 'restaurant', 'mcdonald', 'food']):
-        return {"category": "Dining", "confidence": 0.85}
-    elif any(word in description_lower for word in ['uber', 'lyft', 'taxi', 'gas', 'fuel']):
-        return {"category": "Transportation", "confidence": 0.80}
-    elif any(word in description_lower for word in ['amazon', 'walmart', 'target', 'shopping']):
-        return {"category": "Shopping", "confidence": 0.75}
-    elif any(word in description_lower for word in ['netflix', 'spotify', 'subscription']):
-        return {"category": "Entertainment", "confidence": 0.82}
-    elif any(word in description_lower for word in ['rent', 'mortgage', 'utilities', 'electric']):
-        return {"category": "Bills", "confidence": 0.90}
-    else:
-        return {"category": "Other", "confidence": 0.50}
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "ml-classifier"}
-
-@app.post("/classify", response_model=ClassificationOutput)
-async def classify(transaction: TransactionInput):
-    try:
-        result = classify_transaction(transaction.description, transaction.amount)
-        return ClassificationOutput(**result)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # Check each category
+    for category, rules in CATEGORY_RULES.items():
+        for keyword in rules["keywords"]:
+            if keyword in text:
+                return category, rules["confidence"]
+    
+    # Default category
+    return "Other", 0.50
 
 @app.get("/")
 async def root():
-    return {"message": "FinTrack ML Classifier API", "version": "1.0"}
+    return {
+        "service": "FinTrack ML Classifier",
+        "status": "running",
+        "version": "1.0.0",
+        "mode": "rule-based"
+    }
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "model_loaded": True,  # Using rule-based classification
+        "mode": "rule-based"
+    }
+
+@app.post("/classify", response_model=TransactionOutput)
+async def classify_transaction(transaction: TransactionInput):
+    """Classify a transaction using rule-based logic"""
+    
+    try:
+        category, confidence = classify_by_rules(
+            transaction.description,
+            transaction.merchant or ""
+        )
+        
+        return TransactionOutput(
+            category=category,
+            confidence=confidence
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Classification error: {str(e)}")
+
+@app.post("/batch-classify")
+async def batch_classify(transactions: list[TransactionInput]):
+    """Classify multiple transactions at once"""
+    
+    results = []
+    for transaction in transactions:
+        try:
+            category, confidence = classify_by_rules(
+                transaction.description,
+                transaction.merchant or ""
+            )
+            results.append({
+                "description": transaction.description,
+                "category": category,
+                "confidence": confidence
+            })
+        except Exception as e:
+            results.append({
+                "description": transaction.description,
+                "error": str(e)
+            })
+    
+    return {"results": results}
+
+@app.get("/categories")
+async def get_categories():
+    """Get list of available categories"""
+    return {
+        "categories": list(CATEGORY_RULES.keys()) + ["Other"],
+        "total": len(CATEGORY_RULES) + 1
+    }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8085)
+    port = int(os.getenv("PORT", 8000))
+    print(f"Starting ML Classifier on port {port}")
+    print("Mode: Rule-based classification")
+    uvicorn.run(app, host="0.0.0.0", port=port)

@@ -1,6 +1,6 @@
 ﻿spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/fintrack_test}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/fintrack_test}
     username: ${SPRING_DATASOURCE_USERNAME:test_user}
     password: ${SPRING_DATASOURCE_PASSWORD:test_pass}
   jpa:
@@ -12,3 +12,4 @@
 jwt:
   secret: test-secret-key-for-testing-only-min-256-bits-long
   expiration: 3600000
+

@@ -1,28 +1,16 @@
-﻿# syntax=docker/dockerfile:1.7
-FROM maven:3.9.9-eclipse-temurin-17 AS build
+﻿FROM maven:3.9.10-eclipse-temurin-21 AS build
 WORKDIR /workspace
-
-# Copy pom.xml first for dependency caching
-COPY pom.xml ./pom.xml
-
-# Download dependencies (cached layer)
-RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline
-
-# Copy source code
+COPY pom.xml .
+RUN --mount=type=cache,target=/root/.m2 mvn -q -B -DskipTests dependency:go-offline
 COPY src ./src
+RUN --mount=type=cache,target=/root/.m2 mvn -q -B -DskipTests package
 
-# Build the application
-RUN --mount=type=cache,target=/root/.m2 mvn clean package -DskipTests
-
-# Runtime stage
-FROM eclipse-temurin:17-jre-jammy
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-# Copy the built JAR from build stage
+# Install wget for healthcheck
+RUN apk add --no-cache wget
+
 COPY --from=build /workspace/target/*.jar app.jar
-
-# Expose port
 EXPOSE 8080
-
-# Run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java","-jar","/app/app.jar"]

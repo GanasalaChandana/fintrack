@@ -20,33 +20,36 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class User {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
-    
+
     @Email(message = "Invalid email format")
     @NotBlank(message = "Email is required")
-    @Column(unique = true, nullable = false)
+    @Column(unique = true, nullable = false, length = 255)
     private String email;
-    
+
+    @Column(length = 255)  // Add this field
+    private String name;
+
     @NotBlank(message = "Password is required")
-    @Column(nullable = false)
+    @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
-    
+
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     @Builder.Default
     private Role role = Role.USER;
-    
+
     @CreationTimestamp
-    @Column(nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-    
+
     @UpdateTimestamp
-    @Column(nullable = false)
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
-    
+
     public enum Role {
         USER, ADMIN
     }

@@ -1,6 +1,6 @@
 ﻿spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/fintrack_test}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/fintrack_test}
     username: ${SPRING_DATASOURCE_USERNAME:test_user}
     password: ${SPRING_DATASOURCE_PASSWORD:test_pass}
   jpa:
@@ -9,5 +9,6 @@
   flyway:
     enabled: false
   redis:
-    host: ${SPRING_REDIS_HOST:localhost}
+    host: ${SPRING_REDIS_host: postgres}
     port: ${SPRING_REDIS_PORT:6379}
+

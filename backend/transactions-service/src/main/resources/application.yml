@@ -1,62 +1,63 @@
-server:
-  port: 8082
+﻿server:
+  port: ${SERVER_PORT:8082}
 
 spring:
   application:
     name: transactions-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/fintrack
-    username: fintrack_user
-    password: fintrack_pass
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fintrack}?currentSchema=transactions
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: validate
-    show-sql: true
+      ddl-auto: update
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: transactions
   flyway:
     enabled: true
     baseline-on-migrate: true
     schemas: transactions
-  servlet:
-    multipart:
-      enabled: true
-      max-file-size: 10MB
-      max-request-size: 10MB
+    locations: classpath:db/migration
   kafka:
-    bootstrap-servers: localhost:9092
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      properties:
-        spring.json.add.type.headers: false
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
       group-id: transactions-service
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
 
-kafka:
-  topics:
-    transaction-created: transaction.created
-    transaction-categorized: transaction.categorized
+ml-classifier:
+  url: ${ML_CLASSIFIER_URL:http://localhost:8000}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus
-  metrics:
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
         enabled: true
+  metrics:
     tags:
       application: ${spring.application.name}
   endpoint:
     health:
       show-details: always
-    prometheus:
-      enabled: true
+  health:
+    mail:
+      enabled: false
