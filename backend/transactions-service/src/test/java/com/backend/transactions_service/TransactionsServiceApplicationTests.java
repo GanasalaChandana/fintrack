@@ -1,4 +1,4 @@
-package com.backend.transactions_service;
+package com.fintrack.transactions;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
