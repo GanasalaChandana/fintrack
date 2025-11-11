@@ -1,18 +1,16 @@
-﻿services:
-  # Infrastructure Services
+﻿
+services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: fintrack-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
+    ports: ["2181:2181"]
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_logs:/var/lib/zookeeper/log
-    networks:
-      - fintrack-network
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181"]
       interval: 10s
@@ -25,9 +23,7 @@
     depends_on:
       zookeeper:
         condition: service_healthy
-    ports:
-      - "9092:9092"
-      - "9093:9093"
+    ports: ["9092:9092","9093:9093"]
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -37,15 +33,13 @@
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     volumes:
       - kafka_data:/var/lib/kafka/data
-    networks:
-      - fintrack-network
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
       interval: 10s
       timeout: 10s
       retries: 5
 
-  # UPDATED: PostgreSQL with init script
   postgres:
     image: postgres:15-alpine
     container_name: fintrack-postgres
@@ -53,13 +47,11 @@
       POSTGRES_DB: fintrack
       POSTGRES_USER: fintrack_user
       POSTGRES_PASSWORD: fintrack_pass
-    ports:
-      - "5432:5432"
+    ports: ["5432:5432"]
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-    networks:
-      - fintrack-network
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fintrack_user -d fintrack"]
       interval: 10s
@@ -69,39 +61,30 @@
   redis:
     image: redis:7-alpine
     container_name: fintrack-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - fintrack-network
+    ports: ["6379:6379"]
+    volumes: [redis_data:/data]
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ML Service
   ml-classifier:
     build:
       context: ../../ml-classifier
       dockerfile: Dockerfile
     container_name: fintrack-ml-classifier
-    ports:
-      - "8000:8000"
-    networks:
-      - fintrack-network
+    ports: ["8000:8000"]
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 5
 
-  # Microservices
   users-service:
-    build:
-      context: ../../backend/users-service
-      dockerfile: Dockerfile
+    build: { context: ../../backend/users-service, dockerfile: Dockerfile }
     container_name: fintrack-users-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -110,13 +93,10 @@
       POSTGRES_DB: fintrack
       POSTGRES_USER: fintrack_user
       POSTGRES_PASSWORD: fintrack_pass
-    ports:
-      - "8081:8081"
+    ports: ["8081:8081"]
     depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - fintrack-network
+      postgres: { condition: service_healthy }
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
       interval: 30s
@@ -125,9 +105,7 @@
       start_period: 60s
 
   transactions-service:
-    build:
-      context: ../../backend/transactions-service
-      dockerfile: Dockerfile
+    build: { context: ../../backend/transactions-service, dockerfile: Dockerfile }
     container_name: fintrack-transactions-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -138,17 +116,12 @@
       POSTGRES_PASSWORD: fintrack_pass
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ML_CLASSIFIER_URL: http://ml-classifier:8000
-    ports:
-      - "8082:8082"
+    ports: ["8082:8082"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      ml-classifier:
-        condition: service_healthy
-    networks:
-      - fintrack-network
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      ml-classifier: { condition: service_healthy }
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8082/actuator/health"]
       interval: 30s
@@ -157,9 +130,7 @@
       start_period: 60s
 
   alerts-service:
-    build:
-      context: ../../backend/alerts-service
-      dockerfile: Dockerfile
+    build: { context: ../../backend/alerts-service, dockerfile: Dockerfile }
     container_name: fintrack-alerts-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -171,17 +142,12 @@
       POSTGRES_USER: fintrack_user
       POSTGRES_PASSWORD: fintrack_pass
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    ports:
-      - "8083:8083"
+    ports: ["8083:8083"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - fintrack-network
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8083/actuator/health"]
       interval: 30s
@@ -190,9 +156,7 @@
       start_period: 60s
 
   reports-service:
-    build:
-      context: ../../backend/reports-service
-      dockerfile: Dockerfile
+    build: { context: ../../backend/reports-service, dockerfile: Dockerfile }
     container_name: fintrack-reports-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -201,13 +165,10 @@
       POSTGRES_DB: fintrack
       POSTGRES_USER: fintrack_user
       POSTGRES_PASSWORD: fintrack_pass
-    ports:
-      - "8084:8084"
+    ports: ["8084:8084"]
     depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - fintrack-network
+      postgres: { condition: service_healthy }
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8084/actuator/health"]
       interval: 30s
@@ -216,9 +177,7 @@
       start_period: 60s
 
   budgets-service:
-    build:
-      context: ../../backend/budgets-service
-      dockerfile: Dockerfile
+    build: { context: ../../backend/budgets-service, dockerfile: Dockerfile }
     container_name: fintrack-budgets-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -229,15 +188,11 @@
       POSTGRES_DB: fintrack
       POSTGRES_USER: fintrack_user
       POSTGRES_PASSWORD: fintrack_pass
-    ports:
-      - "8085:8085"
+    ports: ["8085:8085"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - fintrack-network
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8085/actuator/health"]
       interval: 30s
@@ -246,9 +201,7 @@
       start_period: 60s
 
   notifications-service:
-    build:
-      context: ../../backend/notifications-service
-      dockerfile: Dockerfile
+    build: { context: ../../backend/notifications-service, dockerfile: Dockerfile }
     container_name: fintrack-notifications-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -257,13 +210,10 @@
       POSTGRES_DB: fintrack
       POSTGRES_USER: fintrack_user
       POSTGRES_PASSWORD: fintrack_pass
-    ports:
-      - "8086:8086"
+    ports: ["8086:8086"]
     depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - fintrack-network
+      postgres: { condition: service_healthy }
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8086/actuator/health"]
       interval: 30s
@@ -272,13 +222,11 @@
       start_period: 60s
 
   api-gateway:
-    build:
-      context: ../../backend/api-gateway
-      dockerfile: Dockerfile
+    build: { context: ../../backend/api-gateway, dockerfile: Dockerfile }
     container_name: fintrack-api-gateway
     environment:
       APP_ENVIRONMENT: dev
-      DEV_BYPASS_AUTH: true
+      DEV_BYPASS_AUTH: "true"
       DEV_USER_ID: dev-user-123
       SPRING_PROFILES_ACTIVE: docker
       USERS_SERVICE_URL: http://users-service:8081
@@ -287,23 +235,15 @@
       REPORTS_SERVICE_URL: http://reports-service:8084
       BUDGETS_SERVICE_URL: http://budgets-service:8085
       NOTIFICATIONS_SERVICE_URL: http://notifications-service:8086
-    ports:
-      - "8080:8080"
+    ports: ["8080:8080"]
     depends_on:
-      users-service:
-        condition: service_healthy
-      transactions-service:
-        condition: service_healthy
-      alerts-service:
-        condition: service_healthy
-      reports-service:
-        condition: service_healthy
-      budgets-service:
-        condition: service_healthy
-      notifications-service:
-        condition: service_healthy
-    networks:
-      - fintrack-network
+      users-service: { condition: service_healthy }
+      transactions-service: { condition: service_healthy }
+      alerts-service: { condition: service_healthy }
+      reports-service: { condition: service_healthy }
+      budgets-service: { condition: service_healthy }
+      notifications-service: { condition: service_healthy }
+    networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -311,41 +251,34 @@
       retries: 5
       start_period: 60s
 
-  # Monitoring Stack
   prometheus:
     image: prom/prometheus:latest
     container_name: fintrack-prometheus
-    ports:
-      - "9090:9090"
+    ports: ["9090:9090"]
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-    networks:
-      - fintrack-network
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    networks: [fintrack-network]
 
   grafana:
     image: grafana/grafana:latest
     container_name: fintrack-grafana
-    ports:
-      - "3001:3000"
+    ports: ["3001:3000"]
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana_data:/var/lib/grafana
-    networks:
-      - fintrack-network
+    networks: [fintrack-network]
 
   loki:
     image: grafana/loki:latest
     container_name: fintrack-loki
-    ports:
-      - "3100:3100"
+    ports: ["3100:3100"]
     command: -config.file=/etc/loki/local-config.yaml
-    networks:
-      - fintrack-network
+    networks: [fintrack-network]
 
   promtail:
     image: grafana/promtail:latest
@@ -354,23 +287,18 @@
       - /var/log:/var/log:ro
       - ./promtail/promtail-config.yml:/etc/promtail/config.yml:ro
     command: -config.file=/etc/promtail/config.yml
-    networks:
-      - fintrack-network
-    depends_on:
-      - loki
+    networks: [fintrack-network]
+    depends_on: [loki]
 
   kafdrop:
     image: obsidiandynamics/kafdrop:latest
     container_name: fintrack-kafdrop
-    ports:
-      - "9000:9000"
+    ports: ["9000:9000"]
     environment:
       KAFKA_BROKERCONNECT: kafka:9092
     depends_on:
-      kafka:
-        condition: service_healthy
-    networks:
-      - fintrack-network
+      kafka: { condition: service_healthy }
+    networks: [fintrack-network]
 
 networks:
   fintrack-network:

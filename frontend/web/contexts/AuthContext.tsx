@@ -1,134 +1,125 @@
-// contexts/AuthContext.tsx
-'use client';
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import { authAPI, getToken, clearToken } from '@/lib/api';
+import axios from 'axios';
 
 interface User {
-  id: string;
+  userId: number;
   email: string;
-  username: string;
-  firstName?: string;
-  lastName?: string;
+  firstName: string;
+  lastName: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
+  token: string | null;
   login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   logout: () => void;
-  refreshUser: () => Promise<void>;
+  isAuthenticated: boolean;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Public routes that don't require authentication
-const PUBLIC_ROUTES = ['/login', '/register', '/forgot-password'];
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
-  const pathname = usePathname();
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Check if current route is public
-  const isPublicRoute = PUBLIC_ROUTES.some(route => pathname?.startsWith(route));
-
-  // Load user on mount
+  // Load token from localStorage on mount
   useEffect(() => {
-    loadUser();
-  }, []);
+    const storedToken = localStorage.getItem('authToken');
+    const storedUser = localStorage.getItem('user');
 
-  // Redirect logic
-  useEffect(() => {
-    if (!isLoading) {
-      if (!user && !isPublicRoute) {
-        // Not authenticated and trying to access protected route
-        console.log('🔒 Not authenticated, redirecting to login');
-        router.push('/login');
-      } else if (user && isPublicRoute) {
-        // Authenticated but on public route
-        console.log('✅ Already authenticated, redirecting to dashboard');
-        router.push('/dashboard');
-      }
-    }
-  }, [user, isLoading, pathname, isPublicRoute]);
-
-  const loadUser = async () => {
-    const token = getToken();
-    
-    if (!token) {
-      console.log('❌ No token found');
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      console.log('🔍 Loading user with token:', token.substring(0, 20) + '...');
-      const userData = await authAPI.getCurrentUser();
-      console.log('✅ User loaded:', userData);
-      setUser(userData);
-    } catch (error: any) {
-      console.error('❌ Failed to load user:', error);
+    if (storedToken && storedUser) {
+      setToken(storedToken);
+      setUser(JSON.parse(storedUser));
       
-      // Clear invalid token
-      if (error.status === 401 || error.status === 403) {
-        console.log('🗑️ Clearing invalid token');
-        clearToken();
-        setUser(null);
-      }
-    } finally {
-      setIsLoading(false);
+      // Set default axios header
+      axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
     }
-  };
+    setLoading(false);
+  }, []);
 
   const login = async (email: string, password: string) => {
     try {
-      console.log('🔐 Attempting login for:', email);
-      const response = await authAPI.login({ email, password });
-      console.log('✅ Login successful:', response);
-      
-      // authAPI.login already stores the token
-      // Now load the user data
-      await loadUser();
-      
-      // Redirect to dashboard
-      router.push('/dashboard');
+      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
+        email,
+        password,
+      });
+
+      const { token, userId, email: userEmail, firstName, lastName } = response.data;
+
+      // Store token and user info
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('user', JSON.stringify({ userId, email: userEmail, firstName, lastName }));
+
+      setToken(token);
+      setUser({ userId, email: userEmail, firstName, lastName });
+
+      // Set default axios header
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     } catch (error: any) {
-      console.error('❌ Login failed:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || 'Login failed');
+    }
+  };
+
+  const register = async (
+    email: string,
+    password: string,
+    firstName: string,
+    lastName: string
+  ) => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/auth/register`, {
+        email,
+        password,
+        firstName,
+        lastName,
+      });
+
+      const { token, userId, email: userEmail } = response.data;
+
+      // Store token and user info
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('user', JSON.stringify({ userId, email: userEmail, firstName, lastName }));
+
+      setToken(token);
+      setUser({ userId, email: userEmail, firstName, lastName });
+
+      // Set default axios header
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Registration failed');
     }
   };
 
   const logout = () => {
-    console.log('👋 Logging out');
-    authAPI.logout();
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
+    setToken(null);
     setUser(null);
-    router.push('/login');
+    delete axios.defaults.headers.common['Authorization'];
   };
 
-  const refreshUser = async () => {
-    await loadUser();
-  };
-
-  const value: AuthContextType = {
+  const value = {
     user,
-    isAuthenticated: !!user,
-    isLoading,
+    token,
     login,
+    register,
     logout,
-    refreshUser,
+    isAuthenticated: !!token,
+    loading,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
+};
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
+};

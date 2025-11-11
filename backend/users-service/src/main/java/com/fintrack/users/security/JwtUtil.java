@@ -38,10 +38,10 @@ public class JwtUtil {
 
     private Claims extractAllClaims(String token) {
         return Jwts.parser()
-                .verifyWith(getSignKey())  // NEW API: verifyWith instead of setSigningKey
+                .verifyWith(getSignKey()) // NEW API: verifyWith instead of setSigningKey
                 .build()
-                .parseSignedClaims(token)  // NEW API: parseSignedClaims instead of parseClaimsJws
-                .getPayload();  // NEW API: getPayload instead of getBody
+                .parseSignedClaims(token) // NEW API: parseSignedClaims instead of parseClaimsJws
+                .getPayload(); // NEW API: getPayload instead of getBody
     }
 
     private Boolean isTokenExpired(String token) {
@@ -64,11 +64,12 @@ public class JwtUtil {
 
     private String createToken(Map<String, Object> claims, String subject) {
         return Jwts.builder()
-                .claims(claims)  // NEW API: claims() instead of setClaims()
-                .subject(subject)  // NEW API: subject() instead of setSubject()
-                .issuedAt(new Date(System.currentTimeMillis()))  // NEW API: issuedAt() instead of setIssuedAt()
-                .expiration(new Date(System.currentTimeMillis() + expiration))  // NEW API: expiration() instead of setExpiration()
-                .signWith(getSignKey())  // NEW API: simplified signWith - algorithm is inferred
+                .claims(claims) // NEW API: claims() instead of setClaims()
+                .subject(subject) // NEW API: subject() instead of setSubject()
+                .issuedAt(new Date(System.currentTimeMillis())) // NEW API: issuedAt() instead of setIssuedAt()
+                .expiration(new Date(System.currentTimeMillis() + expiration)) // NEW API: expiration() instead of
+                                                                               // setExpiration()
+                .signWith(getSignKey()) // NEW API: simplified signWith - algorithm is inferred
                 .compact();
     }
 

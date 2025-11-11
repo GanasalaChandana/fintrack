@@ -6,8 +6,8 @@ spring:
     name: transactions-service
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fintrack}?currentSchema=transactions
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:postgres}
+    username: ${POSTGRES_USER:fintrack_user}
+    password: ${POSTGRES_PASSWORD:fintrack_pass}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
