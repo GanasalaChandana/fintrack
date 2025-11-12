@@ -11,8 +11,12 @@ spring:
         cors-configurations:
           '[/**]':
             allowedOrigins:
+              # Production (Vercel)
+              - "https://fintrack-liart.vercel.app"
+              # Local development
               - "http://localhost:3000"
               - "http://localhost:3001"
+              - "http://localhost:5173"
               - "http://127.0.0.1:3000"
             allowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
             allowedHeaders: "*"
@@ -25,16 +29,15 @@ spring:
       routes:
         # ================= AUTH (NO AUTH REQUIRED) =================
         - id: users-service-auth
-          uri: http://users-service:8081
+          uri: ${USERS_SERVICE_URL:https://fintrack-users-service.onrender.com}
           predicates:
             - Path=/api/auth/**
           filters:
             - RewritePath=/api/auth/(?<segment>.*), /api/auth/${segment}
 
         # ================= NOTIFICATIONS (NO AUTH FOR TESTING) =================
-        # Moved UP before other routes to ensure it's matched first
         - id: notifications-service
-          uri: http://notifications-service:8086
+          uri: ${NOTIFICATIONS_SERVICE_URL:https://fintrack-notifications-service.onrender.com}
           predicates:
             - Path=/api/notifications/**
           filters:
@@ -42,7 +45,7 @@ spring:
 
         # ================= USERS (REQUIRES AUTH) =================
         - id: users-service
-          uri: http://users-service:8081
+          uri: ${USERS_SERVICE_URL:https://fintrack-users-service.onrender.com}
           predicates:
             - Path=/api/users/**
           filters:
@@ -51,7 +54,7 @@ spring:
 
         # ================= TRANSACTIONS (REQUIRES AUTH) =================
         - id: transactions-service
-          uri: http://transactions-service:8082
+          uri: ${TRANSACTIONS_SERVICE_URL:https://fintrack-transactions-service.onrender.com}
           predicates:
             - Path=/api/transactions/**
           filters:
@@ -59,7 +62,7 @@ spring:
             - RewritePath=/api/transactions/(?<segment>.*), /api/transactions/${segment}
 
         - id: transactions-service-recurring
-          uri: http://transactions-service:8082
+          uri: ${TRANSACTIONS_SERVICE_URL:https://fintrack-transactions-service.onrender.com}
           predicates:
             - Path=/api/recurring-transactions/**
           filters:
@@ -68,7 +71,7 @@ spring:
 
         # ================= BUDGETS (REQUIRES AUTH) =================
         - id: budgets-service
-          uri: http://budgets-service:8085
+          uri: ${BUDGETS_SERVICE_URL:https://fintrack-budgets-service.onrender.com}
           predicates:
             - Path=/api/budgets/**
           filters:
@@ -76,7 +79,7 @@ spring:
 
         # ================= ALERTS (REQUIRES AUTH) =================
         - id: alerts-service
-          uri: http://alerts-service:8083
+          uri: ${ALERTS_SERVICE_URL:https://fintrack-alerts-service.onrender.com}
           predicates:
             - Path=/api/alerts/**
           filters:
@@ -85,7 +88,7 @@ spring:
 
         # ================= REPORTS (REQUIRES AUTH) =================
         - id: reports-service
-          uri: http://reports-service:8084
+          uri: ${REPORTS_SERVICE_URL:https://fintrack-reports-service.onrender.com}
           predicates:
             - Path=/api/reports/**
           filters:
@@ -94,9 +97,9 @@ spring:
 
 # Application-specific configuration
 app:
-  environment: ${APP_ENVIRONMENT:dev}
+  environment: ${APP_ENVIRONMENT:production}
   dev:
-    bypass-auth: ${DEV_BYPASS_AUTH:true}
+    bypass-auth: ${DEV_BYPASS_AUTH:false}
     default-user-id: ${DEV_USER_ID:dev-user-123}
 
 # JWT (must match users-service)
@@ -119,6 +122,6 @@ management:
 # Logging
 logging:
   level:
-    com.fintrack: DEBUG
-    org.springframework.cloud.gateway: DEBUG
-    reactor.netty: DEBUG
+    com.fintrack: INFO
+    org.springframework.cloud.gateway: INFO
+    reactor.netty: INFO
