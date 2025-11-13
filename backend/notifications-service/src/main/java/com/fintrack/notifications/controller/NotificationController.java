@@ -33,7 +33,7 @@ public class NotificationController {
 
     @PostMapping
     public ResponseEntity<NotificationResponse> create(@Valid @RequestBody NotificationRequest req) {
-        log.info("Creating notification for user: {}", req.getUserId());
+        log.info("Creating notification for user: {}", req.userId());
         return ResponseEntity.ok(notifications.create(req));
     }
 
