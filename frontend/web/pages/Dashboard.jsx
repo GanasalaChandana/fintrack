@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { healthAPI, transactionsAPI } from '../lib/api';
 import './Dashboard.css';
 
@@ -23,40 +23,50 @@ function Dashboard() {
     transactionCount: 0
   });
 
-  // Check API connection on mount
-  useEffect(() => {
-    checkAPIConnection();
-  }, []);
+  // Prevent multiple simultaneous API checks
+  const isCheckingRef = useRef(false);
+  const hasLoadedRef = useRef(false);
 
-  // Load dashboard data once API is connected
-  useEffect(() => {
-    if (apiStatus.backend) {
-      loadDashboardData();
+  // Memoized function to check API connection
+  const checkAPIConnection = useCallback(async () => {
+    // Prevent duplicate checks
+    if (isCheckingRef.current) {
+      console.log('⏭️ Skipping duplicate API check');
+      return;
     }
-  }, [apiStatus.backend]);
 
-  const checkAPIConnection = async () => {
+    isCheckingRef.current = true;
+
     try {
       setApiStatus(prev => ({ ...prev, checking: true }));
+      console.log('🔍 Checking API connection...');
       
-      // Check each service individually
-      const [gatewayHealth, txHealth] = await Promise.allSettled([
-        fetch('http://localhost:8080/actuator/health').then(r => r.json()),
-        fetch('http://localhost:8080/api/transactions').then(r => r.json())
-      ]);
+      // Use healthAPI from your API client
+      const health = await healthAPI.checkAll().catch(() => ({
+        connected: false,
+        gateway: { connected: false }
+      }));
 
-      console.log('✅ Health check results:', { gatewayHealth, txHealth });
+      console.log('✅ Health check results:', health);
       
-      setApiStatus({
+      const newStatus = {
         checking: false,
-        backend: gatewayHealth.status === 'fulfilled',
-        transactions: txHealth.status === 'fulfilled',
-        budgets: false, // Known to be unavailable
-        alerts: false   // Known to be unavailable
-      });
+        backend: health.connected || false,
+        transactions: health.transactions?.connected || false,
+        budgets: health.budgets?.connected || false,
+        alerts: false
+      };
+
+      setApiStatus(newStatus);
       
-      if (gatewayHealth.status === 'rejected') {
-        setError('Backend gateway is not available. Please check if Docker containers are running.');
+      if (!newStatus.backend) {
+        setError('Backend gateway is not available. Please check if services are running.');
+      }
+
+      // If backend is connected and we haven't loaded data yet, load it
+      if (newStatus.backend && !hasLoadedRef.current) {
+        hasLoadedRef.current = true;
+        loadDashboardData();
       }
     } catch (error) {
       console.error('❌ API check failed:', error);
@@ -67,20 +77,23 @@ function Dashboard() {
         budgets: false,
         alerts: false
       });
-      setError('Cannot connect to backend. Please verify services are running.');
+      setError('Cannot connect to backend: ' + (error.message || 'Unknown error'));
+    } finally {
+      isCheckingRef.current = false;
     }
-  };
+  }, []); // No dependencies - function is stable
 
-  const loadDashboardData = async () => {
+  // Memoized function to load dashboard data
+  const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       console.log('📊 Loading dashboard data...');
 
-      // Only fetch from working services
+      // Fetch transactions with error handling
       const txRes = await transactionsAPI.getAll({ limit: 10 }).catch(err => {
         console.warn('⚠️ Transactions API error:', err);
-        return { content: [] }; // Return empty result on error
+        return { content: [] };
       });
 
       // Handle paginated response
@@ -124,7 +137,25 @@ function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // No dependencies - function is stable
+
+  // Check API connection ONCE on mount
+  useEffect(() => {
+    checkAPIConnection();
+  }, []); // Empty array = run once on mount only
+
+  // Manual retry handler
+  const handleRetry = useCallback(() => {
+    hasLoadedRef.current = false; // Reset loaded flag
+    checkAPIConnection();
+  }, [checkAPIConnection]);
+
+  // Manual refresh handler
+  const handleRefresh = useCallback(() => {
+    if (!loading) {
+      loadDashboardData();
+    }
+  }, [loading, loadDashboardData]);
 
   const formatCurrency = (n) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(n || 0));
@@ -162,15 +193,16 @@ function Dashboard() {
         <div className="error-container">
           <h2>⚠️ Backend Not Connected</h2>
           <p>{error || 'Unable to connect to backend services.'}</p>
-          <button className="retry-button" onClick={checkAPIConnection}>
+          <button className="retry-button" onClick={handleRetry}>
             Retry Connection
           </button>
           <div className="troubleshooting">
             <h3>Troubleshooting</h3>
             <ul>
-              <li>Check Gateway: <a href="http://localhost:8080/actuator/health" target="_blank" rel="noopener noreferrer">http://localhost:8080/actuator/health</a></li>
-              <li>Gateway logs: <code>docker logs fintrack-api-gateway -f</code></li>
-              <li>Start services: <code>docker compose up -d</code></li>
+              <li>Gateway URL: {process.env.NEXT_PUBLIC_API_URL || 'Not configured'}</li>
+              <li>Check if all Render services are deployed and running</li>
+              <li>Verify CORS settings allow your Vercel domain</li>
+              <li>Check Render logs for errors</li>
             </ul>
           </div>
         </div>
@@ -194,7 +226,7 @@ function Dashboard() {
           </div>
           <button 
             className="refresh-button" 
-            onClick={loadDashboardData}
+            onClick={handleRefresh}
             disabled={loading}
           >
             {loading ? '⟳ Refreshing...' : '🔄 Refresh'}
@@ -370,8 +402,8 @@ function Dashboard() {
                 <span className="status-badge connected">✅ Online</span>
               </div>
               <div className="status-item">
-                <span className="status-label">Authentication:</span>
-                <span className="status-badge connected">✅ Dev Mode (Bypassed)</span>
+                <span className="status-label">Environment:</span>
+                <span className="status-badge">{process.env.NODE_ENV || 'production'}</span>
               </div>
               <div className="status-item">
                 <span className="status-label">Available Services:</span>
@@ -391,13 +423,13 @@ function Dashboard() {
           <details>
             <summary>🔍 Debug Info</summary>
             <pre>
-{`API Gateway: http://localhost:8080
+{`API Gateway: ${process.env.NEXT_PUBLIC_API_URL || 'Not configured'}
 Backend Status: ${apiStatus.backend ? '✅ Connected' : '❌ Disconnected'}
 
 Service Status:
 - Transactions: ${apiStatus.transactions ? '✅ Online' : '❌ Offline'}
-- Budgets: ${apiStatus.budgets ? '✅ Online' : '❌ Not Implemented (404)'}
-- Alerts: ${apiStatus.alerts ? '✅ Online' : '❌ Not Implemented (404)'}
+- Budgets: ${apiStatus.budgets ? '✅ Online' : '❌ Not Implemented'}
+- Alerts: ${apiStatus.alerts ? '✅ Online' : '❌ Not Implemented'}
 
 Data Summary:
 - Transactions: ${transactions.length}
@@ -408,7 +440,7 @@ Data Summary:
 Status:
 - Loading: ${loading ? 'Yes' : 'No'}
 - Error: ${error || 'None'}
-- Auth Mode: Dev (Bypassed)`}
+- Has Loaded: ${hasLoadedRef.current ? 'Yes' : 'No'}`}
             </pre>
           </details>
         </div>

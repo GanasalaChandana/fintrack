@@ -1,10 +1,6 @@
-// app/login/page.jsx
-'use client';
-
+// pages/login.js or app/login/page.js
 import { useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation'; // or 'next/router' for pages router
 import { authAPI } from '@/lib/api';
 
 export default function LoginPage() {
@@ -13,206 +9,166 @@ export default function LoginPage() {
     email: '',
     password: ''
   });
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    // Clear error when user starts typing
+    if (error) setError('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Prevent multiple simultaneous submissions
+    if (loading) return;
+    
     setError('');
     setLoading(true);
 
     try {
-      // ✅ Use the API helper - it handles URL building correctly
-      const data = await authAPI.login({
-        email: formData.email.toLowerCase().trim(),
-        password: formData.password,
-      });
-
-      console.log('Login successful:', data);
-
-      // Store token if returned
-      if (data.token) {
-        localStorage.setItem('authToken', data.token);
-      }
-
-      // Store user data
-      if (data.user) {
-        localStorage.setItem('user', JSON.stringify(data.user));
-      }
-
-      // Redirect to dashboard
-      router.push('/dashboard');
+      const response = await authAPI.login(formData);
       
+      if (response.token) {
+        // Success! Redirect to dashboard
+        router.push('/dashboard');
+      } else {
+        setError('Login failed. No token received.');
+      }
     } catch (err) {
       console.error('Login error:', err);
       
-      // Handle specific error messages
-      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
-      
-      if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized')) {
-        setError('Invalid email or password');
-      } else if (errorMessage.includes('404')) {
-        setError('Login service not available. Please try again later.');
-      } else if (errorMessage.includes('429')) {
-        setError('Too many login attempts. Please try again later.');
+      // Handle different error types
+      if (err.status === 429) {
+        setError('Too many login attempts. Please wait a few minutes and try again.');
+      } else if (err.status === 401) {
+        setError('Invalid email or password.');
+      } else if (err.isNetworkError) {
+        setError('Cannot connect to server. Please check your internet connection.');
       } else {
-        setError('Login failed. Please try again.');
+        setError(err.message || 'An error occurred during login. Please try again.');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    if (error) setError('');
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full">
-        <div className="text-center mb-8">
-          <Link href="/" className="text-3xl font-bold text-indigo-600">
-            FinTrack
-          </Link>
-          <p className="text-gray-600 mt-2">Sign in to your account</p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Sign in to your account
+          </h2>
         </div>
-
-        <div className="bg-white rounded-xl shadow-lg p-8">
+        
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-red-800 text-sm">{error}</p>
+            <div className="rounded-md bg-red-50 p-4">
+              <div className="flex">
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">
+                    {error}
+                  </h3>
+                </div>
+              </div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
+              <label htmlFor="email" className="sr-only">
+                Email address
               </label>
               <input
-                type="email"
                 id="email"
                 name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
-                placeholder="you@example.com"
+                type="email"
+                autoComplete="email"
                 required
                 disabled={loading}
-                autoComplete="email"
+                value={formData.email}
+                onChange={handleChange}
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm disabled:opacity-50"
+                placeholder="Email address"
               />
             </div>
-
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="sr-only">
                 Password
               </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  id="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition pr-12"
-                  placeholder="Enter your password"
-                  required
-                  disabled={loading}
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                  disabled={loading}
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                disabled={loading}
+                value={formData.password}
+                onChange={handleChange}
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm disabled:opacity-50"
+                placeholder="Password"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <input
+                id="remember-me"
+                name="remember-me"
+                type="checkbox"
+                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              />
+              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                Remember me
+              </label>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="remember"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                />
-                <label htmlFor="remember" className="ml-2 text-sm text-gray-600">
-                  Remember me
-                </label>
-              </div>
-              <Link 
-                href="/forgot-password" 
-                className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-              >
+            <div className="text-sm">
+              <a href="#" className="font-medium text-indigo-600 hover:text-indigo-500">
                 Forgot password?
-              </Link>
+              </a>
             </div>
+          </div>
 
+          <div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                'Sign In'
-              )}
+              {loading ? 'Signing in...' : 'Sign in'}
             </button>
-          </form>
+          </div>
 
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or continue with</span>
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-2 gap-3">
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
+              Or continue with
+            </p>
+            <div className="mt-2 flex justify-center space-x-4">
               <button
                 type="button"
-                className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                disabled
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
               >
                 Google
               </button>
               <button
                 type="button"
-                className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                disabled
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
               >
                 GitHub
               </button>
             </div>
           </div>
-
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
-              <Link href="/register" className="text-indigo-600 hover:text-indigo-700 font-semibold">
-                Sign up for free
-              </Link>
-            </p>
-          </div>
-        </div>
+        </form>
       </div>
     </div>
   );

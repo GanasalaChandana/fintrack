@@ -1,6 +1,5 @@
 // lib/api/index.js
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-const GATEWAY_BASE = API_BASE_URL.replace(/\/api\/?$/, "");
 
 /* ============================= Token Management ============================= */
 export const getToken = () => {
@@ -29,6 +28,7 @@ export const clearToken = () => {
 class ApiClient {
   constructor(baseURL) { 
     this.baseURL = baseURL;
+    this.pendingRequests = new Map(); // Track pending requests
   }
 
   _authHeaders() { 
@@ -41,6 +41,10 @@ class ApiClient {
     }
     
     return headers;
+  }
+
+  _getCacheKey(url, method) {
+    return `${method}:${url}`;
   }
 
   async request(endpoint, options = {}) {
@@ -113,18 +117,18 @@ class ApiClient {
 }
 
 const api = new ApiClient(API_BASE_URL);
-export { api as apiClient, API_BASE_URL, GATEWAY_BASE, ApiClient };
+export { api as apiClient, API_BASE_URL, ApiClient };
 
 /* ============================= Auth API ============================= */
 export const authAPI = {
   async register(userData) { 
-    const r = await api.post("/auth/register", userData);
+    const r = await api.post("/api/auth/register", userData);
     if (r?.token) setToken(r.token);
     return r;
   },
   
   async login(credentials) { 
-    const r = await api.post("/auth/login", credentials);
+    const r = await api.post("/api/auth/login", credentials);
     if (r?.token) {
       setToken(r.token);
     }
@@ -136,7 +140,7 @@ export const authAPI = {
   },
   
   async getCurrentUser() { 
-    return api.get("/auth/me");
+    return api.get("/api/auth/me");
   },
   
   isAuthenticated() { 
@@ -148,16 +152,16 @@ export const authAPI = {
 export const transactionsAPI = {
   async getAll(params = {}) { 
     const qs = new URLSearchParams(params).toString();
-    return api.get(qs ? `/transactions?${qs}` : "/transactions");
+    return api.get(qs ? `/api/transactions?${qs}` : "/api/transactions");
   },
-  getById(id) { return api.get(`/transactions/${id}`); },
-  create(d) { return api.post("/transactions", d); },
-  update(id, d) { return api.put(`/transactions/${id}`, d); },
-  delete(id) { return api.delete(`/transactions/${id}`); },
-  classify(description) { return api.post("/transactions/classify", { description }); },
+  getById(id) { return api.get(`/api/transactions/${id}`); },
+  create(d) { return api.post("/api/transactions", d); },
+  update(id, d) { return api.put(`/api/transactions/${id}`, d); },
+  delete(id) { return api.delete(`/api/transactions/${id}`); },
+  classify(description) { return api.post("/api/transactions/classify", { description }); },
   getSummary(params = {}) { 
     const qs = new URLSearchParams(params).toString();
-    return api.get(qs ? `/transactions/summary?${qs}` : "/transactions/summary");
+    return api.get(qs ? `/api/transactions/summary?${qs}` : "/api/transactions/summary");
   },
 };
 
@@ -165,40 +169,40 @@ export const transactionsAPI = {
 export const budgetsAPI = {
   async getAll(params = {}) { 
     const qs = new URLSearchParams(params).toString();
-    return api.get(qs ? `/budgets?${qs}` : "/budgets");
+    return api.get(qs ? `/api/budgets?${qs}` : "/api/budgets");
   },
-  getById(id) { return api.get(`/budgets/${id}`); },
-  create(d) { return api.post("/budgets", d); },
-  update(id, d) { return api.put(`/budgets/${id}`, d); },
-  delete(id) { return api.delete(`/budgets/${id}`); },
-  checkStatus(id) { return api.get(`/budgets/${id}/status`); },
+  getById(id) { return api.get(`/api/budgets/${id}`); },
+  create(d) { return api.post("/api/budgets", d); },
+  update(id, d) { return api.put(`/api/budgets/${id}`, d); },
+  delete(id) { return api.delete(`/api/budgets/${id}`); },
+  checkStatus(id) { return api.get(`/api/budgets/${id}/status`); },
 };
 
 /* ============================= Alerts API ============================= */
 export const alertsAPI = {
-  getAll() { return api.get("/alerts"); },
-  getActive() { return api.get("/alerts/active"); },
-  acknowledge(id) { return api.post(`/alerts/${id}/acknowledge`); },
-  dismiss(id) { return api.delete(`/alerts/${id}`); },
+  getAll() { return api.get("/api/alerts"); },
+  getActive() { return api.get("/api/alerts/active"); },
+  acknowledge(id) { return api.post(`/api/alerts/${id}/acknowledge`); },
+  dismiss(id) { return api.delete(`/api/alerts/${id}`); },
 };
 
 /* ============================= Reports API ============================= */
 export const reportsAPI = {
   getSpendingByCategory(p = {}) { 
     const qs = new URLSearchParams(p).toString();
-    return api.get(qs ? `/reports/spending-by-category?${qs}` : "/reports/spending-by-category");
+    return api.get(qs ? `/api/reports/spending-by-category?${qs}` : "/api/reports/spending-by-category");
   },
   getMonthlyTrends(p = {}) { 
     const qs = new URLSearchParams(p).toString();
-    return api.get(qs ? `/reports/monthly-trends?${qs}` : "/reports/monthly-trends");
+    return api.get(qs ? `/api/reports/monthly-trends?${qs}` : "/api/reports/monthly-trends");
   },
   getSummary(startDate, endDate) { 
     const qs = new URLSearchParams({ startDate, endDate }).toString();
-    return api.get(`/reports/summary?${qs}`);
+    return api.get(`/api/reports/summary?${qs}`);
   },
   getCustomReport(t, p = {}) { 
     const qs = new URLSearchParams(p).toString();
-    return api.get(qs ? `/reports/${t}?${qs}` : `/reports/${t}`);
+    return api.get(qs ? `/api/reports/${t}?${qs}` : `/api/reports/${t}`);
   },
 };
 
@@ -206,7 +210,7 @@ export const reportsAPI = {
 export const healthAPI = {
   async checkGateway() { 
     try { 
-      const r = await fetch(`${GATEWAY_BASE}/actuator/health`, {
+      const r = await fetch(`${API_BASE_URL}/actuator/health`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
       });
@@ -219,8 +223,7 @@ export const healthAPI = {
   
   async checkTransactions() {
     try {
-      // Check by calling the actual endpoint, not /health
-      const r = await fetch(`${API_BASE_URL}/transactions`, {
+      const r = await fetch(`${API_BASE_URL}/api/transactions`, {
         method: 'GET',
         headers: { 
           'Accept': 'application/json',
@@ -236,8 +239,7 @@ export const healthAPI = {
   
   async checkBudgets() {
     try {
-      // Check by calling the actual endpoint, not /health
-      const r = await fetch(`${API_BASE_URL}/budgets`, {
+      const r = await fetch(`${API_BASE_URL}/api/budgets`, {
         method: 'GET',
         headers: { 
           'Accept': 'application/json',
