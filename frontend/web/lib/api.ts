@@ -1,34 +1,56 @@
-// lib/api.ts or utils/api.ts
-// Create this file to centralize all API calls
+// lib/api.ts
+// Centralized API helper for all backend calls
 
 /**
  * Get the base API URL, ensuring no trailing slash
  */
 function getBaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-  // Remove trailing slash if present
   return url.replace(/\/$/, '');
 }
 
 /**
- * Build API endpoint URL, preventing double /api/ paths
+ * Build API endpoint URL
+ * Services should include /api in their endpoint paths
  */
 function buildApiUrl(endpoint: string): string {
   const baseUrl = getBaseUrl();
-  
-  // Ensure endpoint starts with /
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  
-  // Check if baseUrl already ends with /api
-  if (baseUrl.endsWith('/api')) {
-    // If endpoint also starts with /api, remove it
-    if (cleanEndpoint.startsWith('/api')) {
-      return `${baseUrl}${cleanEndpoint.substring(4)}`;
-    }
-    return `${baseUrl}${cleanEndpoint}`;
-  }
-  
   return `${baseUrl}${cleanEndpoint}`;
+}
+
+/**
+ * Token management utilities
+ */
+export function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('authToken');
+}
+
+export function setToken(token: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('authToken', token);
+}
+
+export function removeToken(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('user');
+}
+
+export function getUser(): any | null {
+  if (typeof window === 'undefined') return null;
+  const userStr = localStorage.getItem('user');
+  try {
+    return userStr ? JSON.parse(userStr) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setUser(user: any): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('user', JSON.stringify(user));
 }
 
 /**
@@ -39,7 +61,6 @@ export async function apiRequest<T = any>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = getToken();
-  
   const url = buildApiUrl(endpoint);
   
   console.log('API Request:', {
@@ -81,7 +102,9 @@ export async function apiRequest<T = any>(
   }
 }
 
-// Auth API calls
+/**
+ * Auth API namespace
+ */
 export const authApi = {
   register: async (userData: { name: string; email: string; password: string }) => {
     const response = await apiRequest('/api/auth/register', {
@@ -89,7 +112,6 @@ export const authApi = {
       body: JSON.stringify(userData),
     });
     
-    // Store token and user if returned
     if (response.token) setToken(response.token);
     if (response.user) setUser(response.user);
     
@@ -102,7 +124,6 @@ export const authApi = {
       body: JSON.stringify(credentials),
     });
     
-    // Store token and user if returned
     if (response.token) setToken(response.token);
     if (response.user) setUser(response.user);
     
@@ -122,12 +143,15 @@ export const authApi = {
     }),
 };
 
-// Transactions API calls
+/**
+ * Transactions API namespace
+ */
 export const transactionsApi = {
-  getAll: () =>
-    apiRequest('/api/transactions', {
-      method: 'GET',
-    }),
+  getAll: (filters?: any) => {
+    const params = new URLSearchParams(filters || {});
+    const endpoint = params.toString() ? `/api/transactions?${params}` : '/api/transactions';
+    return apiRequest(endpoint, { method: 'GET' });
+  },
 
   create: (transaction: any) =>
     apiRequest('/api/transactions', {
@@ -153,44 +177,23 @@ export const transactionsApi = {
     return apiRequest('/api/transactions/upload', {
       method: 'POST',
       body: formData,
-      headers: {}, // Let browser set Content-Type for FormData
+      headers: {},
     });
   },
 };
 
-// Token management utilities
-export function getToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('authToken');
-}
+/**
+ * Health API namespace
+ */
+export const healthApi = {
+  check: () => apiRequest('/api/health', { method: 'GET' }),
+  ping: () => apiRequest('/api/health/ping', { method: 'GET' }),
+};
 
-export function setToken(token: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('authToken', token);
-}
-
-export function removeToken(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem('authToken');
-  localStorage.removeItem('user');
-}
-
-export function getUser(): any | null {
-  if (typeof window === 'undefined') return null;
-  const userStr = localStorage.getItem('user');
-  try {
-    return userStr ? JSON.parse(userStr) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function setUser(user: any): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('user', JSON.stringify(user));
-}
-
-// Create a default API object with common HTTP methods
+/**
+ * Default API object with HTTP methods
+ * This provides api.get(), api.post(), api.put(), api.delete()
+ */
 const api = {
   get: <T = any>(endpoint: string, options?: RequestInit) =>
     apiRequest<T>(endpoint, { ...options, method: 'GET' }),
@@ -213,8 +216,10 @@ const api = {
     apiRequest<T>(endpoint, { ...options, method: 'DELETE' }),
 };
 
-// Export named exports for specific use cases
+// Export both naming conventions for backward compatibility
 export { authApi as authAPI };
+export { transactionsApi as transactionsAPI };
+export { healthApi as healthAPI };
 
 // Export the api object as default
 export default api;

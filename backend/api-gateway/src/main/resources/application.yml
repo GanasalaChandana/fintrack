@@ -26,16 +26,19 @@ spring:
           predicates:
             - Path=/api/auth/**
           filters:
-            - RewritePath=/api/auth/(?<segment>.*), /api/auth/${segment}
+            - name: RewritePath
+              args:
+                regexp: /api/auth/(?<segment>.*)
+                replacement: /api/auth/${segment}
 
-        # ================= NOTIFICATIONS (NO AUTH FOR TESTING) =================
+        # ================= NOTIFICATIONS (WITH AUTH) =================
         - id: notifications-service
           uri: ${NOTIFICATIONS_SERVICE_URL:http://notifications-service:8086}
           predicates:
             - Path=/api/notifications/**
           filters:
-            - AuthenticationFilter
-
+            - AuthenticationFilter 
+            
         # ================= USERS (REQUIRES AUTH) =================
         - id: users-service
           uri: ${USERS_SERVICE_URL:http://users-service:8081}
@@ -43,7 +46,10 @@ spring:
             - Path=/api/users/**
           filters:
             - AuthenticationFilter
-            - RewritePath=/api/users/(?<segment>.*), /api/users/${segment}
+            - name: RewritePath
+              args:
+                regexp: /api/users/(?<segment>.*)
+                replacement: /api/users/${segment}
 
         # ================= TRANSACTIONS (REQUIRES AUTH) =================
         - id: transactions-service
@@ -52,15 +58,22 @@ spring:
             - Path=/api/transactions/**
           filters:
             - AuthenticationFilter
-            - RewritePath=/api/transactions/(?<segment>.*), /api/transactions/${segment}
+            - name: RewritePath
+              args:
+                regexp: /api/transactions/(?<segment>.*)
+                replacement: /api/transactions/${segment}
 
+        # ================= RECURRING TRANSACTIONS =================
         - id: transactions-service-recurring
           uri: ${TRANSACTIONS_SERVICE_URL:http://transactions-service:8082}
           predicates:
             - Path=/api/recurring-transactions/**
           filters:
             - AuthenticationFilter
-            - RewritePath=/api/recurring-transactions/(?<segment>.*), /api/recurring-transactions/${segment}
+            - name: RewritePath
+              args:
+                regexp: /api/recurring-transactions/(?<segment>.*)
+                replacement: /api/recurring-transactions/${segment}
 
         # ================= BUDGETS (REQUIRES AUTH) =================
         - id: budgets-service
@@ -77,7 +90,10 @@ spring:
             - Path=/api/alerts/**
           filters:
             - AuthenticationFilter
-            - RewritePath=/api/alerts/(?<segment>.*), /api/alerts/${segment}
+            - name: RewritePath
+              args:
+                regexp: /api/alerts/(?<segment>.*)
+                replacement: /api/alerts/${segment}
 
         # ================= REPORTS (REQUIRES AUTH) =================
         - id: reports-service
@@ -86,7 +102,10 @@ spring:
             - Path=/api/reports/**
           filters:
             - AuthenticationFilter
-            - RewritePath=/api/reports/(?<segment>.*), /api/reports/${segment}
+            - name: RewritePath
+              args:
+                regexp: /api/reports/(?<segment>.*)
+                replacement: /api/reports/${segment}
 
 # Application-specific configuration
 app:
@@ -114,9 +133,15 @@ management:
     gateway:
       enabled: true
 
-# Logging
+# Logging - CRITICAL: Enable gateway logging to debug routing
 logging:
   level:
-    com.fintrack: INFO
-    org.springframework.cloud.gateway: INFO
-    reactor.netty: INFO
+    root: INFO
+    com.fintrack: DEBUG
+    org.springframework.cloud.gateway: TRACE
+    org.springframework.cloud.gateway.handler.RoutePredicateHandlerMapping: TRACE
+    org.springframework.web: DEBUG
+    org.springframework.web.server.adapter.HttpWebHandlerAdapter: TRACE
+    reactor.netty.http.server: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n%wEx"

@@ -30,6 +30,15 @@ spring:
             - Path=/api/auth/**
           filters:
             - RewritePath=/api/auth/(?<segment>.*), /api/auth/${segment}
+        
+        
+        # ================= NOTIFICATIONS (WITH AUTH) =================
+        - id: notifications-service
+          uri: ${NOTIFICATIONS_SERVICE_URL:http://notifications-service:8086}
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - AuthenticationFilter
 
         - id: users-service
           uri: http://users-service:8081

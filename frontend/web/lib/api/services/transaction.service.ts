@@ -37,7 +37,6 @@ function buildSearchParams(filters?: TransactionFilters): string {
   if (!filters) return '';
   const params = new URLSearchParams();
 
-  // Append only known, allowed keys to avoid index-signature errors
   const {
     startDate, endDate, category, type,
     minAmount, maxAmount, page, size,
@@ -59,10 +58,10 @@ export const transactionService = {
   async getAll(filters?: TransactionFilters): Promise<Transaction[]> {
     try {
       const qs = buildSearchParams(filters);
-      const endpoint = qs ? `/transactions?${qs}` : '/transactions';
+      const endpoint = qs ? `/api/transactions?${qs}` : '/api/transactions';
       const res = (await api.get(endpoint)) as unknown;
 
-      // Normalize a few possible shapes
+      // Normalize response shapes
       if (Array.isArray(res)) return res as Transaction[];
       if (res && Array.isArray((res as any).content)) return (res as any).content as Transaction[];
       if (res && Array.isArray((res as any).data)) return (res as any).data as Transaction[];
@@ -75,22 +74,22 @@ export const transactionService = {
   },
 
   async getById(id: string): Promise<Transaction> {
-    const res = (await api.get(`/transactions/${id}`)) as unknown as Transaction;
+    const res = (await api.get(`/api/transactions/${id}`)) as unknown as Transaction;
     return res;
   },
 
   async create(tx: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>): Promise<Transaction> {
-    const res = (await api.post('/transactions', tx)) as unknown as Transaction;
+    const res = (await api.post('/api/transactions', tx)) as unknown as Transaction;
     return res;
   },
 
   async update(id: string, updates: Partial<Transaction>): Promise<Transaction> {
-    const res = (await api.put(`/transactions/${id}`, updates)) as unknown as Transaction;
+    const res = (await api.put(`/api/transactions/${id}`, updates)) as unknown as Transaction;
     return res;
   },
 
   async delete(id: string): Promise<void> {
-    await api.delete(`/transactions/${id}`);
+    await api.delete(`/api/transactions/${id}`);
   },
 
   async getSummary(filters?: Pick<TransactionFilters, 'startDate' | 'endDate'>): Promise<TransactionSummary> {
@@ -98,7 +97,7 @@ export const transactionService = {
       const params = new URLSearchParams();
       if (filters?.startDate) params.append('startDate', filters.startDate);
       if (filters?.endDate) params.append('endDate', filters.endDate);
-      const endpoint = params.toString() ? `/transactions/summary?${params}` : '/transactions/summary';
+      const endpoint = params.toString() ? `/api/transactions/summary?${params}` : '/api/transactions/summary';
 
       const res = (await api.get(endpoint)) as unknown as TransactionSummary | undefined;
       return (
@@ -124,7 +123,7 @@ export const transactionService = {
 
   async classify(description: string): Promise<{ category: string; confidence: number }> {
     try {
-      const res = (await api.post('/transactions/classify', { description })) as unknown as {
+      const res = (await api.post('/api/transactions/classify', { description })) as unknown as {
         category: string;
         confidence: number;
       };
@@ -137,9 +136,9 @@ export const transactionService = {
 
   async exportToCsv(filters?: TransactionFilters): Promise<Blob> {
     const qs = buildSearchParams(filters);
-    const endpoint = qs ? `/transactions/export?${qs}` : '/transactions/export';
+    const endpoint = qs ? `/api/transactions/export?${qs}` : '/api/transactions/export';
 
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
     const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : '';
 
     const res = await fetch(`${base}${endpoint}`, {

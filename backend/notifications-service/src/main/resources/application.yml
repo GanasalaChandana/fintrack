@@ -32,8 +32,10 @@ spring:
 # Logging
 logging:
   level:
+    root: INFO
     com.fintrack: DEBUG
-    org.springframework.web: INFO
+    org.springframework.web: DEBUG
+    org.springframework.web.servlet: DEBUG
     org.hibernate: INFO
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
@@ -47,3 +49,7 @@ management:
   endpoint:
     health:
       show-details: always
+      show-components: always
+  health:
+    db:
+      enabled: true

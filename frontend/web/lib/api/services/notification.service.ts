@@ -24,6 +24,8 @@ export interface NotificationSettings {
 }
 
 class NotificationService {
+  private serviceAvailable: boolean = true;
+
   /** Resolve the active user id. */
   private getUserId(): string {
     if (typeof window === 'undefined') return 'dev-user-123';
@@ -40,6 +42,8 @@ class NotificationService {
   /* ---------------------------- Notifications ---------------------------- */
 
   async getAll(): Promise<Notification[]> {
+    if (!this.serviceAvailable) return [];
+    
     const userId = this.getUserId();
     try {
       // GET /api/notifications/user/{userId}
@@ -47,13 +51,21 @@ class NotificationService {
         `/api/notifications/user/${encodeURIComponent(userId)}`
       );
       return res || [];
-    } catch (err) {
-      console.warn('Notifications service not available - using empty state');
+    } catch (err: any) {
+      // If 404, service not implemented - mark as unavailable
+      if (err?.message?.includes('404')) {
+        this.serviceAvailable = false;
+        console.info('Notifications service not available - using empty state');
+      } else {
+        console.warn('Notifications service error:', err?.message);
+      }
       return [];
     }
   }
 
   async getUnread(): Promise<Notification[]> {
+    if (!this.serviceAvailable) return [];
+    
     const userId = this.getUserId();
     try {
       // GET /api/notifications/user/{userId}/unread
@@ -61,13 +73,17 @@ class NotificationService {
         `/api/notifications/user/${encodeURIComponent(userId)}/unread`
       );
       return res || [];
-    } catch (err) {
-      console.warn('Notifications service not available - using empty state');
+    } catch (err: any) {
+      if (err?.message?.includes('404')) {
+        this.serviceAvailable = false;
+      }
       return [];
     }
   }
 
   async getUnreadCount(): Promise<number> {
+    if (!this.serviceAvailable) return 0;
+    
     const userId = this.getUserId();
     try {
       // GET /api/notifications/user/{userId}/count/unread
@@ -77,13 +93,17 @@ class NotificationService {
       if (typeof res === 'number') return res;
       if (res && typeof res.count === 'number') return res.count;
       return 0;
-    } catch {
-      console.warn('Notifications service not available - count is 0');
+    } catch (err: any) {
+      if (err?.message?.includes('404')) {
+        this.serviceAvailable = false;
+      }
       return 0;
     }
   }
 
   async markAsRead(notificationId: string): Promise<void> {
+    if (!this.serviceAvailable) return;
+    
     const userId = this.getUserId();
     try {
       // PATCH /api/notifications/{id}/read?userId={userId}
@@ -93,13 +113,17 @@ class NotificationService {
         )}`,
         { method: 'PATCH', body: JSON.stringify({}) }
       );
-    } catch (err) {
-      console.warn('Failed to mark notification as read - service not available');
-      throw err;
+    } catch (err: any) {
+      if (err?.message?.includes('404')) {
+        this.serviceAvailable = false;
+      }
+      // Don't throw - fail silently
     }
   }
 
   async markAllAsRead(): Promise<void> {
+    if (!this.serviceAvailable) return;
+    
     const userId = this.getUserId();
     try {
       // PATCH /api/notifications/user/{userId}/read-all
@@ -107,13 +131,17 @@ class NotificationService {
         `/api/notifications/user/${encodeURIComponent(userId)}/read-all`,
         { method: 'PATCH', body: JSON.stringify({}) }
       );
-    } catch (err) {
-      console.warn('Failed to mark all notifications as read - service not available');
-      throw err;
+    } catch (err: any) {
+      if (err?.message?.includes('404')) {
+        this.serviceAvailable = false;
+      }
+      // Don't throw - fail silently
     }
   }
 
   async delete(notificationId: string): Promise<void> {
+    if (!this.serviceAvailable) return;
+    
     const userId = this.getUserId();
     try {
       // DELETE /api/notifications/{id}?userId={userId}
@@ -123,13 +151,17 @@ class NotificationService {
         )}`,
         { method: 'DELETE' }
       );
-    } catch (err) {
-      console.warn('Failed to delete notification - service not available');
-      throw err;
+    } catch (err: any) {
+      if (err?.message?.includes('404')) {
+        this.serviceAvailable = false;
+      }
+      // Don't throw - fail silently
     }
   }
 
   async deleteAll(): Promise<void> {
+    if (!this.serviceAvailable) return;
+    
     const userId = this.getUserId();
     try {
       // DELETE /api/notifications/user/{userId}
@@ -137,15 +169,19 @@ class NotificationService {
         `/api/notifications/user/${encodeURIComponent(userId)}`,
         { method: 'DELETE' }
       );
-    } catch (err) {
-      console.warn('Failed to delete all notifications - service not available');
-      throw err;
+    } catch (err: any) {
+      if (err?.message?.includes('404')) {
+        this.serviceAvailable = false;
+      }
+      // Don't throw - fail silently
     }
   }
 
   /* ------------------------------ Settings ------------------------------ */
 
   async getSettings(): Promise<NotificationSettings> {
+    if (!this.serviceAvailable) return this.getDefaultSettings();
+    
     const userId = this.getUserId();
     try {
       // GET /api/notifications/settings/{userId}
@@ -153,8 +189,11 @@ class NotificationService {
         `/api/notifications/settings/${encodeURIComponent(userId)}`
       );
       return res || this.getDefaultSettings();
-    } catch {
-      console.warn('Notification settings service not available - using defaults');
+    } catch (err: any) {
+      if (err?.message?.includes('404')) {
+        this.serviceAvailable = false;
+        console.info('Notification settings service not available - using defaults');
+      }
       return this.getDefaultSettings();
     }
   }
@@ -162,6 +201,8 @@ class NotificationService {
   async updateSettings(
     settings: Partial<NotificationSettings>
   ): Promise<NotificationSettings> {
+    if (!this.serviceAvailable) return this.getDefaultSettings();
+    
     const userId = this.getUserId();
     try {
       // PUT /api/notifications/settings/{userId}
@@ -170,13 +211,18 @@ class NotificationService {
         { method: 'PUT', body: JSON.stringify(settings) }
       );
       return res;
-    } catch (err) {
-      console.warn('Failed to update notification settings - service not available');
-      throw err;
+    } catch (err: any) {
+      if (err?.message?.includes('404')) {
+        this.serviceAvailable = false;
+      }
+      // Return merged default settings with attempted changes
+      return { ...this.getDefaultSettings(), ...settings };
     }
   }
 
   async resetSettings(): Promise<NotificationSettings> {
+    if (!this.serviceAvailable) return this.getDefaultSettings();
+    
     const userId = this.getUserId();
     try {
       // POST /api/notifications/settings/{userId}/reset
@@ -185,8 +231,10 @@ class NotificationService {
         { method: 'POST', body: JSON.stringify({}) }
       );
       return res || this.getDefaultSettings();
-    } catch {
-      console.warn('Failed to reset notification settings - service not available');
+    } catch (err: any) {
+      if (err?.message?.includes('404')) {
+        this.serviceAvailable = false;
+      }
       return this.getDefaultSettings();
     }
   }
@@ -206,6 +254,16 @@ class NotificationService {
 
   isAuthenticated(): boolean {
     return !!getToken();
+  }
+
+  // Method to check if service is available
+  isServiceAvailable(): boolean {
+    return this.serviceAvailable;
+  }
+
+  // Method to manually reset service availability (useful for testing)
+  resetServiceAvailability(): void {
+    this.serviceAvailable = true;
   }
 }
 
