@@ -1,233 +1,217 @@
-import { useState } from 'react';
-import { useRouter } from 'next/router';
+// app/login/page.jsx
+'use client';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
+import { authAPI } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
 
-  async function handleSubmit(e) {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setBusy(true);
     setError('');
-    setSuccessMessage('');
+    setLoading(true);
 
     try {
-      console.log('🔐 Attempting login with:', email);
-      
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+      // ✅ Use the API helper - it handles URL building correctly
+      const data = await authAPI.login({
+        email: formData.email.toLowerCase().trim(),
+        password: formData.password,
       });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        let msg = 'Login failed';
-        try {
-          const j = JSON.parse(text);
-          msg = j.message || msg;
-        } catch {
-          if (res.status === 401) msg = 'Invalid email or password';
-        }
-        throw new Error(msg);
+      console.log('Login successful:', data);
+
+      // Store token if returned
+      if (data.token) {
+        localStorage.setItem('authToken', data.token);
       }
 
-      const data = await res.json();
-      console.log('✅ Login response:', data);
-
-      if (!data.token) {
-        console.error('❌ No token in response!');
-        throw new Error('No authentication token received from server');
-      }
-
-      // Save token as 'authToken'
-      console.log('💾 Saving token to localStorage as authToken...');
-      localStorage.setItem('authToken', data.token);
-      
-      // Also save user info
+      // Store user data
       if (data.user) {
         localStorage.setItem('user', JSON.stringify(data.user));
       }
 
-      // Verify token was saved
-      const savedToken = localStorage.getItem('authToken');
-      console.log('✅ Token saved:', savedToken ? 'YES' : 'NO');
-      console.log('🔍 Verify token:', savedToken?.substring(0, 20) + '...');
-      
-      if (!savedToken) {
-        throw new Error('Failed to save authentication token');
-      }
-
-      // Navigate to dashboard
-      console.log('🚀 Redirecting to dashboard...');
-      router.replace('/dashboard');
+      // Redirect to dashboard
+      router.push('/dashboard');
       
     } catch (err) {
-      console.error('❌ Login error:', err);
-      setError(err.message || 'Unable to login');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createDemoUser() {
-    try {
-      setBusy(true);
-      setError('');
-      setSuccessMessage('');
+      console.error('Login error:', err);
       
-      // Generate random demo user
-      const rand = Math.floor(Math.random() * 900000) + 100000;
-      const demoEmail = `user${rand}@test.com`;
-      const demoPass = 'Test1234!';
-
-      console.log('📝 Creating demo user:', demoEmail);
-
-      const res = await fetch(`${API_BASE}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email: demoEmail, 
-          password: demoPass 
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Registration failed');
+      // Handle specific error messages
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+      
+      if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized')) {
+        setError('Invalid email or password');
+      } else if (errorMessage.includes('404')) {
+        setError('Login service not available. Please try again later.');
+      } else if (errorMessage.includes('429')) {
+        setError('Too many login attempts. Please try again later.');
+      } else {
+        setError('Login failed. Please try again.');
       }
-
-      const data = await res.json();
-      console.log('✅ Registration successful:', data);
-
-      // Auto-fill the form with demo credentials
-      setEmail(demoEmail);
-      setPassword(demoPass);
-      
-      // Show success message with credentials
-      setSuccessMessage(
-        `✅ Demo user created successfully!\n\nEmail: ${demoEmail}\nPassword: ${demoPass}\n\nCredentials have been auto-filled. Click "Sign in" to continue.`
-      );
-      
-      // If registration returns a token, save it and redirect
-      if (data.token) {
-        console.log('💾 Registration returned token, saving...');
-        localStorage.setItem('authToken', data.token);
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-        }
-        
-        // Give user time to see the message, then redirect
-        setTimeout(() => {
-          console.log('🚀 Redirecting to dashboard...');
-          router.replace('/dashboard');
-        }, 1500);
-      }
-      
-    } catch (err) {
-      console.error('❌ Registration error:', err);
-      setError(err.message || 'Registration failed');
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
-  }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    
+    if (error) setError('');
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">FinTrack</h1>
-          <p className="text-gray-600">Sign in to your account</p>
+          <Link href="/" className="text-3xl font-bold text-indigo-600">
+            FinTrack
+          </Link>
+          <p className="text-gray-600 mt-2">Sign in to your account</p>
         </div>
 
-        {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
-            <strong>Error:</strong> {error}
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="mb-4 rounded-lg bg-green-50 border border-green-200 text-green-700 px-4 py-3 text-sm whitespace-pre-line">
-            {successMessage}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Email Address
-            </label>
-            <input
-              type="email"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-              autoFocus
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Password
-            </label>
-            <input
-              type="password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-lg bg-blue-600 text-white font-semibold py-3 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] active:scale-[0.98]"
-          >
-            {busy ? (
-              <span className="flex items-center justify-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Signing in...
-              </span>
-            ) : (
-              'Sign In'
-            )}
-          </button>
-        </form>
-
-        <div className="mt-6">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          {error && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-red-800 text-sm">{error}</p>
             </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">or</span>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                Email Address
+              </label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+                placeholder="you@example.com"
+                required
+                disabled={loading}
+                autoComplete="email"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition pr-12"
+                  placeholder="Enter your password"
+                  required
+                  disabled={loading}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  disabled={loading}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="remember"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                />
+                <label htmlFor="remember" className="ml-2 text-sm text-gray-600">
+                  Remember me
+                </label>
+              </div>
+              <Link 
+                href="/forgot-password" 
+                className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+              >
+                Forgot password?
+              </Link>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                'Sign In'
+              )}
+            </button>
+          </form>
+
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">Or continue with</span>
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              >
+                Google
+              </button>
+              <button
+                type="button"
+                className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              >
+                GitHub
+              </button>
             </div>
           </div>
 
-          <button
-            onClick={createDemoUser}
-            disabled={busy}
-            className="mt-6 w-full rounded-lg bg-gray-100 text-gray-700 font-semibold py-3 hover:bg-gray-200 disabled:opacity-60 disabled:cursor-not-allowed transition-all border border-gray-300"
-          >
-            {busy ? 'Creating...' : '🎯 Create Demo Account'}
-          </button>
-          
-          <p className="mt-4 text-center text-xs text-gray-500">
-            Creates a test account with random credentials
-          </p>
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              Don't have an account?{' '}
+              <Link href="/register" className="text-indigo-600 hover:text-indigo-700 font-semibold">
+                Sign up for free
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>
