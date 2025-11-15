@@ -1,8 +1,15 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { healthAPI, transactionsAPI } from '../lib/api';
+import { useRouter } from 'next/navigation'; // or 'next/router' for pages router
+import { healthAPI, transactionsAPI, getToken, getUser, isAuthenticated } from '../lib/api';
 import './Dashboard.css';
 
 function Dashboard() {
+  const router = useRouter();
+
+  // Authentication State
+  const [authChecked, setAuthChecked] = useState(false);
+  const [user, setUser] = useState(null);
+
   // API Connection State
   const [apiStatus, setApiStatus] = useState({
     checking: true,
@@ -27,6 +34,27 @@ function Dashboard() {
   const isCheckingRef = useRef(false);
   const hasLoadedRef = useRef(false);
 
+  // ⭐ CHECK AUTHENTICATION FIRST ⭐
+  useEffect(() => {
+    console.log('🔐 Checking authentication...');
+    
+    // Check if user has valid token
+    const token = getToken();
+    const userData = getUser();
+    
+    if (!token) {
+      console.log('❌ No token found - redirecting to login');
+      router.push('/login');
+      return;
+    }
+
+    console.log('✅ Token found:', token.substring(0, 20) + '...');
+    console.log('✅ User data:', userData);
+    
+    setUser(userData);
+    setAuthChecked(true);
+  }, [router]);
+
   // Memoized function to check API connection
   const checkAPIConnection = useCallback(async () => {
     // Prevent duplicate checks
@@ -41,19 +69,28 @@ function Dashboard() {
       setApiStatus(prev => ({ ...prev, checking: true }));
       console.log('🔍 Checking API connection...');
       
+      // Check if we have a token before making API calls
+      if (!isAuthenticated()) {
+        console.log('⚠️ Not authenticated, skipping API check');
+        router.push('/login');
+        return;
+      }
+
       // Use healthAPI from your API client
-      const health = await healthAPI.checkAll().catch(() => ({
+      const health = await healthAPI.check().catch(() => ({
         connected: false,
-        gateway: { connected: false }
+        status: 'offline'
       }));
 
       console.log('✅ Health check results:', health);
       
+      const isConnected = health.status === 'ok' || health.connected;
+      
       const newStatus = {
         checking: false,
-        backend: health.connected || false,
-        transactions: health.transactions?.connected || false,
-        budgets: health.budgets?.connected || false,
+        backend: isConnected,
+        transactions: isConnected, // Assume connected if backend is
+        budgets: false,
         alerts: false
       };
 
@@ -61,6 +98,9 @@ function Dashboard() {
       
       if (!newStatus.backend) {
         setError('Backend gateway is not available. Please check if services are running.');
+      } else {
+        // Clear any previous errors
+        setError(null);
       }
 
       // If backend is connected and we haven't loaded data yet, load it
@@ -70,6 +110,14 @@ function Dashboard() {
       }
     } catch (error) {
       console.error('❌ API check failed:', error);
+      
+      // If it's a 401 error, redirect to login
+      if (error.message && error.message.includes('401')) {
+        console.log('🔐 Unauthorized - redirecting to login');
+        router.push('/login');
+        return;
+      }
+      
       setApiStatus({
         checking: false,
         backend: false,
@@ -81,10 +129,17 @@ function Dashboard() {
     } finally {
       isCheckingRef.current = false;
     }
-  }, []); // No dependencies - function is stable
+  }, [router]);
 
   // Memoized function to load dashboard data
   const loadDashboardData = useCallback(async () => {
+    // Double-check authentication
+    if (!isAuthenticated()) {
+      console.log('⚠️ Not authenticated, cannot load data');
+      router.push('/login');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -93,6 +148,12 @@ function Dashboard() {
       // Fetch transactions with error handling
       const txRes = await transactionsAPI.getAll({ limit: 10 }).catch(err => {
         console.warn('⚠️ Transactions API error:', err);
+        
+        // If unauthorized, redirect to login
+        if (err.message && err.message.includes('401')) {
+          router.push('/login');
+        }
+        
         return { content: [] };
       });
 
@@ -108,9 +169,9 @@ function Dashboard() {
 
       txList.forEach(tx => {
         const amount = Number(tx.amount) || 0;
-        if (tx.type === 'INCOME' || amount > 0) {
+        if (tx.type === 'INCOME' || tx.type === 'income' || amount > 0) {
           totalIncome += Math.abs(amount);
-        } else if (tx.type === 'EXPENSE' || amount < 0) {
+        } else if (tx.type === 'EXPENSE' || tx.type === 'expense' || amount < 0) {
           totalExpenses += Math.abs(amount);
         }
       });
@@ -133,20 +194,29 @@ function Dashboard() {
 
     } catch (err) {
       console.error('❌ Dashboard load error:', err);
+      
+      // If it's an auth error, redirect
+      if (err.message && err.message.includes('401')) {
+        router.push('/login');
+        return;
+      }
+      
       setError('Failed to load dashboard data: ' + (err.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }
-  }, []); // No dependencies - function is stable
+  }, [router]);
 
-  // Check API connection ONCE on mount
+  // Check API connection ONLY after auth is verified
   useEffect(() => {
-    checkAPIConnection();
-  }, []); // Empty array = run once on mount only
+    if (authChecked && isAuthenticated()) {
+      checkAPIConnection();
+    }
+  }, [authChecked, checkAPIConnection]);
 
   // Manual retry handler
   const handleRetry = useCallback(() => {
-    hasLoadedRef.current = false; // Reset loaded flag
+    hasLoadedRef.current = false;
     checkAPIConnection();
   }, [checkAPIConnection]);
 
@@ -156,6 +226,14 @@ function Dashboard() {
       loadDashboardData();
     }
   }, [loading, loadDashboardData]);
+
+  // Logout handler
+  const handleLogout = useCallback(() => {
+    // Import removeToken from api
+    const { removeToken } = require('../lib/api');
+    removeToken();
+    router.push('/login');
+  }, [router]);
 
   const formatCurrency = (n) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(n || 0));
@@ -174,13 +252,30 @@ function Dashboard() {
 
   // ---------- RENDER ----------
 
+  // Show loading while checking authentication
+  if (!authChecked) {
+    return (
+      <div className="dashboard">
+        <div className="loading">
+          <div className="spinner" />
+          <p>Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If not authenticated, show nothing (will redirect)
+  if (!isAuthenticated()) {
+    return null;
+  }
+
   // Loading state while checking API
   if (apiStatus.checking) {
     return (
       <div className="dashboard">
         <div className="loading">
           <div className="spinner" />
-          <p>Checking API connection...</p>
+          <p>Connecting to services...</p>
         </div>
       </div>
     );
@@ -190,15 +285,32 @@ function Dashboard() {
   if (!apiStatus.backend) {
     return (
       <div className="dashboard">
+        {/* Header with logout */}
+        <div className="dashboard-header">
+          <div>
+            <h1>Dashboard</h1>
+            <p className="subtitle">Welcome, {user?.name || 'User'}</p>
+          </div>
+          <button className="logout-button" onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
+
         <div className="error-container">
           <h2>⚠️ Backend Not Connected</h2>
           <p>{error || 'Unable to connect to backend services.'}</p>
-          <button className="retry-button" onClick={handleRetry}>
-            Retry Connection
-          </button>
+          <div className="button-group">
+            <button className="retry-button" onClick={handleRetry}>
+              Retry Connection
+            </button>
+            <button className="logout-button" onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
           <div className="troubleshooting">
             <h3>Troubleshooting</h3>
             <ul>
+              <li>✅ Authenticated as: {user?.email || 'Unknown'}</li>
               <li>Gateway URL: {process.env.NEXT_PUBLIC_API_URL || 'Not configured'}</li>
               <li>Check if all Render services are deployed and running</li>
               <li>Verify CORS settings allow your Vercel domain</li>
@@ -217,7 +329,7 @@ function Dashboard() {
       <div className="dashboard-header">
         <div>
           <h1>Dashboard</h1>
-          <p className="subtitle">Welcome back! Here's your financial overview</p>
+          <p className="subtitle">Welcome back, {user?.name || user?.email || 'User'}!</p>
         </div>
         <div className="header-actions">
           <div className="api-status">
@@ -230,6 +342,9 @@ function Dashboard() {
             disabled={loading}
           >
             {loading ? '⟳ Refreshing...' : '🔄 Refresh'}
+          </button>
+          <button className="logout-button" onClick={handleLogout}>
+            Logout
           </button>
         </div>
       </div>
@@ -283,7 +398,7 @@ function Dashboard() {
           </div>
           <p className="amount">{formatCurrency(summary.totalExpenses)}</p>
           <span className="subtitle">{summary.transactionCount} transactions</span>
-        </div>
+          </div>
 
         <div className="card net-income">
           <div className="card-header">
@@ -327,7 +442,7 @@ function Dashboard() {
               <p>Start by adding your first transaction to track your finances.</p>
               <button
                 className="primary-button"
-                onClick={() => (window.location.href = '/transactions')}
+                onClick={() => router.push('/transactions')}
               >
                 Add Transaction
               </button>
@@ -352,7 +467,7 @@ function Dashboard() {
               ))}
               <button
                 className="view-all-button"
-                onClick={() => (window.location.href = '/transactions')}
+                onClick={() => router.push('/transactions')}
               >
                 View All Transactions →
               </button>
@@ -367,7 +482,7 @@ function Dashboard() {
           <div className="action-cards">
             <div
               className="action-card"
-              onClick={() => (window.location.href = '/transactions/new')}
+              onClick={() => router.push('/transactions/new')}
             >
               <div className="action-icon add">➕</div>
               <div className="action-content">
@@ -398,6 +513,10 @@ function Dashboard() {
             <h3>System Information</h3>
             <div className="status-grid">
               <div className="status-item">
+                <span className="status-label">Logged in as:</span>
+                <span className="status-badge">{user?.email || 'Unknown'}</span>
+              </div>
+              <div className="status-item">
                 <span className="status-label">API Gateway:</span>
                 <span className="status-badge connected">✅ Online</span>
               </div>
@@ -423,7 +542,12 @@ function Dashboard() {
           <details>
             <summary>🔍 Debug Info</summary>
             <pre>
-{`API Gateway: ${process.env.NEXT_PUBLIC_API_URL || 'Not configured'}
+{`Authentication:
+- User: ${user?.email || 'Not logged in'}
+- Token: ${getToken() ? '✅ Present' : '❌ Missing'}
+- Auth Status: ${isAuthenticated() ? '✅ Authenticated' : '❌ Not Authenticated'}
+
+API Gateway: ${process.env.NEXT_PUBLIC_API_URL || 'Not configured'}
 Backend Status: ${apiStatus.backend ? '✅ Connected' : '❌ Disconnected'}
 
 Service Status:
@@ -438,6 +562,7 @@ Data Summary:
 - Net Income: ${formatCurrency(summary.netIncome)}
 
 Status:
+- Auth Checked: ${authChecked ? 'Yes' : 'No'}
 - Loading: ${loading ? 'Yes' : 'No'}
 - Error: ${error || 'None'}
 - Has Loaded: ${hasLoadedRef.current ? 'Yes' : 'No'}`}
