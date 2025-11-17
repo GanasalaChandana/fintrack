@@ -1,108 +1,216 @@
-﻿'use client';
+﻿// components/Navigation.tsx
+'use client';
 
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Bell, X } from 'lucide-react';
-import AlertsNotifications from '@/app/notifications/page';
+import { useRouter, usePathname } from 'next/navigation';
+import { Bell, LogOut, Menu, X } from 'lucide-react';
 
 export default function Navigation() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const router = useRouter();
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
 
-  const navItems = [
-    { name: 'Dashboard', path: '/dashboard', icon: '📊' },
-    { name: 'Transactions', path: '/transactions', icon: '💳' },
-    { name: 'Budget', path: '/budget', icon: '💰' },
-    { name: 'Reports', path: '/reports', icon: '📈' },
-  ];
+  // Wait for component to mount before checking authentication
+  useEffect(() => {
+    setMounted(true);
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('authToken');
+      setIsAuthenticated(!!token);
+    }
+  }, []);
 
-  return (
-    <nav className="bg-white shadow-sm border-b">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          {/* Brand */}
-          <div className="flex items-center">
-            <Link href="/dashboard" className="flex items-center">
-              <span className="text-2xl font-bold text-blue-600">FinTrack</span>
-            </Link>
-          </div>
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('user');
+      setIsAuthenticated(false);
+      router.push('/login');
+    }
+  };
 
-          {/* Main nav */}
-          <div className="flex space-x-1">
-            {navItems.map((item) => {
-              const isActive = pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  href={item.path}
-                  className={`px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 ${
-                    isActive
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
-                >
-                  <span>{item.icon}</span>
-                  <span className="hidden sm:inline">{item.name}</span>
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* Actions (Bell + Avatar link to settings) */}
-          <div className="flex items-center gap-3">
-            {/* Bell opens notifications panel (no navigation) */}
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="relative px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-              aria-label="Open notifications"
-            >
-              <Bell className="w-5 h-5" />
-              {/* Optional badge
-              <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] rounded-full w-4 h-4 grid place-items-center">4</span>
-              */}
-            </button>
-
-            {/* Avatar now routes to Settings -> Profile tab */}
-            <Link
-              href="/settings?tab=profile"
-              aria-label="Open settings"
-              className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-medium hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            >
-              U
+  // Don't render navigation on auth pages during SSR
+  if (!mounted) {
+    return (
+      <nav className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <Link href="/" className="text-2xl font-bold text-indigo-600">
+              FinTrack
             </Link>
           </div>
         </div>
+      </nav>
+    );
+  }
+
+  // Hide navigation on login and register pages
+  const isAuthPage = pathname === '/login' || pathname === '/register';
+  if (isAuthPage) {
+    return null;
+  }
+
+  return (
+    <nav className="bg-white shadow-sm sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16">
+          {/* Logo */}
+          <Link href="/" className="text-2xl font-bold text-indigo-600 hover:text-indigo-700 transition">
+            FinTrack
+          </Link>
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-6">
+            {isAuthenticated ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  className="text-gray-700 hover:text-indigo-600 font-medium transition"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/transactions"
+                  className="text-gray-700 hover:text-indigo-600 font-medium transition"
+                >
+                  Transactions
+                </Link>
+                <Link
+                  href="/budget"
+                  className="text-gray-700 hover:text-indigo-600 font-medium transition"
+                >
+                  Budget
+                </Link>
+                <Link
+                  href="/reports"
+                  className="text-gray-700 hover:text-indigo-600 font-medium transition"
+                >
+                  Reports
+                </Link>
+
+                <div className="flex items-center gap-3 ml-4 pl-4 border-l border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => router.push('/notifications')}
+                    className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition"
+                    aria-label="Open notifications"
+                  >
+                    <Bell className="w-5 h-5" />
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-lg transition font-medium"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="text-gray-700 hover:text-indigo-600 font-medium transition"
+                >
+                  Log In
+                </Link>
+                <Link
+                  href="/register"
+                  className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition font-medium shadow-sm hover:shadow-md"
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
+          </div>
+
+          {/* Mobile Menu Button */}
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="md:hidden p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition"
+            aria-label="Toggle menu"
+          >
+            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        </div>
       </div>
 
-      {/* Notifications overlay */}
-      {open && (
-        <div
-          className="fixed inset-0 z-50 bg-black/50"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            className="absolute right-4 top-16 bottom-4 w-[720px] max-w-[95vw] bg-white rounded-xl shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 h-12 border-b">
-              <span className="font-semibold">Notifications</span>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="p-2 rounded hover:bg-gray-100"
-                aria-label="Close notifications"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="h-[calc(100%-3rem)] overflow-y-auto">
-              <AlertsNotifications />
-            </div>
+      {/* Mobile Menu */}
+      {isMenuOpen && (
+        <div className="md:hidden bg-white border-t border-gray-200">
+          <div className="px-4 py-4 space-y-3">
+            {isAuthenticated ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  className="block px-4 py-2 text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition font-medium"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/transactions"
+                  className="block px-4 py-2 text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition font-medium"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Transactions
+                </Link>
+                <Link
+                  href="/budget"
+                  className="block px-4 py-2 text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition font-medium"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Budget
+                </Link>
+                <Link
+                  href="/reports"
+                  className="block px-4 py-2 text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition font-medium"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Reports
+                </Link>
+                <Link
+                  href="/notifications"
+                  className="block px-4 py-2 text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition font-medium"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Notifications
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleLogout();
+                    setIsMenuOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition font-medium"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="block px-4 py-2 text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition font-medium"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Log In
+                </Link>
+                <Link
+                  href="/register"
+                  className="block px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition font-medium text-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

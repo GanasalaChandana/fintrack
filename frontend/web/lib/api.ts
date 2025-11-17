@@ -44,7 +44,6 @@ function getBaseUrl(): string {
 
 /**
  * Build API endpoint URL
- * Services should include /api in their endpoint paths
  */
 function buildApiUrl(endpoint: string): string {
   const baseUrl = getBaseUrl();
@@ -94,8 +93,11 @@ export function isAuthenticated(): boolean {
   return !!getToken();
 }
 
+// ✅ ADD REQUEST TRACKING TO PREVENT DUPLICATES
+const pendingRequests = new Map<string, Promise<any>>();
+
 /**
- * Make an API request with automatic error handling
+ * Make an API request with automatic error handling and duplicate prevention
  */
 export async function apiRequest<T = any>(
   endpoint: string,
@@ -104,6 +106,15 @@ export async function apiRequest<T = any>(
   const token = getToken();
   const url = buildApiUrl(endpoint);
   
+  // ✅ CREATE UNIQUE REQUEST KEY
+  const requestKey = `${options.method || 'GET'}-${endpoint}-${JSON.stringify(options.body || '')}`;
+  
+  // ✅ CHECK IF THIS EXACT REQUEST IS ALREADY IN FLIGHT
+  if (pendingRequests.has(requestKey)) {
+    console.log('Duplicate request detected, returning existing promise:', requestKey);
+    return pendingRequests.get(requestKey)!;
+  }
+  
   console.log('API Request:', {
     endpoint,
     url,
@@ -111,7 +122,6 @@ export async function apiRequest<T = any>(
     hasToken: !!token
   });
 
-  // Don't set Content-Type for FormData (browser will set it with boundary)
   const isFormData = options.body instanceof FormData;
   
   const config: RequestInit = {
@@ -124,80 +134,76 @@ export async function apiRequest<T = any>(
     credentials: 'include',
   };
 
-  try {
-    const response = await fetch(url, config);
-    
-    // Handle empty responses (like 204 No Content)
-    if (response.status === 204 || response.headers.get('content-length') === '0') {
-      return {} as T;
-    }
+  // ✅ CREATE AND STORE THE PROMISE
+  const requestPromise = (async () => {
+    try {
+      const response = await fetch(url, config);
+      
+      // Handle empty responses
+      if (response.status === 204 || response.headers.get('content-length') === '0') {
+        return {} as T;
+      }
 
-    // Check content type before parsing
-    const contentType = response.headers.get('content-type');
-    let data: any;
-    
-    if (contentType && contentType.includes('application/json')) {
-      try {
-        data = await response.json();
-      } catch (jsonError) {
-        console.error('Failed to parse JSON response:', jsonError);
+      const contentType = response.headers.get('content-type');
+      let data: any;
+      
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          console.error('Failed to parse JSON response:', jsonError);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          throw new Error('Server returned an invalid response');
+        }
+      } else {
+        const text = await response.text();
+        console.warn('Non-JSON response received:', text);
         
-        // If response is not ok and we can't parse JSON, throw generic error
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          throw new Error(`HTTP error! status: ${response.status} - ${text}`);
         }
         
-        throw new Error('Server returned an invalid response');
+        data = { message: text };
       }
-    } else {
-      // Non-JSON response (could be text, html, etc.)
-      const text = await response.text();
-      console.warn('Non-JSON response received:', text);
-      
+
+      // Handle HTTP errors
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status} - ${text}`);
-      }
-      
-      // Return text as data
-      data = { message: text };
-    }
-
-    // Handle HTTP errors
-    if (!response.ok) {
-      // Check for specific status codes
-      if (response.status === 401) {
-        // Unauthorized - clear tokens and redirect
-        removeToken();
-        
-        // Only redirect if we're in the browser and not already on login page
-        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-          window.location.href = '/login';
+        if (response.status === 401) {
+          removeToken();
+          if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+            window.location.href = '/login';
+          }
         }
+        
+        const errorMessage = data?.message || data?.error || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMessage);
       }
-      
-      const errorMessage = data?.message || data?.error || `HTTP error! status: ${response.status}`;
-      throw new Error(errorMessage);
-    }
 
-    return data;
-  } catch (error) {
-    console.error('API Error:', {
-      endpoint,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-    
-    // Re-throw the error so calling code can handle it
-    throw error;
-  }
+      return data;
+    } catch (error) {
+      console.error('API Error:', {
+        endpoint,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    } finally {
+      // ✅ CLEAN UP THE PENDING REQUEST
+      pendingRequests.delete(requestKey);
+    }
+  })();
+
+  // ✅ STORE THE PROMISE
+  pendingRequests.set(requestKey, requestPromise);
+  
+  return requestPromise;
 }
 
 /**
  * Auth API namespace
  */
-export const authApi = {
-  /**
-   * Register a new user
-   */
+export const authAPI = {
   register: async (userData: { name: string; email: string; password: string }): Promise<AuthResponse> => {
     const response = await apiRequest<AuthResponse>('/api/auth/register', {
       method: 'POST',
@@ -210,9 +216,6 @@ export const authApi = {
     return response;
   },
 
-  /**
-   * Login with email and password
-   */
   login: async (credentials: { email: string; password: string }): Promise<AuthResponse> => {
     const response = await apiRequest<AuthResponse>('/api/auth/login', {
       method: 'POST',
@@ -225,34 +228,23 @@ export const authApi = {
     return response;
   },
 
-  /**
-   * Logout current user
-   */
   logout: async (): Promise<void> => {
     try {
       await apiRequest('/api/auth/logout', {
         method: 'POST',
       });
     } catch (error) {
-      // Even if the API call fails, clear local data
       console.error('Logout API error:', error);
     } finally {
-      // Always remove token locally
       removeToken();
     }
   },
 
-  /**
-   * Get current authenticated user
-   */
   getCurrentUser: (): Promise<User> =>
     apiRequest<User>('/api/auth/me', {
       method: 'GET',
     }),
 
-  /**
-   * Refresh authentication token
-   */
   refreshToken: async (): Promise<AuthResponse> => {
     const response = await apiRequest<AuthResponse>('/api/auth/refresh', {
       method: 'POST',
@@ -263,9 +255,6 @@ export const authApi = {
     return response;
   },
 
-  /**
-   * Update user profile
-   */
   updateProfile: async (userData: Partial<User>): Promise<User> => {
     const response = await apiRequest<User>('/api/auth/profile', {
       method: 'PUT',
@@ -277,9 +266,6 @@ export const authApi = {
     return response;
   },
 
-  /**
-   * Change password
-   */
   changePassword: async (data: { currentPassword: string; newPassword: string }): Promise<{ message: string }> =>
     apiRequest('/api/auth/change-password', {
       method: 'POST',
@@ -290,10 +276,7 @@ export const authApi = {
 /**
  * Transactions API namespace
  */
-export const transactionsApi = {
-  /**
-   * Get all transactions with optional filters
-   */
+export const transactionsAPI = {
   getAll: (filters?: Record<string, string | number>): Promise<Transaction[]> => {
     const params = new URLSearchParams(
       filters ? Object.entries(filters).reduce((acc, [key, value]) => {
@@ -305,43 +288,28 @@ export const transactionsApi = {
     return apiRequest<Transaction[]>(endpoint, { method: 'GET' });
   },
 
-  /**
-   * Get a single transaction by ID
-   */
   getById: (id: string): Promise<Transaction> =>
     apiRequest<Transaction>(`/api/transactions/${id}`, {
       method: 'GET',
     }),
 
-  /**
-   * Create a new transaction
-   */
   create: (transaction: Omit<Transaction, 'id'>): Promise<Transaction> =>
     apiRequest<Transaction>('/api/transactions', {
       method: 'POST',
       body: JSON.stringify(transaction),
     }),
 
-  /**
-   * Update an existing transaction
-   */
   update: (id: string, transaction: Partial<Transaction>): Promise<Transaction> =>
     apiRequest<Transaction>(`/api/transactions/${id}`, {
       method: 'PUT',
       body: JSON.stringify(transaction),
     }),
 
-  /**
-   * Delete a transaction
-   */
   delete: (id: string): Promise<{ message: string }> =>
     apiRequest(`/api/transactions/${id}`, {
       method: 'DELETE',
     }),
 
-  /**
-   * Upload CSV file with transactions
-   */
   uploadCsv: async (file: File): Promise<{ 
     imported: number; 
     failed: number; 
@@ -356,9 +324,6 @@ export const transactionsApi = {
     });
   },
 
-  /**
-   * Export transactions as CSV
-   */
   exportCsv: async (filters?: Record<string, string>): Promise<Blob> => {
     const params = new URLSearchParams(filters || {});
     const endpoint = params.toString() ? `/api/transactions/export?${params}` : '/api/transactions/export';
@@ -385,40 +350,25 @@ export const transactionsApi = {
 /**
  * Budget API namespace
  */
-export const budgetApi = {
-  /**
-   * Get all budgets
-   */
+export const budgetAPI = {
   getAll: (): Promise<any[]> =>
     apiRequest('/api/budgets', { method: 'GET' }),
 
-  /**
-   * Get a single budget by ID
-   */
   getById: (id: string): Promise<any> =>
     apiRequest(`/api/budgets/${id}`, { method: 'GET' }),
 
-  /**
-   * Create a new budget
-   */
   create: (budget: any): Promise<any> =>
     apiRequest('/api/budgets', {
       method: 'POST',
       body: JSON.stringify(budget),
     }),
 
-  /**
-   * Update an existing budget
-   */
   update: (id: string, budget: any): Promise<any> =>
     apiRequest(`/api/budgets/${id}`, {
       method: 'PUT',
       body: JSON.stringify(budget),
     }),
 
-  /**
-   * Delete a budget
-   */
   delete: (id: string): Promise<{ message: string }> =>
     apiRequest(`/api/budgets/${id}`, {
       method: 'DELETE',
@@ -428,10 +378,7 @@ export const budgetApi = {
 /**
  * Reports API namespace
  */
-export const reportsApi = {
-  /**
-   * Get overview/summary report
-   */
+export const reportsAPI = {
   getOverview: (startDate?: string, endDate?: string): Promise<any> => {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
@@ -441,9 +388,6 @@ export const reportsApi = {
     return apiRequest(endpoint, { method: 'GET' });
   },
 
-  /**
-   * Get spending by category
-   */
   getByCategory: (startDate?: string, endDate?: string): Promise<any> => {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
@@ -453,9 +397,6 @@ export const reportsApi = {
     return apiRequest(endpoint, { method: 'GET' });
   },
 
-  /**
-   * Get spending trends
-   */
   getTrends: (period: 'daily' | 'weekly' | 'monthly' | 'yearly' = 'monthly'): Promise<any> =>
     apiRequest(`/api/reports/trends?period=${period}`, { method: 'GET' }),
 };
@@ -463,23 +404,16 @@ export const reportsApi = {
 /**
  * Health API namespace
  */
-export const healthApi = {
-  /**
-   * Check API health
-   */
+export const healthAPI = {
   check: (): Promise<{ status: string; timestamp: string }> =>
     apiRequest('/api/health', { method: 'GET' }),
 
-  /**
-   * Ping API
-   */
   ping: (): Promise<{ message: string }> =>
     apiRequest('/api/health/ping', { method: 'GET' }),
 };
 
 /**
  * Default API object with HTTP methods
- * This provides api.get(), api.post(), api.put(), api.delete()
  */
 const api = {
   get: <T = any>(endpoint: string, options?: RequestInit): Promise<T> =>
@@ -510,15 +444,7 @@ const api = {
     }),
 };
 
-// Export both naming conventions for backward compatibility
-export { authApi as authAPI };
-export { transactionsApi as transactionsAPI };
-export { healthApi as healthAPI };
-export { budgetApi as budgetAPI };
-export { reportsApi as reportsAPI };
-
-// Export the api object as default
 export default api;
 
-// Export types for use in other files
+// Export types
 export type { User, AuthResponse, Transaction };
