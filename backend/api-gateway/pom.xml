@@ -29,6 +29,10 @@
   </properties>
 
   <dependencies>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-webflux</artifactId>
+</dependency>
     <!-- Reactive Gateway (WebFlux + Netty) -->
     <dependency>
       <groupId>org.springframework.cloud</groupId>

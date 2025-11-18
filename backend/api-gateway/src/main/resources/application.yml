@@ -7,15 +7,17 @@ spring:
 
   cloud:
     gateway:
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowedOrigins:
-              - "https://fintrack-liart.vercel.app"
-              - "http://localhost:3000"
-            allowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
-            allowedHeaders: "*"
-            allowCredentials: true
+      # ❌ REMOVE THIS ENTIRE SECTION - It's conflicting with GlobalCorsConfiguration
+      # globalcors:
+      #   cors-configurations:
+      #     '[/**]':
+      #       allowedOrigins:
+      #         - "https://fintrack-liart.vercel.app"
+      #         - "http://localhost:3000"
+      #       allowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
+      #       allowedHeaders: "*"
+      #       allowCredentials: true
+      
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
 
