@@ -18,7 +18,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Global CORS configuration for the API Gateway.
@@ -119,11 +118,10 @@ public class GlobalCorsConfiguration {
                                         }
 
                                         // Echo back requested headers if present; otherwise allow all
-                                        Set<String> requested = reqHeaders.getAccessControlRequestHeaders();
-                                        if (requested != null && !requested.isEmpty()) {
-                                                // Convert Set to array for String.join()
+                                        List<String> requestedHeaders = reqHeaders.getAccessControlRequestHeaders();
+                                        if (requestedHeaders != null && !requestedHeaders.isEmpty()) {
                                                 resHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
-                                                                String.join(", ", requested.toArray(new String[0])));
+                                                                String.join(", ", requestedHeaders));
                                         } else {
                                                 resHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS, "*");
                                         }
