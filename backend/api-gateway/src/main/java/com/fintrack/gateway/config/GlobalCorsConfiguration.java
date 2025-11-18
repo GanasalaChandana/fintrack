@@ -1,7 +1,6 @@
 package com.fintrack.gateway.config;
 
 import org.springframework.core.annotation.Order;
-
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -16,7 +15,7 @@ import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
-import java.util.ArrayList;
+
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -94,6 +93,7 @@ public class GlobalCorsConfiguration {
          * headers).
          */
         @Bean
+        @Order(-2) // Run even before CorsWebFilter
         public WebFilter corsPreflightFilter() {
                 return (ServerWebExchange exchange, WebFilterChain chain) -> {
                         ServerHttpRequest request = exchange.getRequest();
@@ -121,8 +121,9 @@ public class GlobalCorsConfiguration {
                                         // Echo back requested headers if present; otherwise allow all
                                         Set<String> requested = reqHeaders.getAccessControlRequestHeaders();
                                         if (requested != null && !requested.isEmpty()) {
+                                                // Convert Set to array for String.join()
                                                 resHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
-                                                                String.join(", ", new ArrayList<>(requested)));
+                                                                String.join(", ", requested.toArray(new String[0])));
                                         } else {
                                                 resHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS, "*");
                                         }
