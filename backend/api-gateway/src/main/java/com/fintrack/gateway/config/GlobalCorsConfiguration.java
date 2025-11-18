@@ -16,7 +16,7 @@ import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
-
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -122,7 +122,7 @@ public class GlobalCorsConfiguration {
                                         Set<String> requested = reqHeaders.getAccessControlRequestHeaders();
                                         if (requested != null && !requested.isEmpty()) {
                                                 resHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
-                                                                String.join(", ", requested));
+                                                                String.join(", ", new ArrayList<>(requested)));
                                         } else {
                                                 resHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS, "*");
                                         }
