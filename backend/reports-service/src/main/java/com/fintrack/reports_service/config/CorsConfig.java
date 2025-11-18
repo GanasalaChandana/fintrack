@@ -1,4 +1,4 @@
-package com.fintrack.reports_service.config.CorsConfig;
+package com.fintrack.reports_service.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
