@@ -1,9 +1,16 @@
 server:
-  port: 8086
+  port: ${SERVER_PORT:8086}
+
+app:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:https://fintrack-liart.vercel.app,https://*.vercel.app,http://localhost:3000,http://localhost:5173}
 
 spring:
   application:
     name: notifications-service
+  web:
+    resources:
+      add-mappings: false
 
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:postgres}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fintrack}

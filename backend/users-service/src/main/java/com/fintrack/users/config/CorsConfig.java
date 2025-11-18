@@ -1,4 +1,4 @@
-package com.fintrack.budgets_service.config;
+package com.fintrack.users_service.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -16,7 +16,7 @@ import java.util.List;
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
-    @Value("${app.cors.allowed-origins:http://localhost:3000,https://fintrack-liart.vercel.app}")
+    @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:3001,https://fintrack-liart.vercel.app}")
     private String allowedOrigins;
 
     @Override
@@ -24,7 +24,7 @@ public class CorsConfig implements WebMvcConfigurer {
         List<String> origins = Arrays.asList(allowedOrigins.split(","));
 
         registry.addMapping("/**")
-                .allowedOriginPatterns(origins.toArray(new String[0]))
+                .allowedOriginPatterns(origins.toArray(new String[0])) // Use allowedOriginPatterns
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                 .allowedHeaders("*")
                 .exposedHeaders("Authorization", "X-User-Id")
@@ -37,7 +37,7 @@ public class CorsConfig implements WebMvcConfigurer {
         CorsConfiguration configuration = new CorsConfiguration();
 
         List<String> origins = Arrays.asList(allowedOrigins.split(","));
-        configuration.setAllowedOriginPatterns(origins);
+        configuration.setAllowedOriginPatterns(origins); // Use setAllowedOriginPatterns
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setExposedHeaders(Arrays.asList("Authorization", "X-User-Id"));

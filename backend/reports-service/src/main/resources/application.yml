@@ -1,14 +1,24 @@
 ﻿server:
   port: ${SERVER_PORT:8084}
 
+app:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:https://fintrack-liart.vercel.app,https://*.vercel.app,http://localhost:3000,http://localhost:5173}
+
 spring:
   application:
     name: reports-service
+  
+  web:
+    resources:
+      add-mappings: false
+  
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fintrack}?currentSchema=reports
     username: ${POSTGRES_USER:postgres}
     password: ${POSTGRES_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
+  
   jpa:
     hibernate:
       ddl-auto: update
@@ -18,11 +28,13 @@ spring:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
         default_schema: reports
+  
   flyway:
     enabled: true
     baseline-on-migrate: true
     schemas: reports
     locations: classpath:db/migration
+  
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
@@ -35,24 +47,26 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-  redis:
-    host: ${SPRING_REDIS_HOST:localhost}
-    port: ${SPRING_REDIS_PORT:6379}
+  
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus
-  metrics:
-    export:
-      prometheus:
-        enabled: true
-    tags:
-      application: ${spring.application.name}
   endpoint:
     health:
       show-details: always
   health:
     mail:
       enabled: false
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    export:
+      prometheus:
+        enabled: true

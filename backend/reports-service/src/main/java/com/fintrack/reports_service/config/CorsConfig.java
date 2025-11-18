@@ -1,4 +1,4 @@
-package com.fintrack.budgets_service.config;
+package com.fintrack.reports_service.config.CorsConfig;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
