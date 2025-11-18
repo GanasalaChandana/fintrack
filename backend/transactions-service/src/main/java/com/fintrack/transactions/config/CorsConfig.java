@@ -16,7 +16,8 @@ import java.util.List;
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
-    @Value("${app.cors.allowed-origins:http://localhost:3000,https://fintrack-liart.vercel.app}")
+    // CRITICAL: Must include the API Gateway URL!
+    @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:8080,https://fintrack-liart.vercel.app,https://fintrack-api-gateway.onrender.com}")
     private String allowedOrigins;
 
     @Override
