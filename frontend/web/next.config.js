@@ -3,11 +3,18 @@ const nextConfig = {
   // Enable React strict mode for better development experience
   reactStrictMode: true,
 
-  // Image optimization
+  // Image optimization - UPDATED: using remotePatterns instead of domains
   images: {
-    domains: [
-      'fintrack-liart.vercel.app',
-      // Add your CDN or image hosting domains here
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'fintrack-liart.vercel.app',
+      },
+      // Add more patterns as needed
+      {
+        protocol: 'https',
+        hostname: '**', // Allows all HTTPS images (remove in production for better security)
+      },
     ],
     formats: ['image/avif', 'image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
@@ -22,8 +29,8 @@ const nextConfig = {
     } : false,
   },
 
-  // Enable SWC minification (faster than Terser)
-  swcMinify: true,
+  // REMOVED: swcMinify is now default in Next.js 13+
+  // No need to specify it explicitly
 
   // Experimental features for better performance
   experimental: {
