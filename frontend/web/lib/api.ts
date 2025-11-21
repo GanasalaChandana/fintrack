@@ -31,6 +31,9 @@ interface Transaction {
   category: string;
   type: "income" | "expense";
   amount: number;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
   [key: string]: any;
 }
 
