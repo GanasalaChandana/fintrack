@@ -1,166 +1,123 @@
 package com.fintrack.budgets_service.service;
 
-import com.fintrack.budgets_service.dto.BudgetDTO;
-import com.fintrack.budgets_service.dto.CreateBudgetRequest;
 import com.fintrack.budgets_service.entity.Budget;
+import com.fintrack.budgets_service.exception.ResourceNotFoundException;
+import com.fintrack.budgets_service.exception.UnauthorizedException;
 import com.fintrack.budgets_service.repository.BudgetRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class BudgetsService {
 
     private final BudgetRepository budgetRepository;
 
-    /* ---------- Queries ---------- */
-
-    @Transactional(readOnly = true)
-    public List<BudgetDTO> getAllBudgets(String userId) {
-        log.info("Fetching all budgets for user: {}", userId);
-        return budgetRepository.findByUserId(userId)
-                .stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
-    public List<BudgetDTO> getActiveBudgets(String userId) {
-        log.info("Fetching active budgets for user: {}", userId);
-        return budgetRepository.findByUserIdAndIsActiveTrue(userId)
-                .stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
-    public BudgetDTO getBudgetById(String userId, String budgetId) {
-        log.info("Fetching budget {} for user {}", budgetId, userId);
-        Budget budget = budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new RuntimeException("Budget not found"));
-        if (!Objects.equals(budget.getUserId(), userId)) {
-            throw new RuntimeException("Unauthorized access to budget");
+    public List<Budget> getAllBudgetsByUserId(String userId, String month) {
+        if (month != null && !month.isEmpty()) {
+            return budgetRepository.findByUserIdAndMonth(userId, month);
         }
-        return toDTO(budget);
+        return budgetRepository.findByUserId(userId);
     }
 
-    /* ---------- Mutations ---------- */
+    public Budget getBudgetById(String id, String userId) {
+        Budget budget = budgetRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Budget not found"));
 
-    @Transactional
-    public BudgetDTO createBudget(String userId, CreateBudgetRequest request) {
-        log.info("Creating budget for user {}", userId);
+        if (!budget.getUserId().equals(userId)) {
+            throw new UnauthorizedException("You don't have permission to access this budget");
+        }
 
-        Budget budget = new Budget();
-        budget.setUserId(userId);
-        budget.setCategory(request.getCategory());
-        budget.setAmount(request.getAmount());
-        budget.setPeriod(request.getPeriod());
-        budget.setStartDate(request.getStartDate());
-        budget.setEndDate(request.getEndDate());
-        budget.setAlertThreshold(request.getAlertThreshold());
-        // spentAmount defaults to ZERO in entity; remaining/percentage are derived
-
-        return toDTO(budgetRepository.save(budget));
+        return budget;
     }
 
     @Transactional
-    public BudgetDTO updateBudget(String userId, String budgetId, CreateBudgetRequest request) {
-        log.info("Updating budget {} for user {}", budgetId, userId);
-
-        Budget budget = budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new RuntimeException("Budget not found"));
-        if (!Objects.equals(budget.getUserId(), userId)) {
-            throw new RuntimeException("Unauthorized access to budget");
+    public Budget createBudget(Budget budget) {
+        // Set default values if not provided
+        if (budget.getSpent() == null) {
+            budget.setSpent(0.0);
+        }
+        if (budget.getIcon() == null || budget.getIcon().isEmpty()) {
+            budget.setIcon("💰");
+        }
+        if (budget.getColor() == null || budget.getColor().isEmpty()) {
+            budget.setColor("#3b82f6");
+        }
+        if (budget.getMonth() == null || budget.getMonth().isEmpty()) {
+            budget.setMonth(YearMonth.now().format(DateTimeFormatter.ofPattern("yyyy-MM")));
         }
 
-        budget.setCategory(request.getCategory());
-        budget.setAmount(request.getAmount());
-        budget.setPeriod(request.getPeriod());
-        budget.setStartDate(request.getStartDate());
-        budget.setEndDate(request.getEndDate());
-        budget.setAlertThreshold(request.getAlertThreshold());
-
-        return toDTO(budgetRepository.save(budget));
+        return budgetRepository.save(budget);
     }
 
     @Transactional
-    public void deleteBudget(String userId, String budgetId) {
-        log.info("Deleting budget {} for user {}", budgetId, userId);
-        Budget budget = budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new RuntimeException("Budget not found"));
-        if (!Objects.equals(budget.getUserId(), userId)) {
-            throw new RuntimeException("Unauthorized access to budget");
+    public Budget updateBudget(String id, Budget budgetUpdate, String userId) {
+        Budget budget = getBudgetById(id, userId);
+
+        if (budgetUpdate.getCategory() != null) {
+            budget.setCategory(budgetUpdate.getCategory());
         }
+        if (budgetUpdate.getBudget() != null) {
+            budget.setBudget(budgetUpdate.getBudget());
+        }
+        if (budgetUpdate.getSpent() != null) {
+            budget.setSpent(budgetUpdate.getSpent());
+        }
+        if (budgetUpdate.getIcon() != null) {
+            budget.setIcon(budgetUpdate.getIcon());
+        }
+        if (budgetUpdate.getColor() != null) {
+            budget.setColor(budgetUpdate.getColor());
+        }
+        if (budgetUpdate.getMonth() != null) {
+            budget.setMonth(budgetUpdate.getMonth());
+        }
+
+        return budgetRepository.save(budget);
+    }
+
+    @Transactional
+    public Budget updateSpent(String id, Double spent, String userId) {
+        Budget budget = getBudgetById(id, userId);
+        budget.setSpent(spent);
+        return budgetRepository.save(budget);
+    }
+
+    @Transactional
+    public void deleteBudget(String id, String userId) {
+        Budget budget = getBudgetById(id, userId);
         budgetRepository.delete(budget);
     }
 
-    /* ---------- Aggregates ---------- */
+    public Map<String, Object> getBudgetSummary(String userId, String month) {
+        String targetMonth = month != null ? month : YearMonth.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
 
-    @Transactional(readOnly = true)
-    public Map<String, Object> getBudgetStats(String userId) {
-        List<BudgetDTO> list = getAllBudgets(userId);
+        List<Budget> budgets = budgetRepository.findByUserIdAndMonth(userId, targetMonth);
 
-        BigDecimal totalBudget = list.stream()
-                .map(BudgetDTO::getAmount)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        double totalBudget = budgets.stream()
+                .mapToDouble(Budget::getBudget)
+                .sum();
 
-        BigDecimal totalSpent = list.stream()
-                .map(BudgetDTO::getSpentAmount)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        double totalSpent = budgets.stream()
+                .mapToDouble(Budget::getSpent)
+                .sum();
 
-        BigDecimal totalRemaining = list.stream()
-                .map(BudgetDTO::getRemainingAmount)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        double remaining = totalBudget - totalSpent;
+        double percentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
-        double avgUtilization = list.stream()
-                .map(BudgetDTO::getPercentageUsed)
-                .filter(Objects::nonNull)
-                .mapToDouble(Double::doubleValue)
-                .average()
-                .orElse(0.0);
-
-        long activeCount = list.stream()
-                .filter(b -> Boolean.TRUE.equals(b.getIsActive()))
-                .count();
-
-        Map<String, Object> stats = new LinkedHashMap<>();
-        stats.put("count", list.size());
-        stats.put("activeCount", activeCount);
-        stats.put("totalBudget", totalBudget);
-        stats.put("totalSpent", totalSpent);
-        stats.put("totalRemaining", totalRemaining);
-        stats.put("avgUtilization", Math.round(avgUtilization * 100.0) / 100.0);
-        return stats;
-    }
-
-    /* ---------- Mapping ---------- */
-
-    private BudgetDTO toDTO(Budget budget) {
-        BudgetDTO dto = new BudgetDTO();
-        dto.setId(budget.getId());
-        dto.setUserId(budget.getUserId());
-        dto.setCategory(budget.getCategory());
-        dto.setAmount(budget.getAmount());
-        dto.setSpentAmount(budget.getSpentAmount()); // BigDecimal
-        dto.setRemainingAmount(budget.getRemainingAmount()); // BigDecimal (derived)
-        dto.setPercentageUsed(budget.getPercentageUsed()); // Double (derived)
-        dto.setPeriod(budget.getPeriod());
-        dto.setStartDate(budget.getStartDate());
-        dto.setEndDate(budget.getEndDate());
-        dto.setAlertThreshold(budget.getAlertThreshold());
-        dto.setIsActive(budget.getIsActive());
-        dto.setCreatedAt(budget.getCreatedAt());
-        dto.setUpdatedAt(budget.getUpdatedAt());
-        return dto;
+        return Map.of(
+                "month", targetMonth,
+                "totalBudget", totalBudget,
+                "totalSpent", totalSpent,
+                "remaining", remaining,
+                "percentage", Math.round(percentage * 100.0) / 100.0,
+                "budgets", budgets);
     }
 }

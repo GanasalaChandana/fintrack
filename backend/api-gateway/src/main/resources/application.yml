@@ -7,17 +7,6 @@ spring:
 
   cloud:
     gateway:
-      # ❌ REMOVE THIS ENTIRE SECTION - It's conflicting with GlobalCorsConfiguration
-      # globalcors:
-      #   cors-configurations:
-      #     '[/**]':
-      #       allowedOrigins:
-      #         - "https://fintrack-liart.vercel.app"
-      #         - "http://localhost:3000"
-      #       allowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
-      #       allowedHeaders: "*"
-      #       allowCredentials: true
-      
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
 
@@ -85,6 +74,14 @@ spring:
           filters:
             - AuthenticationFilter
 
+        # ================= GOALS (REQUIRES AUTH) =================
+        - id: goals-service
+          uri: ${BUDGETS_SERVICE_URL:http://budgets-service:8085}
+          predicates:
+            - Path=/api/goals/**
+          filters:
+            - AuthenticationFilter
+
         # ================= ALERTS (REQUIRES AUTH) =================
         - id: alerts-service
           uri: ${ALERTS_SERVICE_URL:http://alerts-service:8083}
@@ -135,7 +132,7 @@ management:
     gateway:
       enabled: true
 
-# Logging - CRITICAL: Enable gateway logging to debug routing
+# Logging
 logging:
   level:
     root: INFO

@@ -1,4 +1,4 @@
-// lib/api.ts
+// lib/api.ts - UPDATED with Goals & Budgets
 // Centralized API helper for all backend calls
 
 /**
@@ -35,6 +35,52 @@ interface Transaction {
   createdAt?: string;
   updatedAt?: string;
   [key: string]: any;
+}
+
+/**
+ * Goal interface
+ */
+interface Goal {
+  id?: string;
+  name: string;
+  target: number;
+  current: number;
+  deadline: string;
+  icon: string;
+  color: string;
+  category: string;
+  monthlyContribution: number;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Budget interface
+ */
+interface Budget {
+  id?: string;
+  category: string;
+  budget: number;
+  spent: number;
+  icon: string;
+  color: string;
+  month?: string;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Budget Summary interface
+ */
+interface BudgetSummary {
+  month: string;
+  totalBudget: number;
+  totalSpent: number;
+  remaining: number;
+  percentage: number;
+  budgets: Budget[];
 }
 
 /**
@@ -344,28 +390,76 @@ export const transactionsAPI = {
 };
 
 /**
- * Budget API
+ * Goals API
  */
-export const budgetAPI = {
-  getAll: (): Promise<any[]> => apiRequest("/api/budgets", { method: "GET" }),
+export const goalsAPI = {
+  getAll: (): Promise<Goal[]> => 
+    apiRequest<Goal[]>("/api/goals", { method: "GET" }),
 
-  getById: (id: string): Promise<any> =>
-    apiRequest(`/api/budgets/${id}`, { method: "GET" }),
+  getById: (id: string): Promise<Goal> =>
+    apiRequest<Goal>(`/api/goals/${id}`, { method: "GET" }),
 
-  create: (budget: any): Promise<any> =>
-    apiRequest("/api/budgets", {
+  create: (goal: Omit<Goal, "id">): Promise<Goal> =>
+    apiRequest<Goal>("/api/goals", {
+      method: "POST",
+      body: JSON.stringify(goal),
+    }),
+
+  update: (id: string, goal: Partial<Goal>): Promise<Goal> =>
+    apiRequest<Goal>(`/api/goals/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(goal),
+    }),
+
+  delete: (id: string): Promise<{ message: string }> =>
+    apiRequest(`/api/goals/${id}`, { method: "DELETE" }),
+
+  updateProgress: (id: string, current: number): Promise<Goal> =>
+    apiRequest<Goal>(`/api/goals/${id}/progress`, {
+      method: "PATCH",
+      body: JSON.stringify({ current }),
+    }),
+};
+
+/**
+ * Budgets API
+ */
+export const budgetsAPI = {
+  getAll: (month?: string): Promise<Budget[]> => {
+    const params = month ? `?month=${month}` : "";
+    return apiRequest<Budget[]>(`/api/budgets${params}`, { method: "GET" });
+  },
+
+  getById: (id: string): Promise<Budget> =>
+    apiRequest<Budget>(`/api/budgets/${id}`, { method: "GET" }),
+
+  create: (budget: Omit<Budget, "id">): Promise<Budget> =>
+    apiRequest<Budget>("/api/budgets", {
       method: "POST",
       body: JSON.stringify(budget),
     }),
 
-  update: (id: string, budget: any): Promise<any> =>
-    apiRequest(`/api/budgets/${id}`, {
+  update: (id: string, budget: Partial<Budget>): Promise<Budget> =>
+    apiRequest<Budget>(`/api/budgets/${id}`, {
       method: "PUT",
       body: JSON.stringify(budget),
     }),
 
   delete: (id: string): Promise<{ message: string }> =>
     apiRequest(`/api/budgets/${id}`, { method: "DELETE" }),
+
+  updateSpent: (id: string, spent: number): Promise<Budget> =>
+    apiRequest<Budget>(`/api/budgets/${id}/spent`, {
+      method: "PATCH",
+      body: JSON.stringify({ spent }),
+    }),
+
+  getSummary: (month?: string): Promise<BudgetSummary> => {
+    const params = month ? `?month=${month}` : "";
+    return apiRequest<BudgetSummary>(`/api/budgets/summary${params}`, { 
+      method: "GET" 
+    });
+  },
 };
 
 /**
@@ -444,4 +538,4 @@ const api = {
 };
 
 export default api;
-export type { User, AuthResponse, Transaction };
+export type { User, AuthResponse, Transaction, Goal, Budget, BudgetSummary };

@@ -1,11 +1,9 @@
 package com.fintrack.budgets_service.controller;
 
-import com.fintrack.budgets_service.dto.BudgetDTO;
-import com.fintrack.budgets_service.dto.CreateBudgetRequest;
+import com.fintrack.budgets_service.entity.Budget;
 import com.fintrack.budgets_service.service.BudgetsService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,107 +12,115 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/budgets") // <-- accept both
+@RequestMapping("/api/budgets")
 @RequiredArgsConstructor
-@Slf4j
-@CrossOrigin(origins = { "http://localhost:3000", "http://localhost:3001" })
 public class BudgetController {
 
     private final BudgetsService budgetsService;
 
-    @Value("${app.environment:dev}")
-    private String environment;
-
+    // Get all budgets for the authenticated user
     @GetMapping
-    public ResponseEntity<List<BudgetDTO>> getAllBudgets(
-            @RequestHeader(name = "X-User-Id", required = false) String userId,
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+    public ResponseEntity<List<Budget>> getAllBudgets(
+            @RequestParam(required = false) String month,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        String uid = resolveUserId(userId, authHeader);
-        log.info("Getting all budgets for user: {}", uid);
-        return ResponseEntity.ok(budgetsService.getAllBudgets(uid));
+        if (userId == null || userId.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        List<Budget> budgets = budgetsService.getAllBudgetsByUserId(userId, month);
+        return ResponseEntity.ok(budgets);
     }
 
-    @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> getBudgetStats(
-            @RequestHeader(name = "X-User-Id", required = false) String userId,
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+    // Get budget summary
+    @GetMapping("/summary")
+    public ResponseEntity<Map<String, Object>> getBudgetSummary(
+            @RequestParam(required = false) String month,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        String uid = resolveUserId(userId, authHeader);
-        log.info("Getting budget stats for user: {}", uid);
-        return ResponseEntity.ok(budgetsService.getBudgetStats(uid));
+        if (userId == null || userId.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Map<String, Object> summary = budgetsService.getBudgetSummary(userId, month);
+        return ResponseEntity.ok(summary);
     }
 
+    // Get a specific budget by ID
     @GetMapping("/{id}")
-    public ResponseEntity<BudgetDTO> getBudgetById(
+    public ResponseEntity<Budget> getBudgetById(
             @PathVariable String id,
-            @RequestHeader(name = "X-User-Id", required = false) String userId,
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        String uid = resolveUserId(userId, authHeader);
-        log.info("Getting budget {} for user: {}", id, uid);
-        return ResponseEntity.ok(budgetsService.getBudgetById(uid, id));
+        if (userId == null || userId.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Budget budget = budgetsService.getBudgetById(id, userId);
+        return ResponseEntity.ok(budget);
     }
 
+    // Create a new budget
     @PostMapping
-    public ResponseEntity<BudgetDTO> createBudget(
-            @RequestBody CreateBudgetRequest request,
-            @RequestHeader(name = "X-User-Id", required = false) String userId,
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+    public ResponseEntity<Budget> createBudget(
+            @Valid @RequestBody Budget budget,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        String uid = resolveUserId(userId, authHeader);
-        log.info("Creating budget for user: {}", uid);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(budgetsService.createBudget(uid, request));
+        if (userId == null || userId.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        budget.setUserId(userId);
+        Budget createdBudget = budgetsService.createBudget(budget);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdBudget);
     }
 
+    // Update an existing budget
     @PutMapping("/{id}")
-    public ResponseEntity<BudgetDTO> updateBudget(
+    public ResponseEntity<Budget> updateBudget(
             @PathVariable String id,
-            @RequestBody CreateBudgetRequest request,
-            @RequestHeader(name = "X-User-Id", required = false) String userId,
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+            @Valid @RequestBody Budget budget,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        String uid = resolveUserId(userId, authHeader);
-        log.info("Updating budget {} for user: {}", id, uid);
-        return ResponseEntity.ok(budgetsService.updateBudget(uid, id, request));
+        if (userId == null || userId.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Budget updatedBudget = budgetsService.updateBudget(id, budget, userId);
+        return ResponseEntity.ok(updatedBudget);
     }
 
+    // Update budget spent amount (PATCH endpoint for frontend)
+    @PatchMapping("/{id}/spent")
+    public ResponseEntity<Budget> updateSpent(
+            @PathVariable String id,
+            @RequestBody Map<String, Double> payload,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+
+        if (userId == null || userId.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Double spent = payload.get("spent");
+        if (spent == null) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        Budget updatedBudget = budgetsService.updateSpent(id, spent, userId);
+        return ResponseEntity.ok(updatedBudget);
+    }
+
+    // Delete a budget
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteBudget(
+    public ResponseEntity<Map<String, String>> deleteBudget(
             @PathVariable String id,
-            @RequestHeader(name = "X-User-Id", required = false) String userId,
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        String uid = resolveUserId(userId, authHeader);
-        log.info("Deleting budget {} for user: {}", id, uid);
-        budgetsService.deleteBudget(uid, id);
-        return ResponseEntity.noContent().build();
-    }
+        if (userId == null || userId.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
 
-    @GetMapping("/health")
-    public ResponseEntity<Map<String, String>> health() {
-        log.debug("Health check called");
-        return ResponseEntity.ok(Map.of(
-                "status", "UP",
-                "service", "budgets-service",
-                "environment", environment));
-    }
-
-    private String resolveUserId(String xUserId, String authHeader) {
-        if (xUserId != null && !xUserId.isBlank()) {
-            log.debug("Using X-User-Id from header: {}", xUserId);
-            return xUserId;
-        }
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            log.debug("Found Authorization header but not extracting user ID yet");
-        }
-        if ("dev".equals(environment) || "development".equals(environment)) {
-            String defaultUserId = "dev-user-123";
-            log.warn("DEV MODE: No X-User-Id found, using default: {}", defaultUserId);
-            return defaultUserId;
-        }
-        throw new IllegalStateException(
-                "Missing X-User-Id header. Gateway must inject user ID or set app.environment=dev");
+        budgetsService.deleteBudget(id, userId);
+        return ResponseEntity.ok(Map.of("message", "Budget deleted successfully"));
     }
 }

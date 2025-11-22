@@ -13,7 +13,9 @@ import {
   TrendingDown,
   Sparkles,
   X as Close,
+  Check,
 } from "lucide-react";
+import { transactionsAPI, type Transaction as ApiTransaction } from '@/lib/api';
 
 /* =========================
    Types
@@ -35,19 +37,14 @@ type CategoryId =
 interface Category {
   id: CategoryId;
   name: string;
-  icon: string; // emoji
+  icon: string;
   badgeBg: string;
   badgeText: string;
 }
 
-interface Transaction {
-  id: number;
-  date: string; // ISO yyyy-mm-dd
-  merchant: string;
-  description: string;
-  amount: number; // income positive, expense negative
+// Map backend transaction to our UI format
+interface Transaction extends Omit<ApiTransaction, 'category'> {
   category: Exclude<CategoryId, "all">;
-  type: TxType;
   status: TxStatus;
   paymentMethod: string;
   tags: string[];
@@ -58,7 +55,7 @@ interface NewTxForm {
   date: string;
   merchant: string;
   description: string;
-  amount: string; // keep as string in form, parse on submit
+  amount: string;
   category: Exclude<CategoryId, "all">;
   type: TxType;
   status: TxStatus;
@@ -98,6 +95,41 @@ const formatCurrency = (value: number) =>
     minimumFractionDigits: 2,
   }).format(Math.abs(value));
 
+// Map backend category to UI category
+const mapCategoryToUI = (category: string): Exclude<CategoryId, "all"> => {
+  const map: Record<string, Exclude<CategoryId, "all">> = {
+    'Food & Dining': 'food',
+    'Transportation': 'transport',
+    'Shopping': 'shopping',
+    'Entertainment': 'entertainment',
+    'Bills & Utilities': 'bills',
+    'Healthcare': 'health',
+    'Income': 'income',
+    'Salary': 'income',
+    'Freelance': 'income',
+    'Business': 'income',
+    'Investment': 'income',
+  };
+  return map[category] || 'other';
+};
+
+// Map UI category to backend category
+const mapCategoryToBackend = (category: Exclude<CategoryId, "all">, type: TxType): string => {
+  if (type === 'income') return 'Income';
+  
+  const map: Record<Exclude<CategoryId, "all">, string> = {
+    'food': 'Food & Dining',
+    'transport': 'Transportation',
+    'shopping': 'Shopping',
+    'entertainment': 'Entertainment',
+    'bills': 'Bills & Utilities',
+    'health': 'Healthcare',
+    'income': 'Income',
+    'other': 'Other',
+  };
+  return map[category] || 'Other';
+};
+
 /* =========================
    Data
    ========================= */
@@ -114,61 +146,6 @@ const CATEGORIES: Category[] = [
   { id: "other", name: "Other", icon: "📦", badgeBg: "bg-gray-100", badgeText: "text-gray-700" },
 ];
 
-const INITIAL_TX: Transaction[] = [
-  {
-    id: 1,
-    date: "2025-11-18",
-    merchant: "Starbucks Coffee",
-    description: "Morning coffee",
-    amount: -5.8,
-    category: "food",
-    type: "expense",
-    status: "completed",
-    paymentMethod: "Credit Card •••• 4242",
-    tags: ["coffee", "breakfast"],
-    aiSuggested: false,
-  },
-  {
-    id: 2,
-    date: "2025-11-17",
-    merchant: "Amazon",
-    description: "Electronics purchase",
-    amount: -89.99,
-    category: "shopping",
-    type: "expense",
-    status: "completed",
-    paymentMethod: "Credit Card •••• 4242",
-    tags: ["online", "electronics"],
-    aiSuggested: true,
-  },
-  {
-    id: 3,
-    date: "2025-11-17",
-    merchant: "Uber",
-    description: "Ride to downtown",
-    amount: -15.5,
-    category: "transport",
-    type: "expense",
-    status: "completed",
-    paymentMethod: "Debit Card •••• 1234",
-    tags: ["commute"],
-    aiSuggested: false,
-  },
-  {
-    id: 4,
-    date: "2025-11-15",
-    merchant: "Acme Corp",
-    description: "Monthly salary",
-    amount: 3500,
-    category: "income",
-    type: "income",
-    status: "completed",
-    paymentMethod: "Direct Deposit",
-    tags: ["salary", "recurring"],
-    aiSuggested: false,
-  },
-];
-
 /* =========================
    Component
    ========================= */
@@ -179,6 +156,7 @@ export default function TransactionManager() {
 
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = React.useState<string>("");
   const [selectedCategory, setSelectedCategory] = React.useState<CategoryId>("all");
@@ -186,8 +164,10 @@ export default function TransactionManager() {
   const [sortBy, setSortBy] = React.useState<
     "date-desc" | "date-asc" | "amount-desc" | "amount-asc"
   >("date-desc");
-  const [transactions, setTransactions] = React.useState<Transaction[]>(INITIAL_TX);
-  const [selectedTransactions, setSelectedTransactions] = React.useState<number[]>([]);
+  const [transactions, setTransactions] = React.useState<Transaction[]>([]);
+  const [selectedTransactions, setSelectedTransactions] = React.useState<string[]>([]);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editForm, setEditForm] = React.useState<Partial<Transaction>>({});
 
   // ---------- Auth Check ----------
   React.useEffect(() => {
@@ -198,10 +178,37 @@ export default function TransactionManager() {
         router.replace('/register?mode=signin');
       } else {
         setIsAuthenticated(true);
-        setIsLoading(false);
+        loadTransactions();
       }
     }
   }, [router]);
+
+  // ---------- Load Transactions from API ----------
+  const loadTransactions = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const data = await transactionsAPI.getAll();
+      
+      // Transform API data to UI format
+      const transformed: Transaction[] = data.map(t => ({
+        ...t,
+        id: t.id!,
+        category: mapCategoryToUI(t.category),
+        status: 'completed' as TxStatus,
+        paymentMethod: 'Credit Card •••• 4242',
+        tags: [],
+        aiSuggested: false,
+      }));
+      
+      setTransactions(transformed);
+    } catch (err) {
+      console.error('Failed to load transactions:', err);
+      setError('Failed to load transactions');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // ---------- Add-Transaction Modal ----------
   const [showAdd, setShowAdd] = React.useState<boolean>(false);
@@ -215,8 +222,7 @@ export default function TransactionManager() {
     status: "completed",
     paymentMethod: "Credit Card •••• 4242",
   });
-  const [errors, setErrors] = React.useState<Partial<Record<keyof NewTxForm, string>>>({});
-  const nextId = React.useRef<number>(Math.max(...transactions.map(t => t.id)) + 1 || 1);
+  const [formErrors, setFormErrors] = React.useState<Partial<Record<keyof NewTxForm, string>>>({});
 
   const getCategoryInfo = React.useCallback(
     (id: CategoryId): Category => CATEGORIES.find((c) => c.id === id)!,
@@ -261,23 +267,78 @@ export default function TransactionManager() {
     return { income, expenses, net: income - expenses };
   }, [transactions]);
 
-  const onToggleSelect = (id: number) => {
+  const onToggleSelect = (id: string) => {
     setSelectedTransactions((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
   const onToggleSelectAll = (checked: boolean) => {
-    setSelectedTransactions(checked ? filteredTransactions.map((t) => t.id) : []);
+    setSelectedTransactions(checked ? filteredTransactions.map((t) => t.id!) : []);
   };
 
-  const handleBulkCategorize = () => {
-    setTransactions((prev) =>
-      prev.map((t) =>
-        selectedTransactions.includes(t.id) ? { ...t, aiSuggested: true } : t
-      )
-    );
-    setSelectedTransactions([]);
+  const handleBulkDelete = async () => {
+    if (selectedTransactions.length === 0) return;
+    if (!confirm(`Delete ${selectedTransactions.length} transaction(s)?`)) return;
+
+    try {
+      await Promise.all(selectedTransactions.map(id => transactionsAPI.delete(id)));
+      setTransactions(prev => prev.filter(t => !selectedTransactions.includes(t.id!)));
+      setSelectedTransactions([]);
+    } catch (err) {
+      alert('Failed to delete transactions');
+      console.error(err);
+    }
+  };
+
+  const handleEdit = (transaction: Transaction) => {
+    setEditingId(transaction.id!);
+    setEditForm(transaction);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId) return;
+    
+    try {
+      const backendCategory = mapCategoryToBackend(editForm.category as Exclude<CategoryId, "all">, editForm.type as TxType);
+      
+      const updated = await transactionsAPI.update(editingId, {
+        date: editForm.date,
+        description: editForm.description,
+        merchant: editForm.merchant,
+        category: backendCategory,
+        amount: editForm.amount,
+        type: editForm.type,
+      });
+      
+      setTransactions(prev => 
+        prev.map(t => t.id === editingId ? {
+          ...t,
+          ...updated,
+          category: mapCategoryToUI(updated.category),
+          status: editForm.status as TxStatus,
+          paymentMethod: editForm.paymentMethod || t.paymentMethod,
+        } : t)
+      );
+      
+      setEditingId(null);
+      setEditForm({});
+    } catch (err) {
+      alert('Failed to update transaction');
+      console.error(err);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this transaction?')) return;
+
+    try {
+      await transactionsAPI.delete(id);
+      setTransactions(prev => prev.filter(t => t.id !== id));
+    } catch (err) {
+      alert('Failed to delete transaction');
+      console.error(err);
+    }
   };
 
   // ---------- Create Transaction ----------
@@ -289,48 +350,86 @@ export default function TransactionManager() {
     if (f.amount.trim() === "" || isNaN(Number(f.amount))) e.amount = "Enter a valid amount";
     if (!f.category) e.category = "Category is required";
     if (!f.type) e.type = "Type is required";
-    if (!f.status) e.status = "Status is required";
-    if (!f.paymentMethod.trim()) e.paymentMethod = "Payment method is required";
     return e;
   };
 
-  const submitNewTx = (e: React.FormEvent) => {
+  const submitNewTx = async (e: React.FormEvent) => {
     e.preventDefault();
     const eMap = validate(form);
-    setErrors(eMap);
+    setFormErrors(eMap);
     if (Object.keys(eMap).length) return;
 
     const parsed = Number(form.amount);
-    const normalizedAmount =
-      form.type === "income" ? Math.abs(parsed) : -Math.abs(parsed);
+    const normalizedAmount = form.type === "income" ? Math.abs(parsed) : Math.abs(parsed);
+    const backendCategory = mapCategoryToBackend(form.category, form.type);
 
-    const tx: Transaction = {
-      id: nextId.current++,
-      date: form.date,
-      merchant: form.merchant.trim(),
-      description: form.description.trim(),
-      amount: normalizedAmount,
-      category: form.category,
-      type: form.type,
-      status: form.status,
-      paymentMethod: form.paymentMethod.trim(),
-      tags: [],
-      aiSuggested: false,
-    };
+    try {
+      const created = await transactionsAPI.create({
+        date: form.date,
+        merchant: form.merchant.trim(),
+        description: form.description.trim(),
+        amount: normalizedAmount,
+        category: backendCategory,
+        type: form.type,
+      });
 
-    setTransactions((prev) => [tx, ...prev]);
-    setShowAdd(false);
-    setForm((f) => ({ ...f, merchant: "", description: "", amount: "" }));
-    setErrors({});
+      const newTx: Transaction = {
+        ...created,
+        id: created.id!,
+        category: mapCategoryToUI(created.category),
+        status: form.status,
+        paymentMethod: form.paymentMethod.trim(),
+        tags: [],
+        aiSuggested: false,
+      };
+
+      setTransactions((prev) => [newTx, ...prev]);
+      setShowAdd(false);
+      setForm((f) => ({ ...f, merchant: "", description: "", amount: "" }));
+      setFormErrors({});
+    } catch (err) {
+      alert('Failed to create transaction');
+      console.error(err);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const blob = await transactionsAPI.exportCsv();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transactions-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+    } catch (err) {
+      alert('Failed to export transactions');
+      console.error(err);
+    }
   };
 
   // Show loading while checking auth
-  if (isLoading || !isAuthenticated) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600">Loading transactions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={loadTransactions}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -349,7 +448,9 @@ export default function TransactionManager() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <button className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+              <button 
+                onClick={handleExport}
+                className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
                 <Download className="w-4 h-4" />
                 Export
               </button>
@@ -488,17 +589,9 @@ export default function TransactionManager() {
                 {selectedTransactions.length} selected
               </span>
               <button
-                onClick={handleBulkCategorize}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-lg text-sm font-semibold hover:bg-purple-100 transition-colors"
+                onClick={handleBulkDelete}
+                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors"
               >
-                <Sparkles className="w-4 h-4" />
-                AI Categorize
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
-                <Tag className="w-4 h-4" />
-                Add Tag
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors">
                 <Trash2 className="w-4 h-4" />
                 Delete
               </button>
@@ -551,75 +644,131 @@ export default function TransactionManager() {
               <tbody className="divide-y divide-gray-200">
                 {filteredTransactions.map((t) => {
                   const cat = getCategoryInfo(t.category);
+                  const isEditing = editingId === t.id;
+                  
                   return (
                     <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
                         <input
                           type="checkbox"
-                          checked={selectedTransactions.includes(t.id)}
-                          onChange={() => onToggleSelect(t.id)}
+                          checked={selectedTransactions.includes(t.id!)}
+                          onChange={() => onToggleSelect(t.id!)}
                           className="w-4 h-4 text-blue-600 rounded"
                         />
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {isMounted
-                            ? formatRelativeClientOnly(t.date)
-                            : formatAbsolute(t.date)}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {dtUS(new Date(t.date))}
-                        </div>
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            value={editForm.date}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, date: e.target.value }))}
+                            className="px-2 py-1 border border-gray-300 rounded text-sm"
+                          />
+                        ) : (
+                          <>
+                            <div className="text-sm font-medium text-gray-900">
+                              {isMounted
+                                ? formatRelativeClientOnly(t.date)
+                                : formatAbsolute(t.date)}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {dtUS(new Date(t.date))}
+                            </div>
+                          </>
+                        )}
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-start gap-3">
-                          <div
-                            className={`w-10 h-10 bg-gradient-to-br ${
-                              t.type === "income"
-                                ? "from-green-500 to-green-600"
-                                : "from-blue-500 to-blue-600"
-                            } rounded-lg flex items-center justify-center text-white font-bold text-lg flex-shrink-0`}
-                          >
-                            {t.merchant.charAt(0)}
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={editForm.merchant}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, merchant: e.target.value }))}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              placeholder="Merchant"
+                            />
+                            <input
+                              type="text"
+                              value={editForm.description}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              placeholder="Description"
+                            />
                           </div>
-                          <div>
-                            <div className="font-medium text-gray-900">
-                              {t.merchant}
+                        ) : (
+                          <div className="flex items-start gap-3">
+                            <div
+                              className={`w-10 h-10 bg-gradient-to-br ${
+                                t.type === "income"
+                                  ? "from-green-500 to-green-600"
+                                  : "from-blue-500 to-blue-600"
+                              } rounded-lg flex items-center justify-center text-white font-bold text-lg flex-shrink-0`}
+                            >
+                              {t.merchant.charAt(0)}
                             </div>
-                            <div className="text-sm text-gray-500">
-                              {t.description}
-                            </div>
-                            {t.aiSuggested && (
-                              <div className="flex items-center gap-1 mt-1">
-                                <Sparkles className="w-3 h-3 text-purple-600" />
-                                <span className="text-xs text-purple-600 font-medium">
-                                  AI Suggested
-                                </span>
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                {t.merchant}
                               </div>
-                            )}
+                              <div className="text-sm text-gray-500">
+                                {t.description}
+                              </div>
+                              {t.aiSuggested && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Sparkles className="w-3 h-3 text-purple-600" />
+                                  <span className="text-xs text-purple-600 font-medium">
+                                    AI Suggested
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${cat.badgeBg} ${cat.badgeText}`}
-                        >
-                          <span>{cat.icon}</span>
-                          {cat.name}
-                        </span>
+                        {isEditing ? (
+                          <select
+                            value={editForm.category}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, category: e.target.value as Exclude<CategoryId, "all"> }))}
+                            className="px-2 py-1 border border-gray-300 rounded text-sm"
+                          >
+                            {CATEGORIES.filter(c => c.id !== 'all').map((cat) => (
+                              <option key={cat.id} value={cat.id}>
+                                {cat.icon} {cat.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${cat.badgeBg} ${cat.badgeText}`}
+                          >
+                            <span>{cat.icon}</span>
+                            {cat.name}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {t.paymentMethod}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div
-                          className={`text-base font-bold ${
-                            t.type === "income" ? "text-green-600" : "text-gray-900"
-                          }`}
-                        >
-                          {t.type === "income" ? "+" : "-"}
-                          {formatCurrency(t.amount)}
-                        </div>
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={Math.abs(editForm.amount || 0)}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, amount: parseFloat(e.target.value) }))}
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                          />
+                        ) : (
+                          <div
+                            className={`text-base font-bold ${
+                              t.type === "income" ? "text-green-600" : "text-gray-900"
+                            }`}
+                          >
+                            {t.type === "income" ? "+" : "-"}
+                            {formatCurrency(t.amount)}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span
@@ -633,14 +782,42 @@ export default function TransactionManager() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                            <Edit2 className="w-4 h-4 text-gray-600" />
-                          </button>
-                          <button className="p-2 hover:bg-red-50 rounded-lg transition-colors">
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </button>
-                        </div>
+                        {isEditing ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={handleSaveEdit}
+                              className="p-2 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Save"
+                            >
+                              <Check className="w-4 h-4 text-green-600" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingId(null);
+                                setEditForm({});
+                              }}
+                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Cancel"
+                            >
+                              <Close className="w-4 h-4 text-gray-600" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleEdit(t)}
+                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                              <Edit2 className="w-4 h-4 text-gray-600" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(t.id!)}
+                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -690,7 +867,7 @@ export default function TransactionManager() {
                     onChange={(e) => setForm({ ...form, date: e.target.value })}
                     className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none"
                   />
-                  {errors.date && <p className="text-xs text-red-600 mt-1">{errors.date}</p>}
+                  {formErrors.date && <p className="text-xs text-red-600 mt-1">{formErrors.date}</p>}
                 </div>
 
                 <div>
@@ -707,7 +884,7 @@ export default function TransactionManager() {
                     <option value="expense">Expense</option>
                     <option value="income">Income</option>
                   </select>
-                  {errors.type && <p className="text-xs text-red-600 mt-1">{errors.type}</p>}
+                  {formErrors.type && <p className="text-xs text-red-600 mt-1">{formErrors.type}</p>}
                 </div>
 
                 <div>
@@ -721,8 +898,8 @@ export default function TransactionManager() {
                     onChange={(e) => setForm({ ...form, merchant: e.target.value })}
                     className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none"
                   />
-                  {errors.merchant && (
-                    <p className="text-xs text-red-600 mt-1">{errors.merchant}</p>
+                  {formErrors.merchant && (
+                    <p className="text-xs text-red-600 mt-1">{formErrors.merchant}</p>
                   )}
                 </div>
 
@@ -738,8 +915,8 @@ export default function TransactionManager() {
                     onChange={(e) => setForm({ ...form, amount: e.target.value })}
                     className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none"
                   />
-                  {errors.amount && (
-                    <p className="text-xs text-red-600 mt-1">{errors.amount}</p>
+                  {formErrors.amount && (
+                    <p className="text-xs text-red-600 mt-1">{formErrors.amount}</p>
                   )}
                 </div>
 
@@ -754,8 +931,8 @@ export default function TransactionManager() {
                     onChange={(e) => setForm({ ...form, description: e.target.value })}
                     className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none"
                   />
-                  {errors.description && (
-                    <p className="text-xs text-red-600 mt-1">{errors.description}</p>
+                  {formErrors.description && (
+                    <p className="text-xs text-red-600 mt-1">{formErrors.description}</p>
                   )}
                 </div>
 
@@ -779,8 +956,8 @@ export default function TransactionManager() {
                       </option>
                     ))}
                   </select>
-                  {errors.category && (
-                    <p className="text-xs text-red-600 mt-1">{errors.category}</p>
+                  {formErrors.category && (
+                    <p className="text-xs text-red-600 mt-1">{formErrors.category}</p>
                   )}
                 </div>
 
@@ -798,9 +975,6 @@ export default function TransactionManager() {
                     <option value="completed">Completed</option>
                     <option value="pending">Pending</option>
                   </select>
-                  {errors.status && (
-                    <p className="text-xs text-red-600 mt-1">{errors.status}</p>
-                  )}
                 </div>
 
                 <div className="md:col-span-2">
@@ -816,11 +990,6 @@ export default function TransactionManager() {
                     }
                     className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none"
                   />
-                  {errors.paymentMethod && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {errors.paymentMethod}
-                    </p>
-                  )}
                 </div>
               </div>
 
