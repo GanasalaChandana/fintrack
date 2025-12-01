@@ -8,8 +8,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/budgets")
@@ -58,6 +60,27 @@ public class BudgetController {
 
         Budget budget = budgetsService.getBudgetById(id, userId);
         return ResponseEntity.ok(budget);
+    }
+
+    @GetMapping("/category")
+    public ResponseEntity<Map<String, Object>> getBudgetByCategory(
+            @RequestParam String userId,
+            @RequestParam String category) {
+        
+        Optional<Budget> budget = budgetsService.getBudgetByCategory(userId, category);
+        
+        if (budget.isPresent()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("amount", budget.get().getBudget());
+            result.put("category", budget.get().getCategory());
+            return ResponseEntity.ok(result);
+        }
+        
+        // Return default budget if not found
+        Map<String, Object> defaultBudget = new HashMap<>();
+        defaultBudget.put("amount", 1000);
+        defaultBudget.put("category", category);
+        return ResponseEntity.ok(defaultBudget);
     }
 
     // Create a new budget

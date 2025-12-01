@@ -13,6 +13,7 @@ import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +26,10 @@ public class BudgetsService {
             return budgetRepository.findByUserIdAndMonth(userId, month);
         }
         return budgetRepository.findByUserId(userId);
+    }
+
+    public Optional<Budget> getBudgetByCategory(String userId, String category) {
+        return budgetRepository.findByUserIdAndCategory(userId, category);
     }
 
     public Budget getBudgetById(String id, String userId) {

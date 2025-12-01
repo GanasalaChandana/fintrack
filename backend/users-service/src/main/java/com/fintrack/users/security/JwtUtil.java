@@ -1,5 +1,6 @@
 package com.fintrack.users.security;
 
+import com.fintrack.users.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -11,7 +12,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.Function;
 
 @Component
@@ -20,8 +20,43 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
 
-    @Value("${jwt.expiration}")
+    @Value("${jwt.expiration:86400000}") // Default 24 hours
     private Long expiration;
+
+    private SecretKey getSigningKey() {
+        // Ensure the secret is at least 256 bits (32 bytes) for HS256
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    // Generate token from User object
+    public String generateToken(User user) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", user.getId().toString());
+        claims.put("email", user.getEmail());
+        claims.put("role", user.getRole().toString());
+
+        return createToken(claims, user.getEmail());
+    }
+
+    // Generate token from username/email string (for backward compatibility)
+    public String generateToken(String username) {
+        Map<String, Object> claims = new HashMap<>();
+        return createToken(claims, username);
+    }
+
+    private String createToken(Map<String, Object> claims, String subject) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + expiration);
+
+        return Jwts.builder()
+                .claims(claims)
+                .subject(subject)
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(getSigningKey())
+                .compact();
+    }
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
@@ -38,60 +73,18 @@ public class JwtUtil {
 
     private Claims extractAllClaims(String token) {
         return Jwts.parser()
-                .verifyWith(getSignKey()) // NEW API: verifyWith instead of setSigningKey
+                .verifyWith(getSigningKey())
                 .build()
-                .parseSignedClaims(token) // NEW API: parseSignedClaims instead of parseClaimsJws
-                .getPayload(); // NEW API: getPayload instead of getBody
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
     private Boolean isTokenExpired(String token) {
         return extractExpiration(token).before(new Date());
     }
 
-    // Overloaded method to accept userId, username, and email
-    public String generateToken(UUID userId, String username, String email) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", userId.toString());
-        claims.put("email", email);
-        return createToken(claims, username);
-    }
-
-    // Original method for backward compatibility
-    public String generateToken(String username) {
-        Map<String, Object> claims = new HashMap<>();
-        return createToken(claims, username);
-    }
-
-    private String createToken(Map<String, Object> claims, String subject) {
-        return Jwts.builder()
-                .claims(claims) // NEW API: claims() instead of setClaims()
-                .subject(subject) // NEW API: subject() instead of setSubject()
-                .issuedAt(new Date(System.currentTimeMillis())) // NEW API: issuedAt() instead of setIssuedAt()
-                .expiration(new Date(System.currentTimeMillis() + expiration)) // NEW API: expiration() instead of
-                                                                               // setExpiration()
-                .signWith(getSignKey()) // NEW API: simplified signWith - algorithm is inferred
-                .compact();
-    }
-
     public Boolean validateToken(String token, String username) {
         final String extractedUsername = extractUsername(token);
         return (extractedUsername.equals(username) && !isTokenExpired(token));
-    }
-
-    private SecretKey getSignKey() {
-        // NEW API: Create SecretKey directly from bytes
-        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
-    }
-
-    // Helper methods to extract custom claims
-    public UUID extractUserId(String token) {
-        Claims claims = extractAllClaims(token);
-        String userIdStr = claims.get("userId", String.class);
-        return userIdStr != null ? UUID.fromString(userIdStr) : null;
-    }
-
-    public String extractEmail(String token) {
-        Claims claims = extractAllClaims(token);
-        return claims.get("email", String.class);
     }
 }

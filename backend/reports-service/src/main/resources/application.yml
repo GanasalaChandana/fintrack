@@ -1,5 +1,6 @@
 ﻿server:
-  port: ${SERVER_PORT:8084}
+  # Use your env variable from .env (falls back to 8084)
+  port: ${REPORTS_SERVICE_PORT:8084}
 
 app:
   cors:
@@ -8,33 +9,21 @@ app:
 spring:
   application:
     name: reports-service
-  
+
   web:
     resources:
       add-mappings: false
-  
-  datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fintrack}?currentSchema=reports
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:postgres}
-    driver-class-name: org.postgresql.Driver
-  
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: false
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        default_schema: reports
-  
+
+  # ❌ Turn OFF all DB/JPA/Flyway auto-config to avoid Postgres/password errors
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
+
   flyway:
-    enabled: true
-    baseline-on-migrate: true
-    schemas: reports
-    locations: classpath:db/migration
-  
+    enabled: false
+
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
@@ -47,11 +36,18 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-  
+
   data:
     redis:
       host: ${SPRING_REDIS_HOST:localhost}
       port: ${SPRING_REDIS_PORT:6379}
+
+# URLs of other microservices this service calls
+services:
+  transactions:
+    url: ${TRANSACTIONS_SERVICE_URL:http://localhost:8082}
+  budgets:
+    url: ${BUDGETS_SERVICE_URL:http://localhost:8085}
 
 management:
   endpoints:
@@ -70,3 +66,8 @@ management:
     export:
       prometheus:
         enabled: true
+
+logging:
+  level:
+    com.fintrack: DEBUG
+    org.springframework.web: DEBUG

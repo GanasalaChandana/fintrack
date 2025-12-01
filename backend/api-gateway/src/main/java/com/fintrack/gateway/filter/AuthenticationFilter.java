@@ -38,9 +38,11 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
         return (exchange, chain) -> {
             ServerHttpRequest request = exchange.getRequest();
 
+            log.debug("🔍 Processing request: {} {}", request.getMethod(), request.getURI().getPath());
+
             // Development mode bypass
             if (isDevelopmentMode()) {
-                log.debug("🔓 DEV MODE: Bypassing authentication");
+                log.warn("🔓 DEV MODE: Bypassing authentication, using default user ID: {}", defaultUserId);
                 ServerHttpRequest modifiedRequest = request.mutate()
                         .header("X-User-Id", defaultUserId)
                         .build();
@@ -49,23 +51,24 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
 
             // Check for Authorization header
             if (!request.getHeaders().containsKey("Authorization")) {
-                log.warn("Missing Authorization header");
+                log.warn("❌ Missing Authorization header for: {}", request.getURI().getPath());
                 return onError(exchange, "Missing Authorization header", HttpStatus.UNAUTHORIZED);
             }
 
             String authHeader = request.getHeaders().getFirst("Authorization");
 
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                log.warn("Invalid Authorization header format");
+                log.warn("❌ Invalid Authorization header format");
                 return onError(exchange, "Invalid Authorization header", HttpStatus.UNAUTHORIZED);
             }
 
             String token = authHeader.substring(7);
+            log.debug("🔑 Extracted token (first 20 chars): {}...", token.substring(0, Math.min(20, token.length())));
 
             try {
                 // Validate token
                 if (!jwtUtil.validateToken(token)) {
-                    log.warn("Invalid or expired token");
+                    log.warn("❌ Invalid or expired token");
                     return onError(exchange, "Invalid or expired token", HttpStatus.UNAUTHORIZED);
                 }
 
@@ -73,7 +76,7 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
                 String userId = jwtUtil.extractUserId(token);
 
                 if (userId == null || userId.isEmpty()) {
-                    log.warn("Token does not contain user ID");
+                    log.warn("❌ Token does not contain user ID");
                     return onError(exchange, "Invalid token payload", HttpStatus.UNAUTHORIZED);
                 }
 
@@ -82,28 +85,33 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
                         .header("X-User-Id", userId)
                         .build();
 
-                log.debug("✅ Authentication successful for user: {}", userId);
+                log.info("✅ Authentication successful for user: {} | Route: {}", userId, request.getURI().getPath());
                 return chain.filter(exchange.mutate().request(modifiedRequest).build());
 
             } catch (Exception e) {
-                log.error("Authentication error: ", e);
-                return onError(exchange, "Authentication failed", HttpStatus.UNAUTHORIZED);
+                log.error("❌ Authentication error: {}", e.getMessage(), e);
+                return onError(exchange, "Authentication failed: " + e.getMessage(), HttpStatus.UNAUTHORIZED);
             }
         };
     }
 
     private boolean isDevelopmentMode() {
-        return devBypassAuth || "dev".equalsIgnoreCase(environment) || "development".equalsIgnoreCase(environment);
+        boolean isDev = devBypassAuth || "dev".equalsIgnoreCase(environment)
+                || "development".equalsIgnoreCase(environment);
+        if (isDev) {
+            log.debug("Running in development mode (auth bypass: {}, environment: {})", devBypassAuth, environment);
+        }
+        return isDev;
     }
 
     private Mono<Void> onError(ServerWebExchange exchange, String message, HttpStatus status) {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(status);
-        log.error("Authentication error: {} - Status: {}", message, status);
+        log.error("🚫 Authentication error: {} - Status: {}", message, status);
         return response.setComplete();
     }
 
     public static class Config {
-        // Configuration properties if needed
+        // Configuration properties if needed in the future
     }
 }

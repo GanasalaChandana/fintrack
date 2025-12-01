@@ -1,6 +1,4 @@
 "use client";
-
-import { useRouter } from "next/navigation";
 import React, { useState, useEffect } from "react";
 import {
   Target,
@@ -19,6 +17,8 @@ import {
   Loader2,
   TrendingUp,
 } from "lucide-react";
+
+import { useRouter } from "next/navigation";
 
 type TabKey = "goals" | "budgets";
 type GoalIconKey =
@@ -101,7 +101,10 @@ const apiRequest = async <T,>(
     throw new Error(`HTTP error! status: ${response.status}`);
   }
 
-  if (response.status === 204 || response.headers.get("content-length") === "0") {
+  if (
+    response.status === 204 ||
+    response.headers.get("content-length") === "0"
+  ) {
     return {} as T;
   }
 
@@ -114,7 +117,7 @@ const iconMap: Record<GoalIconKey, typeof PiggyBank> = {
   car: Car,
   home: Home,
   heart: Heart,
-  graduation: TrendingUp, // mapped to avoid graduation-cap import
+  graduation: TrendingUp, // using TrendingUp as the graduation icon
   wallet: Wallet,
 };
 
@@ -171,7 +174,9 @@ const GoalCard: React.FC<{
           </div>
           <div>
             <h3 className="font-bold text-gray-900 text-lg">{goal.name}</h3>
-            <p className="text-sm text-gray-500">{monthsLeft} months remaining</p>
+            <p className="text-sm text-gray-500">
+              {monthsLeft} months remaining
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -261,7 +266,8 @@ const BudgetCard: React.FC<{
   budget: Budget;
   onEdit: (budget: Budget) => void;
 }> = ({ budget, onEdit }) => {
-  const percentage = budget.budget <= 0 ? 0 : (budget.spent / budget.budget) * 100;
+  const percentage =
+    budget.budget <= 0 ? 0 : (budget.spent / budget.budget) * 100;
   const remaining = Math.max(budget.budget - budget.spent, 0);
   const isOverBudget = budget.spent > budget.budget;
 
@@ -324,7 +330,10 @@ const BudgetCard: React.FC<{
             }`}
           >
             {isOverBudget ? (
-              <span>Over by {formatCurrency(Math.abs(budget.budget - budget.spent))}</span>
+              <span>
+                Over by{" "}
+                {formatCurrency(Math.abs(budget.budget - budget.spent))}
+              </span>
             ) : (
               <span>{formatCurrency(remaining)} left</span>
             )}
@@ -341,7 +350,9 @@ const BudgetCard: React.FC<{
             }`}
           >
             <AlertCircle className="w-3 h-3" />
-            <span>{isOverBudget ? "Budget exceeded!" : "Approaching budget limit"}</span>
+            <span>
+              {isOverBudget ? "Budget exceeded!" : "Approaching budget limit"}
+            </span>
           </div>
         )}
       </div>
@@ -535,7 +546,9 @@ const GoalModal: React.FC<{
               {colorOptions.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setFormData({ ...formData, color: option.value })}
+                  onClick={() =>
+                    setFormData({ ...formData, color: option.value })
+                  }
                   className={`px-4 py-2 border-2 rounded-lg text-sm font-medium transition-all ${
                     formData.color === option.value
                       ? "border-blue-500 bg-blue-50 text-blue-700"
@@ -912,8 +925,12 @@ export default function GoalsBudgetManager() {
             <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl shadow-xl p-8 text-white">
               <div className="flex items-start justify-between mb-6">
                 <div>
-                  <h2 className="text-2xl font-bold mb-2">Total Goals Progress</h2>
-                  <p className="text-blue-100">You&apos;re making great progress!</p>
+                  <h2 className="text-2xl font-bold mb-2">
+                    Total Goals Progress
+                  </h2>
+                  <p className="text-blue-100">
+                    You&apos;re making great progress!
+                  </p>
                 </div>
                 <div className="w-16 h-16 bg-white bg-opacity-20 rounded-2xl flex items-center justify-center">
                   <Target className="w-8 h-8" />
@@ -923,22 +940,30 @@ export default function GoalsBudgetManager() {
                 <div>
                   <div className="text-blue-100 text-sm mb-1">Total Saved</div>
                   <div className="text-3xl font-bold">
-                    {formatCurrency(goals.reduce((sum, g) => sum + g.current, 0))}
+                    {formatCurrency(
+                      goals.reduce((sum, g) => sum + g.current, 0)
+                    )}
                   </div>
                 </div>
                 <div>
                   <div className="text-blue-100 text-sm mb-1">Total Target</div>
                   <div className="text-3xl font-bold">
-                    {formatCurrency(goals.reduce((sum, g) => sum + g.target, 0))}
+                    {formatCurrency(
+                      goals.reduce((sum, g) => sum + g.target, 0)
+                    )}
                   </div>
                 </div>
                 <div>
-                  <div className="text-blue-100 text-sm mb-1">Average Progress</div>
+                  <div className="text-blue-100 text-sm mb-1">
+                    Average Progress
+                  </div>
                   <div className="text-3xl font-bold">
                     {goals.length > 0
                       ? Math.round(
                           goals.reduce(
-                            (sum, g) => sum + calculateProgress(g.current, g.target),
+                            (sum, g) =>
+                              sum +
+                              calculateProgress(g.current, g.target),
                             0
                           ) / goals.length
                         )
@@ -968,7 +993,9 @@ export default function GoalsBudgetManager() {
             ) : goals.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl">
                 <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No goals yet</h3>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  No goals yet
+                </h3>
                 <p className="text-gray-600">
                   Create your first savings goal to get started!
                 </p>

@@ -44,6 +44,45 @@ public class TransactionController {
         return ResponseEntity.ok(transactions);
     }
 
+    // ⚠️ IMPORTANT: Specific routes MUST come BEFORE generic path variable routes
+    // Move all specific endpoints (classify, summary, health) BEFORE /{id}
+
+    @PostMapping("/classify")
+    public ResponseEntity<Map<String, String>> classifyTransaction(
+            @RequestBody Map<String, String> request,
+            @RequestHeader(name = "X-User-Id", required = false) String userId,
+            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+
+        String uid = resolveUserId(userId, authHeader);
+        String description = request.get("description");
+        log.info("Classifying transaction for user: {}", uid);
+
+        String category = transactionService.classifyTransaction(description);
+        return ResponseEntity.ok(Map.of("category", category));
+    }
+
+    @GetMapping("/summary")
+    public ResponseEntity<Map<String, Object>> getSummary(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestHeader(name = "X-User-Id", required = false) String userId,
+            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+
+        String uid = resolveUserId(userId, authHeader);
+        log.info("Getting transaction summary for user: {}", uid);
+        return ResponseEntity.ok(transactionService.getSummary(uid, startDate, endDate));
+    }
+
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, String>> health() {
+        log.debug("Health check called");
+        return ResponseEntity.ok(Map.of(
+                "status", "UP",
+                "service", "transactions-service",
+                "environment", environment));
+    }
+
+    // NOW the generic /{id} route comes AFTER all specific routes
     @GetMapping("/{id}")
     public ResponseEntity<TransactionResponse> getTransactionById(
             @PathVariable Long id,
@@ -89,41 +128,6 @@ public class TransactionController {
         log.info("Deleting transaction {} for user: {}", id, uid);
         transactionService.deleteTransaction(id, uid);
         return ResponseEntity.noContent().build();
-    }
-
-    @PostMapping("/classify")
-    public ResponseEntity<Map<String, String>> classifyTransaction(
-            @RequestBody Map<String, String> request,
-            @RequestHeader(name = "X-User-Id", required = false) String userId,
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
-
-        String uid = resolveUserId(userId, authHeader);
-        String description = request.get("description");
-        log.info("Classifying transaction for user: {}", uid);
-
-        String category = transactionService.classifyTransaction(description);
-        return ResponseEntity.ok(Map.of("category", category));
-    }
-
-    @GetMapping("/summary")
-    public ResponseEntity<Map<String, Object>> getSummary(
-            @RequestParam(required = false) String startDate,
-            @RequestParam(required = false) String endDate,
-            @RequestHeader(name = "X-User-Id", required = false) String userId,
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
-
-        String uid = resolveUserId(userId, authHeader);
-        log.info("Getting transaction summary for user: {}", uid);
-        return ResponseEntity.ok(transactionService.getSummary(uid, startDate, endDate));
-    }
-
-    @GetMapping("/health")
-    public ResponseEntity<Map<String, String>> health() {
-        log.debug("Health check called");
-        return ResponseEntity.ok(Map.of(
-                "status", "UP",
-                "service", "transactions-service",
-                "environment", environment));
     }
 
     /**

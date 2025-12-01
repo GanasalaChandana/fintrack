@@ -17,10 +17,11 @@ public class JwtUtil {
     private String jwtSecret;
 
     /**
-     * FIXED: Use UTF-8 encoding instead of BASE64 decoding
-     * The secret is a plain hex string, not base64 encoded
+     * Get the signing key for JWT validation
+     * IMPORTANT: This must match the secret used by your auth-service!
      */
     private SecretKey getSigningKey() {
+        // Use UTF-8 encoding of the secret string
         byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);
     }
@@ -58,7 +59,8 @@ public class JwtUtil {
     }
 
     /**
-     * Extract user ID from token (stored in subject)
+     * Extract user ID from token
+     * First tries 'sub' (standard JWT claim), then falls back to 'email'
      */
     public String extractUserId(String token) {
         try {
@@ -68,17 +70,29 @@ public class JwtUtil {
                     .parseSignedClaims(token)
                     .getPayload();
 
+            // Try 'sub' first (standard JWT subject claim)
             String userId = claims.getSubject();
-            log.debug("Extracted user ID: {}", userId);
+
+            // Fallback to 'email' if sub is null/empty
+            if (userId == null || userId.isEmpty()) {
+                userId = claims.get("email", String.class);
+            }
+
+            // Fallback to 'userId' custom claim
+            if (userId == null || userId.isEmpty()) {
+                userId = claims.get("userId", String.class);
+            }
+
+            log.debug("📧 Extracted user ID: {}", userId);
             return userId;
         } catch (Exception e) {
-            log.error("Error extracting user ID from token", e);
+            log.error("❌ Error extracting user ID from token: {}", e.getMessage());
             return null;
         }
     }
 
     /**
-     * Extract email from token
+     * Extract email from token (useful for logging/debugging)
      */
     public String extractEmail(String token) {
         try {
@@ -89,10 +103,10 @@ public class JwtUtil {
                     .getPayload();
 
             String email = claims.get("email", String.class);
-            log.debug("Extracted email: {}", email);
+            log.debug("📧 Extracted email: {}", email);
             return email;
         } catch (Exception e) {
-            log.error("Error extracting email from token", e);
+            log.error("❌ Error extracting email from token: {}", e.getMessage());
             return null;
         }
     }
@@ -109,10 +123,10 @@ public class JwtUtil {
                     .getPayload();
 
             String role = claims.get("role", String.class);
-            log.debug("Extracted role: {}", role);
+            log.debug("👤 Extracted role: {}", role);
             return role;
         } catch (Exception e) {
-            log.error("Error extracting role from token", e);
+            log.error("❌ Error extracting role from token: {}", e.getMessage());
             return null;
         }
     }
@@ -128,10 +142,10 @@ public class JwtUtil {
                     .parseSignedClaims(token)
                     .getPayload();
 
-            log.debug("All claims: {}", claims);
+            log.debug("📋 All claims: {}", claims);
             return claims;
         } catch (Exception e) {
-            log.error("Error extracting claims from token", e);
+            log.error("❌ Error extracting claims from token: {}", e.getMessage());
             return null;
         }
     }

@@ -1,10 +1,10 @@
 ﻿import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import Navigation from '@/components/Navigation';
 
 const inter = Inter({ subsets: ['latin'] });
 
-// Site configuration
 const siteConfig = {
   name: 'FinTrack',
   description: 'Your intelligent financial management platform. Track expenses, analyze spending patterns, and make informed financial decisions with ease.',
@@ -89,20 +89,16 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Preconnect to external domains for performance */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        
-        {/* Additional SEO tags */}
         <meta name="theme-color" content="#7c3aed" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        
-        {/* Verification tags (add your own) */}
-        {/* <meta name="google-site-verification" content="your-code" /> */}
-        {/* <meta name="msvalidate.01" content="your-code" /> */}
       </head>
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <Navigation />
+        {children}
+      </body>
     </html>
   );
 }

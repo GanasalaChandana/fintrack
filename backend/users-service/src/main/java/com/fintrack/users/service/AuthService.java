@@ -4,75 +4,101 @@ import com.fintrack.users.dto.AuthResponse;
 import com.fintrack.users.dto.LoginRequest;
 import com.fintrack.users.dto.RegisterRequest;
 import com.fintrack.users.entity.User;
+import com.fintrack.users.enums.Role; // ADD THIS IMPORT
 import com.fintrack.users.repository.UserRepository;
 import com.fintrack.users.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class AuthService {
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final JwtUtil jwtUtil;
+        private final UserRepository userRepository;
+        private final PasswordEncoder passwordEncoder;
+        private final JwtUtil jwtUtil;
 
-    @Transactional
-    public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already registered");
+        @Transactional
+        public AuthResponse register(RegisterRequest request) {
+                // Check if user already exists
+                if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+                        throw new RuntimeException("Email already registered");
+                }
+
+                // Create new user
+                User user = User.builder()
+                                .email(request.getEmail())
+                                .username(request.getUsername())
+                                .firstName(request.getFirstName())
+                                .lastName(request.getLastName())
+                                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                                .role(Role.USER) // Changed from User.Role.USER
+                                .build();
+
+                User savedUser = userRepository.save(user);
+                log.info("New user registered: {}", savedUser.getEmail());
+
+                // Generate JWT token
+                String token = jwtUtil.generateToken(savedUser);
+
+                // Build response
+                AuthResponse.UserDto userDto = AuthResponse.UserDto.builder()
+                                .id(savedUser.getId()) // Now UUID instead of Long
+                                .email(savedUser.getEmail())
+                                .username(savedUser.getUsername())
+                                .firstName(savedUser.getFirstName())
+                                .lastName(savedUser.getLastName())
+                                .role(savedUser.getRole().toString())
+                                .build();
+
+                return AuthResponse.builder()
+                                .token(token)
+                                .user(userDto)
+                                .build();
         }
 
-        User user = User.builder()
-                .email(request.getEmail())
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .role(User.Role.USER)
-                .build();
+        @Transactional(readOnly = true)
+        public AuthResponse login(LoginRequest request) {
+                // Find user by email
+                User user = userRepository.findByEmail(request.getEmail())
+                                .orElseThrow(() -> new RuntimeException("Invalid credentials"));
 
-        user = userRepository.save(user);
-        log.info("User registered successfully: {}", user.getEmail());
+                // Verify password
+                if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+                        throw new RuntimeException("Invalid credentials");
+                }
 
-        String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().toString());
-        return buildAuthResponse(token, user);
-    }
+                log.info("User logged in: {}", user.getEmail());
 
-    @Transactional(readOnly = true)
-    public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+                // Generate JWT token
+                String token = jwtUtil.generateToken(user);
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Invalid email or password");
+                // Build response
+                AuthResponse.UserDto userDto = AuthResponse.UserDto.builder()
+                                .id(user.getId()) // Now UUID instead of Long
+                                .email(user.getEmail())
+                                .username(user.getUsername())
+                                .firstName(user.getFirstName())
+                                .lastName(user.getLastName())
+                                .role(user.getRole().toString())
+                                .build();
+
+                return AuthResponse.builder()
+                                .token(token)
+                                .user(userDto)
+                                .build();
         }
 
-        log.info("User logged in successfully: {}", user.getEmail());
+        @Transactional(readOnly = true)
+        public User getCurrentUser(String email) {
+                return userRepository.findByEmail(email)
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+        }
 
-        String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().toString());
-        return buildAuthResponse(token, user);
-    }
-
-    /** Used by controllers that need the full User by email/username */
-    @Transactional(readOnly = true)
-    public User getCurrentUser(String email) {
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
-    }
-
-    private AuthResponse buildAuthResponse(String token, User user) {
-        AuthResponse.UserDto userDto = AuthResponse.UserDto.builder()
-                .id(user.getId())
-                .email(user.getEmail())
-                .role(user.getRole().toString())
-                .build();
-
-        return AuthResponse.builder()
-                .token(token)
-                .user(userDto)
-                .build();
-    }
 }

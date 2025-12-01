@@ -42,7 +42,6 @@ interface Category {
   badgeText: string;
 }
 
-// Map backend transaction to our UI format
 interface Transaction extends Omit<ApiTransaction, 'category'> {
   category: Exclude<CategoryId, "all">;
   status: TxStatus;
@@ -95,7 +94,6 @@ const formatCurrency = (value: number) =>
     minimumFractionDigits: 2,
   }).format(Math.abs(value));
 
-// Map backend category to UI category
 const mapCategoryToUI = (category: string): Exclude<CategoryId, "all"> => {
   const map: Record<string, Exclude<CategoryId, "all">> = {
     'Food & Dining': 'food',
@@ -113,7 +111,6 @@ const mapCategoryToUI = (category: string): Exclude<CategoryId, "all"> => {
   return map[category] || 'other';
 };
 
-// Map UI category to backend category
 const mapCategoryToBackend = (category: Exclude<CategoryId, "all">, type: TxType): string => {
   if (type === 'income') return 'Income';
   
@@ -188,7 +185,19 @@ export default function TransactionManager() {
     try {
       setIsLoading(true);
       setError(null);
+      
+      console.log('🔄 Loading transactions...');
       const data = await transactionsAPI.getAll();
+      
+      console.log('📦 Received data:', data);
+      console.log('📦 Data type:', typeof data);
+      console.log('📦 Is array?', Array.isArray(data));
+      
+      // ✅ CRITICAL FIX: Validate that data is actually an array
+      if (!Array.isArray(data)) {
+        console.error('❌ Error: Expected array but got:', data);
+        throw new Error('Invalid response format: expected array of transactions');
+      }
       
       // Transform API data to UI format
       const transformed: Transaction[] = data.map(t => ({
@@ -201,10 +210,25 @@ export default function TransactionManager() {
         aiSuggested: false,
       }));
       
+      console.log('✅ Transformed transactions:', transformed.length);
       setTransactions(transformed);
-    } catch (err) {
-      console.error('Failed to load transactions:', err);
-      setError('Failed to load transactions');
+      
+    } catch (err: any) {
+      console.error('❌ Failed to load transactions:', err);
+      
+      // Check if it's an authentication error
+      if (err.message?.includes('401') || err.message?.includes('Unauthorized')) {
+        setError('Authentication failed. Please sign in again.');
+        setTimeout(() => {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('ft_token');
+          router.replace('/register?mode=signin');
+        }, 2000);
+      } else {
+        setError(err.message || 'Failed to load transactions');
+      }
+      
+      setTransactions([]);
     } finally {
       setIsLoading(false);
     }
@@ -341,7 +365,6 @@ export default function TransactionManager() {
     }
   };
 
-  // ---------- Create Transaction ----------
   const validate = (f: NewTxForm) => {
     const e: Partial<Record<keyof NewTxForm, string>> = {};
     if (!f.date) e.date = "Date is required";
@@ -407,7 +430,6 @@ export default function TransactionManager() {
     }
   };
 
-  // Show loading while checking auth
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
@@ -422,13 +444,16 @@ export default function TransactionManager() {
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">{error}</p>
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 mb-4">
+            <p className="text-red-600 font-semibold mb-2">⚠️ Error Loading Transactions</p>
+            <p className="text-red-700 text-sm">{error}</p>
+          </div>
           <button
             onClick={loadTransactions}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold"
           >
-            Retry
+            Try Again
           </button>
         </div>
       </div>

@@ -1,5 +1,4 @@
-﻿
-services:
+﻿services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: fintrack-zookeeper
@@ -40,23 +39,7 @@ services:
       timeout: 10s
       retries: 5
 
-  postgres:
-    image: postgres:15-alpine
-    container_name: fintrack-postgres
-    environment:
-      POSTGRES_DB: fintrack
-      POSTGRES_USER: fintrack_user
-      POSTGRES_PASSWORD: fintrack_pass
-    ports: ["5432:5432"]
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
-    networks: [fintrack-network]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fintrack_user -d fintrack"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # PostgreSQL removed - using Neon cloud database instead
 
   redis:
     image: redis:7-alpine
@@ -88,14 +71,12 @@ services:
     container_name: fintrack-users-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      POSTGRES_HOST: postgres
+      POSTGRES_HOST: ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech
       POSTGRES_PORT: 5432
-      POSTGRES_DB: fintrack
-      POSTGRES_USER: fintrack_user
-      POSTGRES_PASSWORD: fintrack_pass
+      POSTGRES_DB: neondb
+      POSTGRES_USER: neondb_owner
+      POSTGRES_PASSWORD: npg_eVXG4qfL1FzP
     ports: ["8081:8081"]
-    depends_on:
-      postgres: { condition: service_healthy }
     networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
@@ -109,16 +90,15 @@ services:
     container_name: fintrack-transactions-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      POSTGRES_HOST: postgres
+      POSTGRES_HOST: ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech
       POSTGRES_PORT: 5432
-      POSTGRES_DB: fintrack
-      POSTGRES_USER: fintrack_user
-      POSTGRES_PASSWORD: fintrack_pass
+      POSTGRES_DB: neondb
+      POSTGRES_USER: neondb_owner
+      POSTGRES_PASSWORD: npg_eVXG4qfL1FzP
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ML_CLASSIFIER_URL: http://ml-classifier:8000
     ports: ["8082:8082"]
     depends_on:
-      postgres: { condition: service_healthy }
       kafka: { condition: service_healthy }
       ml-classifier: { condition: service_healthy }
     networks: [fintrack-network]
@@ -136,15 +116,14 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
-      POSTGRES_HOST: postgres
+      POSTGRES_HOST: ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech
       POSTGRES_PORT: 5432
-      POSTGRES_DB: fintrack
-      POSTGRES_USER: fintrack_user
-      POSTGRES_PASSWORD: fintrack_pass
+      POSTGRES_DB: neondb
+      POSTGRES_USER: neondb_owner
+      POSTGRES_PASSWORD: npg_eVXG4qfL1FzP
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     ports: ["8083:8083"]
     depends_on:
-      postgres: { condition: service_healthy }
       kafka: { condition: service_healthy }
       redis: { condition: service_healthy }
     networks: [fintrack-network]
@@ -160,14 +139,12 @@ services:
     container_name: fintrack-reports-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      POSTGRES_HOST: postgres
+      POSTGRES_HOST: ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech
       POSTGRES_PORT: 5432
-      POSTGRES_DB: fintrack
-      POSTGRES_USER: fintrack_user
-      POSTGRES_PASSWORD: fintrack_pass
+      POSTGRES_DB: neondb
+      POSTGRES_USER: neondb_owner
+      POSTGRES_PASSWORD: npg_eVXG4qfL1FzP
     ports: ["8084:8084"]
-    depends_on:
-      postgres: { condition: service_healthy }
     networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8084/actuator/health"]
@@ -183,14 +160,13 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
-      POSTGRES_HOST: postgres
+      POSTGRES_HOST: ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech
       POSTGRES_PORT: 5432
-      POSTGRES_DB: fintrack
-      POSTGRES_USER: fintrack_user
-      POSTGRES_PASSWORD: fintrack_pass
+      POSTGRES_DB: neondb
+      POSTGRES_USER: neondb_owner
+      POSTGRES_PASSWORD: npg_eVXG4qfL1FzP
     ports: ["8085:8085"]
     depends_on:
-      postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     networks: [fintrack-network]
     healthcheck:
@@ -205,14 +181,12 @@ services:
     container_name: fintrack-notifications-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      POSTGRES_HOST: postgres
+      POSTGRES_HOST: ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech
       POSTGRES_PORT: 5432
-      POSTGRES_DB: fintrack
-      POSTGRES_USER: fintrack_user
-      POSTGRES_PASSWORD: fintrack_pass
+      POSTGRES_DB: neondb
+      POSTGRES_USER: neondb_owner
+      POSTGRES_PASSWORD: npg_eVXG4qfL1FzP
     ports: ["8086:8086"]
-    depends_on:
-      postgres: { condition: service_healthy }
     networks: [fintrack-network]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8086/actuator/health"]
@@ -305,7 +279,7 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
+  # postgres_data removed - using Neon cloud database
   redis_data:
   kafka_data:
   zookeeper_data:

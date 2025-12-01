@@ -1,29 +1,23 @@
-// lib/api.ts - UPDATED with Goals & Budgets
-// Centralized API helper for all backend calls
+// lib/api.ts - FIXED with better token management & transaction handling
 
-/**
- * User interface for type safety
- */
-interface User {
+// =====================
+// Types
+// =====================
+
+export interface User {
   id: string;
   name: string;
   email: string;
   [key: string]: any;
 }
 
-/**
- * Auth response interface
- */
-interface AuthResponse {
+export interface AuthResponse {
   token: string;
   user: User;
   message?: string;
 }
 
-/**
- * Transaction interface
- */
-interface Transaction {
+export interface Transaction {
   id?: string;
   date: string;
   description: string;
@@ -37,10 +31,7 @@ interface Transaction {
   [key: string]: any;
 }
 
-/**
- * Goal interface
- */
-interface Goal {
+export interface Goal {
   id?: string;
   name: string;
   target: number;
@@ -55,10 +46,7 @@ interface Goal {
   updatedAt?: string;
 }
 
-/**
- * Budget interface
- */
-interface Budget {
+export interface Budget {
   id?: string;
   category: string;
   budget: number;
@@ -71,10 +59,7 @@ interface Budget {
   updatedAt?: string;
 }
 
-/**
- * Budget Summary interface
- */
-interface BudgetSummary {
+export interface BudgetSummary {
   month: string;
   totalBudget: number;
   totalSpent: number;
@@ -83,50 +68,96 @@ interface BudgetSummary {
   budgets: Budget[];
 }
 
-/**
- * Get the base API URL, ensuring no trailing slash
- */
+// =====================
+// Base URL helpers
+// =====================
+
 function getBaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
   return url.replace(/\/$/, "");
 }
 
-/**
- * Build API endpoint URL
- */
 function buildApiUrl(endpoint: string): string {
   const baseUrl = getBaseUrl();
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   return `${baseUrl}${cleanEndpoint}`;
 }
 
-/**
- * ✅ Unified Token Management
- */
-const TOKEN_KEY = "ft_token";
+// =====================
+// Auth token helpers - IMPROVED
+// =====================
+
+const PRIMARY_TOKEN_KEY = "authToken";
+const LEGACY_TOKEN_KEY = "ft_token";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+  
+  // Try multiple sources
+  const token = 
+    localStorage.getItem(PRIMARY_TOKEN_KEY) || 
+    localStorage.getItem(LEGACY_TOKEN_KEY) ||
+    getCookieToken();
+  
+  console.log("🔑 getToken called:", {
+    hasLocalStorage: !!localStorage.getItem(PRIMARY_TOKEN_KEY),
+    hasLegacy: !!localStorage.getItem(LEGACY_TOKEN_KEY),
+    hasCookie: !!getCookieToken(),
+    finalToken: token ? `${token.substring(0, 30)}...` : "NONE"
+  });
+  
+  return token || null;
+}
+
+function getCookieToken(): string | null {
+  if (typeof document === "undefined") return null;
+  
+  const cookies = document.cookie.split('; ');
+  const tokenCookie = cookies.find(row => row.startsWith(`${PRIMARY_TOKEN_KEY}=`));
+  
+  return tokenCookie ? tokenCookie.split('=')[1] : null;
 }
 
 export function setToken(token: string): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(TOKEN_KEY, token);
-  // also set cookie for middleware / SSR
-  document.cookie = `${TOKEN_KEY}=${token}; path=/; max-age=${60 * 60 * 24 * 7}`;
+  
+  console.log("💾 Setting token:", {
+    length: token?.length,
+    preview: token ? `${token.substring(0, 30)}...` : "NONE"
+  });
+  
+  // Store in both localStorage locations
+  localStorage.setItem(PRIMARY_TOKEN_KEY, token);
+  localStorage.setItem(LEGACY_TOKEN_KEY, token);
+  
+  // Also set cookie for SSR/middleware
+  document.cookie = `${PRIMARY_TOKEN_KEY}=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+  
+  console.log("✅ Token saved to localStorage and cookie");
+  
+  // Verify it was saved
+  const verified = getToken();
+  console.log("🔍 Token verification:", !!verified);
 }
 
 export function removeToken(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(TOKEN_KEY);
+  
+  console.log("🗑️ Removing token from all locations");
+  
+  localStorage.removeItem(PRIMARY_TOKEN_KEY);
+  localStorage.removeItem(LEGACY_TOKEN_KEY);
   localStorage.removeItem("user");
-  // clear cookie
-  document.cookie = `${TOKEN_KEY}=; path=/; max-age=0`;
+  
+  // Clear cookie
+  document.cookie = `${PRIMARY_TOKEN_KEY}=; path=/; max-age=0`;
+  
+  console.log("✅ Token removed");
 }
 
 export function getUser(): User | null {
   if (typeof window === "undefined") return null;
+  
   const userStr = localStorage.getItem("user");
   try {
     return userStr ? JSON.parse(userStr) : null;
@@ -138,97 +169,173 @@ export function getUser(): User | null {
 
 export function setUser(user: User): void {
   if (typeof window === "undefined") return;
+  
   localStorage.setItem("user", JSON.stringify(user));
+  console.log("✅ User saved to localStorage:", user.email);
 }
 
-/**
- * Check if user is authenticated
- */
 export function isAuthenticated(): boolean {
-  return !!getToken();
+  const token = getToken();
+  const hasToken = !!token;
+  
+  console.log("🔐 isAuthenticated check:", {
+    hasToken,
+    tokenPreview: token ? `${token.substring(0, 20)}...` : "NONE"
+  });
+  
+  return hasToken;
 }
 
-// ✅ Prevent duplicate requests
+// =====================
+// Generic API helper - IMPROVED
+// =====================
+
 const pendingRequests = new Map<string, Promise<any>>();
 
-/**
- * Make an API request with automatic error handling and duplicate prevention
- */
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getToken();
   const url = buildApiUrl(endpoint);
+  const token = getToken();
 
-  const requestKey = `${options.method || "GET"}-${endpoint}-${JSON.stringify(
-    options.body || ""
-  )}`;
+  console.log("📡 API Request:", {
+    method: options.method || "GET",
+    endpoint,
+    url,
+    hasToken: !!token,
+    tokenPreview: token ? `${token.substring(0, 30)}...` : "NONE"
+  });
+
+  // Prevent duplicate requests
+  const requestKey = `${options.method || "GET"}-${endpoint}-${JSON.stringify(options.body || "")}`;
 
   if (pendingRequests.has(requestKey)) {
-    console.log("Duplicate request detected:", requestKey);
+    console.log("⏳ Duplicate request detected, returning cached promise");
     return pendingRequests.get(requestKey)!;
   }
 
   const isFormData = options.body instanceof FormData;
 
+  const headers: Record<string, string> = {
+    ...(!isFormData && { "Content-Type": "application/json" }),
+  };
+
+  // CRITICAL: Always add Authorization header if token exists
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+    console.log("✅ Added Authorization header:", headers.Authorization.substring(0, 50) + "...");
+  } else {
+    console.warn("⚠️ No token available for request to:", endpoint);
+  }
+
+  // Merge with existing headers
+  if (options.headers) {
+    const existingHeaders = new Headers(options.headers);
+    existingHeaders.forEach((value, key) => {
+      headers[key] = value;
+    });
+  }
+
   const config: RequestInit = {
     ...options,
-    headers: {
-      ...(!isFormData && { "Content-Type": "application/json" }),
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
-    },
+    headers,
     credentials: "include",
   };
+
+  console.log("📤 Final request config:", {
+    url,
+    method: config.method || "GET",
+    hasContentType: !!headers["Content-Type"],
+    hasAuthorization: !!headers["Authorization"],
+    headers: Object.keys(headers)
+  });
 
   const requestPromise = (async () => {
     try {
       const response = await fetch(url, config);
 
-      if (response.status === 204 || response.headers.get("content-length") === "0") {
-        return {} as T;
-      }
+      console.log("📥 Response received:", {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        contentType: response.headers.get("content-type")
+      });
 
-      const contentType = response.headers.get("content-type");
-      let data: any;
+      const contentType = response.headers.get("content-type") || "";
+      let data: any = undefined;
 
-      if (contentType && contentType.includes("application/json")) {
-        try {
-          data = await response.json();
-        } catch (err) {
-          console.error("Failed to parse JSON:", err);
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          throw new Error("Invalid JSON from server");
+      if (contentType.includes("application/json")) {
+        const text = await response.text();
+        console.log("📄 Response text:", text.substring(0, 200));
+        
+        if (text) {
+          try {
+            data = JSON.parse(text);
+            console.log("✅ Parsed JSON data:", {
+              type: typeof data,
+              isArray: Array.isArray(data),
+              keys: data && typeof data === 'object' ? Object.keys(data) : []
+            });
+          } catch (err) {
+            console.error("❌ Failed to parse JSON:", err, "Raw text:", text);
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            throw new Error("Invalid JSON from server");
+          }
         }
       } else {
         const text = await response.text();
-        if (!response.ok) throw new Error(`HTTP ${response.status}: ${text}`);
-        data = { message: text };
+        data = text || undefined;
       }
 
       // Handle HTTP errors
       if (!response.ok) {
+        console.error("❌ HTTP Error:", {
+          status: response.status,
+          statusText: response.statusText,
+          data
+        });
+
         if (response.status === 401) {
+          console.error("❌ 401 Unauthorized - clearing token and redirecting");
           removeToken();
-          if (
-            typeof window !== "undefined" &&
-            !window.location.pathname.startsWith("/register")
-          ) {
-            window.location.href = "/register?mode=signin";
+          
+          // Redirect to login if in browser
+          if (typeof window !== 'undefined') {
+            setTimeout(() => {
+              window.location.href = '/register?mode=signin';
+            }, 100);
           }
         }
 
         const errorMessage =
-          data?.message || data?.error || `HTTP error! status: ${response.status}`;
+          (data && typeof data === "object" && (data.message || data.error)) ||
+          (typeof data === "string" && data) ||
+          `HTTP error! status: ${response.status}`;
+
         throw new Error(errorMessage);
       }
 
-      return data;
+      // Handle empty responses
+      if (
+        response.status === 204 ||
+        data === undefined ||
+        response.headers.get("content-length") === "0"
+      ) {
+        console.log("✅ Empty response (204/no-content)");
+        return {} as T;
+      }
+
+      console.log("✅ Request successful:", endpoint);
+      return data as T;
+      
     } catch (error) {
-      console.error("API Error:", {
+      console.error("❌ API Error:", {
         endpoint,
         error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined
       });
       throw error;
     } finally {
@@ -240,9 +347,10 @@ export async function apiRequest<T = any>(
   return requestPromise;
 }
 
-/**
- * Auth API
- */
+// =====================
+// Auth API
+// =====================
+
 export const authAPI = {
   register: async (userData: {
     name: string;
@@ -317,11 +425,22 @@ export const authAPI = {
     }),
 };
 
-/**
- * Transactions API
- */
+// =====================
+// Transactions API - FIXED
+// =====================
+
 export const transactionsAPI = {
-  getAll: (filters?: Record<string, string | number>): Promise<Transaction[]> => {
+  // Get all transactions with improved error handling
+  getAll: async (
+    filters?: Record<string, string | number>
+  ): Promise<Transaction[]> => {
+    // Verify token before making request
+    const token = getToken();
+    if (!token) {
+      console.error("❌ No token available for transactions request");
+      throw new Error("Authentication required");
+    }
+
     const params = new URLSearchParams(
       filters
         ? Object.entries(filters).reduce((acc, [key, value]) => {
@@ -330,10 +449,75 @@ export const transactionsAPI = {
           }, {} as Record<string, string>)
         : {}
     );
+
     const endpoint = params.toString()
       ? `/api/transactions?${params}`
       : "/api/transactions";
-    return apiRequest<Transaction[]>(endpoint, { method: "GET" });
+
+    console.log("📊 Fetching transactions:", {
+      endpoint,
+      hasToken: !!token,
+      tokenPreview: token.substring(0, 30) + "..."
+    });
+
+    try {
+      const data = await apiRequest<Transaction[] | any>(endpoint, {
+        method: "GET",
+      });
+
+      console.log("📦 Raw transaction response:", {
+        type: typeof data,
+        isArray: Array.isArray(data),
+        keys: data && typeof data === 'object' ? Object.keys(data) : [],
+        dataPreview: data
+      });
+
+      // Handle different response formats
+      let transactions: Transaction[];
+      
+      if (Array.isArray(data)) {
+        transactions = data;
+        console.log("✅ Got array directly, count:", transactions.length);
+      } else if (data && typeof data === 'object') {
+        // Try common wrapper properties
+        if (Array.isArray(data.transactions)) {
+          transactions = data.transactions;
+          console.log("✅ Got transactions from .transactions, count:", transactions.length);
+        } else if (Array.isArray(data.data)) {
+          transactions = data.data;
+          console.log("✅ Got transactions from .data, count:", transactions.length);
+        } else if (Array.isArray(data.content)) {
+          transactions = data.content;
+          console.log("✅ Got transactions from .content, count:", transactions.length);
+        } else {
+          console.error("❌ Unexpected response format:", {
+            type: typeof data,
+            keys: Object.keys(data),
+            data
+          });
+          return [];
+        }
+      } else {
+        console.error("❌ Expected array or object but got:", typeof data);
+        return [];
+      }
+
+      return transactions;
+      
+    } catch (error: any) {
+      console.error("❌ Error fetching transactions:", {
+        message: error.message,
+        stack: error.stack
+      });
+      
+      // If it's an auth error, it will be handled by apiRequest
+      // For other errors, return empty array to prevent UI breaking
+      if (error.message?.includes("Authentication required")) {
+        throw error;
+      }
+      
+      return [];
+    }
   },
 
   getById: (id: string): Promise<Transaction> =>
@@ -354,46 +538,28 @@ export const transactionsAPI = {
   delete: (id: string): Promise<{ message: string }> =>
     apiRequest(`/api/transactions/${id}`, { method: "DELETE" }),
 
-  uploadCsv: async (file: File): Promise<{
-    imported: number;
-    failed: number;
-    message: string;
-  }> => {
-    const formData = new FormData();
-    formData.append("file", file);
-    return apiRequest("/api/transactions/upload", {
-      method: "POST",
-      body: formData,
-    });
-  },
-
-  exportCsv: async (filters?: Record<string, string>): Promise<Blob> => {
-    const params = new URLSearchParams(filters || {});
-    const endpoint = params.toString()
-      ? `/api/transactions/export?${params}`
-      : "/api/transactions/export";
-
-    const token = getToken();
-    const url = buildApiUrl(endpoint);
-
-    const response = await fetch(url, {
+  exportCsv: async (): Promise<Blob> => {
+    const response = await fetch(buildApiUrl("/api/transactions/export"), {
       method: "GET",
       headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
+        Authorization: `Bearer ${getToken()}`,
       },
-      credentials: "include",
     });
 
-    if (!response.ok) throw new Error("Failed to export transactions");
+    if (!response.ok) {
+      throw new Error("Failed to export transactions");
+    }
+
     return response.blob();
   },
 };
 
-/**
- * Goals API
- */
+// =====================
+// Goals API
+// =====================
+
 export const goalsAPI = {
-  getAll: (): Promise<Goal[]> => 
+  getAll: (): Promise<Goal[]> =>
     apiRequest<Goal[]>("/api/goals", { method: "GET" }),
 
   getById: (id: string): Promise<Goal> =>
@@ -421,9 +587,10 @@ export const goalsAPI = {
     }),
 };
 
-/**
- * Budgets API
- */
+// =====================
+// Budgets API
+// =====================
+
 export const budgetsAPI = {
   getAll: (month?: string): Promise<Budget[]> => {
     const params = month ? `?month=${month}` : "";
@@ -456,15 +623,16 @@ export const budgetsAPI = {
 
   getSummary: (month?: string): Promise<BudgetSummary> => {
     const params = month ? `?month=${month}` : "";
-    return apiRequest<BudgetSummary>(`/api/budgets/summary${params}`, { 
-      method: "GET" 
+    return apiRequest<BudgetSummary>(`/api/budgets/summary${params}`, {
+      method: "GET",
     });
   },
 };
 
-/**
- * Reports API
- */
+// =====================
+// Reports API
+// =====================
+
 export const reportsAPI = {
   getOverview: (startDate?: string, endDate?: string): Promise<any> => {
     const params = new URLSearchParams();
@@ -486,13 +654,16 @@ export const reportsAPI = {
     return apiRequest(endpoint, { method: "GET" });
   },
 
-  getTrends: (period: "daily" | "weekly" | "monthly" | "yearly" = "monthly"): Promise<any> =>
+  getTrends: (
+    period: "daily" | "weekly" | "monthly" | "yearly" = "monthly"
+  ): Promise<any> =>
     apiRequest(`/api/reports/trends?period=${period}`, { method: "GET" }),
 };
 
-/**
- * Health API
- */
+// =====================
+// Health API
+// =====================
+
 export const healthAPI = {
   check: (): Promise<{ status: string; timestamp: string }> =>
     apiRequest("/api/health", { method: "GET" }),
@@ -501,25 +672,35 @@ export const healthAPI = {
     apiRequest("/api/health/ping", { method: "GET" }),
 };
 
-/**
- * Default API object
- */
+// =====================
+// Generic API wrapper
+// =====================
+
 const api = {
   get: <T = any>(endpoint: string, options?: RequestInit): Promise<T> =>
     apiRequest<T>(endpoint, { ...options, method: "GET" }),
 
-  post: <T = any>(endpoint: string, body?: any, options?: RequestInit): Promise<T> =>
+  post: <T = any>(
+    endpoint: string,
+    body?: any,
+    options?: RequestInit
+  ): Promise<T> =>
     apiRequest<T>(endpoint, {
       ...options,
       method: "POST",
-      body: body instanceof FormData
-        ? body
-        : body
-        ? JSON.stringify(body)
-        : undefined,
+      body:
+        body instanceof FormData
+          ? body
+          : body
+          ? JSON.stringify(body)
+          : undefined,
     }),
 
-  put: <T = any>(endpoint: string, body?: any, options?: RequestInit): Promise<T> =>
+  put: <T = any>(
+    endpoint: string,
+    body?: any,
+    options?: RequestInit
+  ): Promise<T> =>
     apiRequest<T>(endpoint, {
       ...options,
       method: "PUT",
@@ -529,7 +710,11 @@ const api = {
   delete: <T = any>(endpoint: string, options?: RequestInit): Promise<T> =>
     apiRequest<T>(endpoint, { ...options, method: "DELETE" }),
 
-  patch: <T = any>(endpoint: string, body?: any, options?: RequestInit): Promise<T> =>
+  patch: <T = any>(
+    endpoint: string,
+    body?: any,
+    options?: RequestInit
+  ): Promise<T> =>
     apiRequest<T>(endpoint, {
       ...options,
       method: "PATCH",
@@ -538,4 +723,3 @@ const api = {
 };
 
 export default api;
-export type { User, AuthResponse, Transaction, Goal, Budget, BudgetSummary };

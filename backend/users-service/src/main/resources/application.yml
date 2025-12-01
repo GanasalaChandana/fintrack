@@ -4,11 +4,18 @@
 spring:
   application:
     name: users-service
+
   datasource:
-    url: jdbc:postgresql://${POSTGRES_host:postgres}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fintrack}?currentSchema=users
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:postgres}
+    url: jdbc:postgresql://${POSTGRES_HOST:ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech}:${POSTGRES_PORT:5432}/${POSTGRES_DB:neondb}?sslmode=require
+    username: ${POSTGRES_USER:neondb_owner}
+    password: ${POSTGRES_PASSWORD:npg_eVXG4qfL1FzP}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 20000
+      idle-timeout: 300000
+
   jpa:
     hibernate:
       ddl-auto: validate
@@ -18,20 +25,24 @@ spring:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
         default_schema: users
+
   flyway:
     enabled: true
     baseline-on-migrate: true
     schemas: users
-  # CORS Configuration
+
   web:
     resources:
-      add-mappings: false  # Disable static resource handling
+      add-mappings: false
 
 jwt:
-  secret: ${JWT_SECRET:MySecretKeyForJWTTokenGenerationMustBe256BitsLongAtLeast}
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
   expiration: 86400000
 
-# CORS Configuration
+google:
+  oauth:
+    client-id: ${GOOGLE_CLIENT_ID:833541687094-vheiq46pf2507ogunobbidu4ke23286d.apps.googleusercontent.com}
+
 app:
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:https://fintrack-liart.vercel.app,https://*.vercel.app,http://localhost:3000,http://localhost:5173}

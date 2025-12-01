@@ -1,20 +1,17 @@
-﻿server:
-  port: ${SERVER_PORT:8083}
-app:
-  cors:
-    allowed-origins: ${ALLOWED_ORIGINS:https://fintrack-liart.vercel.app,https://*.vercel.app,http://localhost:3000,http://localhost:5173}
-spring:
+﻿spring:
   application:
     name: alerts-service
   web:
     resources:
       add-mappings: false
-      
+
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fintrack}?currentSchema=alerts
-    username: ${POSTGRES_USER:postgres}
+    # ❌ removed ?currentSchema=alerts – PgBouncer doesn't like that
+    url: jdbc:postgresql://${POSTGRES_HOST:ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech}:${POSTGRES_PORT:5432}/${POSTGRES_DB:neondb}?sslmode=require
+    username: ${POSTGRES_USER:neondb_owner}
     password: ${POSTGRES_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -23,12 +20,16 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        # ✅ keep schema here, Hibernate will use it without touching search_path
         default_schema: alerts
+
   flyway:
     enabled: true
     baseline-on-migrate: true
+    # ✅ keep schema here too
     schemas: alerts
     locations: classpath:db/migration
+
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
@@ -41,10 +42,18 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
   data:
     redis:
       host: ${SPRING_REDIS_HOST:localhost}
       port: ${SPRING_REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8083}
+
+app:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:https://fintrack-liart.vercel.app,https://*.vercel.app,http://localhost:3000,http://localhost:5173}
 
 management:
   endpoints:

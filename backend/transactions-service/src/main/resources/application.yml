@@ -1,5 +1,6 @@
 ﻿server:
   port: ${SERVER_PORT:8082}
+
 app:
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:https://fintrack-liart.vercel.app,https://*.vercel.app,http://localhost:3000,http://localhost:5173}
@@ -7,14 +8,20 @@ app:
 spring:
   application:
     name: transactions-service
+
   web:
     resources:
       add-mappings: false
+
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fintrack}?currentSchema=transactions
-    username: ${POSTGRES_USER:fintrack_user}
-    password: ${POSTGRES_PASSWORD:fintrack_pass}
+    # ⭐ FIXED FOR NEON LOCAL ⭐
+    # - Removed "?currentSchema=transactions"
+    # - Using Neon DB and credentials
+    url: jdbc:postgresql://${POSTGRES_HOST:ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech}:${POSTGRES_PORT:5432}/${POSTGRES_DB:neondb}?sslmode=require
+    username: ${POSTGRES_USER:neondb_owner}
+    password: ${POSTGRES_PASSWORD:npg_eVXG4qfL1FzP}
     driver-class-name: org.postgresql.Driver
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -23,7 +30,9 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        # ✔ Neon-compatible, sets schema AFTER connection
         default_schema: transactions
+
   flyway:
     validate-on-migrate: false
     repair: true
@@ -31,6 +40,7 @@ spring:
     baseline-on-migrate: true
     schemas: transactions
     locations: classpath:db/migration
+
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
@@ -43,6 +53,7 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
   data:
     redis:
       host: ${SPRING_REDIS_HOST:localhost}

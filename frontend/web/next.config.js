@@ -1,4 +1,5 @@
 ﻿/** @type {import('next').NextConfig} */
+
 const nextConfig = {
   // Enable React strict mode for better development experience
   reactStrictMode: true,
@@ -36,6 +37,11 @@ const nextConfig = {
   experimental: {
     // Enable optimized package imports for lucide-react and recharts
     optimizePackageImports: ['lucide-react', 'recharts'],
+  },
+
+  // Turbopack configuration (required for Next.js 16+)
+  turbopack: {
+    // Empty config to silence Turbopack warning
   },
 
   // Headers for security and performance
@@ -97,6 +103,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+    NEXT_PUBLIC_GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
   },
 
   // Production-only optimizations

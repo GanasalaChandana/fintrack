@@ -7,12 +7,13 @@ spring:
   web:
     resources:
       add-mappings: false
-  
 
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:postgres}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fintrack}?currentSchema=budgets
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:postgres}
+    # ✅ NO currentSchema / search_path in the URL
+    # ✅ Defaults match your Neon .env but are still override-able
+    url: jdbc:postgresql://${POSTGRES_HOST:ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech}:${POSTGRES_PORT:5432}/${POSTGRES_DB:neondb}?sslmode=require
+    username: ${POSTGRES_USER:neondb_owner}
+    password: ${POSTGRES_PASSWORD:npg_eVXG4qfL1FzP}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -23,6 +24,8 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        # ✅ This is fine; becomes `SET search_path ...` after connect,
+        # not a startup parameter.
         default_schema: budgets
 
   flyway:

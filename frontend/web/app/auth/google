@@ -1,0 +1,33 @@
+app.post('/api/auth/google', async (req, res) => {
+  const { credential } = req.body;
+  
+  try {
+    // Verify Google token
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    
+    const payload = ticket.getPayload();
+    const { email, name, sub: googleId, picture } = payload;
+    
+    // Find or create user in your database
+    let user = await User.findOne({ email });
+    
+    if (!user) {
+      user = await User.create({
+        email,
+        name,
+        googleId,
+        profilePicture: picture,
+      });
+    }
+    
+    // Generate your JWT token
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
+    
+    res.json({ token, user });
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid Google token' });
+  }
+});

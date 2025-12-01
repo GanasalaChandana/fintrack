@@ -1,5 +1,7 @@
 package com.fintrack.users.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fintrack.users.enums.Role;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -30,12 +32,29 @@ public class User {
     @Column(unique = true, nullable = false, length = 255)
     private String email;
 
-    @Column(length = 255)  // Add this field
+    @Column(unique = true, length = 100)
+    private String username;
+
+    // Password is nullable to support Google OAuth users
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
+
+    @Column(name = "first_name", length = 100)
+    private String firstName;
+
+    @Column(name = "last_name", length = 100)
+    private String lastName;
+
+    // Full name for display purposes
+    @Column(length = 255)
     private String name;
 
-    @NotBlank(message = "Password is required")
-    @Column(name = "password_hash", nullable = false, length = 255)
-    private String passwordHash;
+    // Google OAuth fields
+    @Column(name = "google_id", unique = true, length = 255)
+    private String googleId;
+
+    @Column(name = "profile_picture", length = 500)
+    private String profilePicture;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -50,7 +69,15 @@ public class User {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    public enum Role {
-        USER, ADMIN
+    // Hide password from JSON serialization
+    @JsonIgnore
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    // Convenience method to check if user is OAuth user
+    @Transient
+    public boolean isOAuthUser() {
+        return googleId != null && !googleId.isEmpty();
     }
 }

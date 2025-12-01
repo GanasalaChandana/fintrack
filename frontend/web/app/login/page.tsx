@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Eye, 
   EyeOff, 
@@ -18,9 +17,42 @@ import {
   Zap
 } from 'lucide-react';
 
-function AuthForm() {
+interface GoogleCredentialResponse {
+  credential: string;
+  select_by: string;
+}
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize(config: {
+            client_id: string;
+            callback: (response: GoogleCredentialResponse) => void;
+            auto_select?: boolean;
+            cancel_on_tap_outside?: boolean;
+          }): void;
+          renderButton(
+            parent: HTMLElement | null,
+            options: {
+              theme?: 'outline' | 'filled_blue' | 'filled_black';
+              size?: 'large' | 'medium' | 'small';
+              text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
+              shape?: 'rectangular' | 'pill';
+              logo_alignment?: 'left' | 'center';
+              width?: number | string;
+            }
+          ): void;
+          prompt(): void;
+        };
+      };
+    };
+  }
+}
+
+export default function AuthPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [formData, setFormData] = useState({
     name: '',
@@ -34,14 +66,155 @@ function AuthForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const isSubmitting = useRef(false);
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const [googleLoaded, setGoogleLoaded] = useState(false);
 
-  // Check URL params for mode
+  // Load Google OAuth Script
   useEffect(() => {
-    const modeParam = searchParams?.get('mode');
-    if (modeParam === 'signup' || modeParam === 'signin') {
-      setMode(modeParam);
+    const loadGoogleScript = () => {
+      if (document.getElementById('google-oauth-script')) {
+        setGoogleLoaded(true);
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.id = 'google-oauth-script';
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        console.log('✅ Google Script loaded');
+        setGoogleLoaded(true);
+      };
+      script.onerror = () => {
+        console.error('❌ Failed to load Google Script');
+        setError('Failed to load Google Sign-In. Please refresh the page.');
+      };
+      document.body.appendChild(script);
+    };
+
+    loadGoogleScript();
+  }, []);
+
+  // Initialize Google Sign-In
+  useEffect(() => {
+    if (!googleLoaded || !window.google) return;
+
+    const GOOGLE_CLIENT_ID = '833541687094-vheiq46pf2507ogunobbidu4ke23286d.apps.googleusercontent.com';
+
+    try {
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleSignIn,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+
+      if (googleButtonRef.current) {
+        window.google.accounts.id.renderButton(
+          googleButtonRef.current,
+          {
+            theme: 'filled_black',
+            size: 'large',
+            text: mode === 'signin' ? 'signin_with' : 'signup_with',
+            shape: 'rectangular',
+            width: 320,
+            logo_alignment: 'left',
+          }
+        );
+      }
+      console.log('✅ Google Sign-In initialized');
+    } catch (err) {
+      console.error('❌ Google Sign-In initialization error:', err);
+      setError('Google Sign-In initialization failed. Please try manual login.');
     }
-  }, [searchParams]);
+  }, [googleLoaded, mode]);
+
+  const handleGoogleSignIn = async (response: GoogleCredentialResponse) => {
+    if (loading || isSubmitting.current) return;
+    
+    console.log('🔵 Google Sign-In callback triggered');
+    
+    setLoading(true);
+    isSubmitting.current = true;
+    setError('');
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+      
+      console.log('📤 Sending credential to:', `${API_URL}/api/auth/google`);
+
+      const res = await fetch(`${API_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        credentials: 'include',
+        mode: 'cors',
+        body: JSON.stringify({
+          credential: response.credential,
+          clientId: '833541687094-vheiq46pf2507ogunobbidu4ke23286d.apps.googleusercontent.com'
+        }),
+      });
+
+      console.log('📥 Response status:', res.status);
+
+      if (!res.ok) {
+        let errorMessage = 'Google sign-in failed';
+        
+        if (res.status === 403) {
+          errorMessage = 'Access denied. Please check backend CORS settings.';
+        } else if (res.status === 401) {
+          errorMessage = 'Invalid Google credentials.';
+        } else if (res.status === 500) {
+          errorMessage = 'Server error. Please try again later.';
+        }
+        
+        try {
+          const errorData = await res.json();
+          console.error('❌ Error data:', errorData);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (parseErr) {
+          console.error('❌ Could not parse error response');
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      const data = await res.json();
+      console.log('✅ Google sign-in successful', data);
+
+      if (data.token) {
+        // ✅ FIXED: Use localStorage to match AuthGate
+        window.localStorage.setItem('authToken', data.token);
+        
+        if (data.user) {
+          window.localStorage.setItem('user', JSON.stringify(data.user));
+        }
+
+        console.log('🔑 Token stored:', window.localStorage.getItem('authToken'));
+        console.log('👤 User stored:', window.localStorage.getItem('user'));
+
+        setSuccess(true);
+        
+        // Redirect after 1 second
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 1000);
+      } else {
+        throw new Error('No authentication token received');
+      }
+
+    } catch (err) {
+      console.error('❌ Google Sign-In error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Google sign-in failed. Please try again.';
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+      isSubmitting.current = false;
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -84,17 +257,14 @@ function AuthForm() {
     return true;
   };
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-
-    // Prevent duplicate submissions
+  const handleSubmit = async () => {
     if (loading || isSubmitting.current) return;
 
     setError('');
 
     if (!validateForm()) return;
 
-    console.log(`🚀 ${mode.toUpperCase()} ATTEMPT:`, new Date().toISOString());
+    console.log(`🚀 ${mode.toUpperCase()} ATTEMPT`);
     
     setLoading(true);
     isSubmitting.current = true;
@@ -102,8 +272,6 @@ function AuthForm() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
       const endpoint = mode === 'signin' ? '/api/auth/login' : '/api/auth/register';
-      
-      console.log('📤 Sending request to:', `${API_URL}${endpoint}`);
       
       const requestBody = mode === 'signin' 
         ? {
@@ -116,12 +284,16 @@ function AuthForm() {
             password: formData.password,
           };
 
+      console.log('📤 Request to:', `${API_URL}${endpoint}`);
+
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
         credentials: 'include',
+        mode: 'cors',
         body: JSON.stringify(requestBody),
       });
 
@@ -136,6 +308,7 @@ function AuthForm() {
         
         try {
           const errorData = await response.json();
+          console.error('❌ Error data:', errorData);
           errorMessage = errorData.message || errorData.error || errorMessage;
         } catch {
           errorMessage = `Server error (${response.status})`;
@@ -145,22 +318,24 @@ function AuthForm() {
       }
 
       const data = await response.json();
-      console.log('✅ Success:', { hasToken: !!data.token, hasUser: !!data.user });
+      console.log('✅ Authentication successful', data);
 
       if (data.token) {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('authToken', data.token);
-          
-          if (data.user) {
-            localStorage.setItem('user', JSON.stringify(data.user));
-          }
+        // ✅ FIXED: Use localStorage to match AuthGate
+        window.localStorage.setItem('authToken', data.token);
+        
+        if (data.user) {
+          window.localStorage.setItem('user', JSON.stringify(data.user));
         }
 
-        setSuccess(true);
+        console.log('🔑 Token stored:', window.localStorage.getItem('authToken'));
+        console.log('👤 User stored:', window.localStorage.getItem('user'));
 
+        setSuccess(true);
+        
         setTimeout(() => {
-          router.push('/dashboard');
-        }, 1500);
+          window.location.href = '/dashboard';
+        }, 1000);
       } else {
         throw new Error('No authentication token received');
       }
@@ -176,10 +351,6 @@ function AuthForm() {
         setError('Invalid email or password. Please check your credentials.');
       } else if (errorMessage.includes('409') || errorMessage.toLowerCase().includes('already exists')) {
         setError('An account with this email already exists. Try signing in instead.');
-      } else if (errorMessage.includes('404')) {
-        setError('Authentication service not available. Please try again later.');
-      } else if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('fetch')) {
-        setError('Cannot connect to server. Please check your internet connection.');
       } else {
         setError(errorMessage);
       }
@@ -198,11 +369,14 @@ function AuthForm() {
       password: '',
       confirmPassword: ''
     });
-    // Update URL without page reload
-    router.push(`/login?mode=${newMode}`, { scroll: false });
   };
 
-  // Success State
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !loading) {
+      handleSubmit();
+    }
+  };
+
   if (success) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
@@ -216,7 +390,7 @@ function AuthForm() {
           <p className="text-gray-300 mb-6">
             {mode === 'signin' 
               ? 'Login successful. Redirecting to your dashboard...' 
-              : 'Your account has been created successfully. Redirecting...'}
+              : 'Your account has been created successfully.'}
           </p>
           <div className="flex items-center justify-center gap-3 text-purple-400">
             <Loader2 className="w-6 h-6 animate-spin" />
@@ -230,14 +404,13 @@ function AuthForm() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
-        {/* Header */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 mb-6 group">
-            <DollarSign className="w-10 h-10 text-purple-400 group-hover:scale-110 transition" />
+          <div className="inline-flex items-center gap-2 mb-6">
+            <DollarSign className="w-10 h-10 text-purple-400" />
             <span className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               FinTrack
             </span>
-          </Link>
+          </div>
           <h1 className="text-3xl font-bold text-white mb-2">
             {mode === 'signin' ? 'Welcome back' : 'Create your account'}
           </h1>
@@ -248,12 +421,9 @@ function AuthForm() {
           </p>
         </div>
 
-        {/* Form Card */}
         <div className="bg-slate-800/50 backdrop-blur-xl rounded-2xl shadow-2xl border border-purple-500/20 p-8">
-          {/* Mode Switcher */}
           <div className="flex gap-2 mb-6 bg-slate-900/50 p-1 rounded-xl">
             <button
-              type="button"
               onClick={() => switchMode('signin')}
               className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
                 mode === 'signin'
@@ -264,7 +434,6 @@ function AuthForm() {
               Sign In
             </button>
             <button
-              type="button"
               onClick={() => switchMode('signup')}
               className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
                 mode === 'signup'
@@ -276,28 +445,46 @@ function AuthForm() {
             </button>
           </div>
 
-          {/* Error Message */}
+          <div className="mb-6">
+            <div 
+              ref={googleButtonRef} 
+              className="w-full flex justify-center"
+              style={{ minHeight: '40px' }}
+            />
+            {!googleLoaded && (
+              <div className="flex items-center justify-center gap-2 py-3 text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm">Loading Google Sign-In...</span>
+              </div>
+            )}
+          </div>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-purple-500/20"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-slate-800/50 text-gray-400">Or continue with email</span>
+            </div>
+          </div>
+
           {error && (
             <div className="mb-6 bg-red-500/10 border border-red-500/50 rounded-xl p-4 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-red-300 text-sm font-medium">{error}</p>
-              </div>
+              <p className="text-red-300 text-sm font-medium">{error}</p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Name Field (Sign Up Only) */}
+          <div className="space-y-5" onKeyPress={handleKeyPress}>
             {mode === 'signup' && (
               <div>
-                <label htmlFor="name" className="block text-sm font-semibold text-gray-300 mb-2">
+                <label className="block text-sm font-semibold text-gray-300 mb-2">
                   Full Name
                 </label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                   <input
                     type="text"
-                    id="name"
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
@@ -309,51 +496,44 @@ function AuthForm() {
               </div>
             )}
 
-            {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-300 mb-2">
+              <label className="block text-sm font-semibold text-gray-300 mb-2">
                 Email Address
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <input
                   type="email"
-                  id="email"
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
                   className="w-full pl-11 pr-4 py-3 bg-slate-900/50 border border-purple-500/20 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition text-white placeholder-gray-500"
                   placeholder="you@example.com"
                   disabled={loading}
-                  autoComplete="email"
                 />
               </div>
             </div>
 
-            {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-300 mb-2">
+              <label className="block text-sm font-semibold text-gray-300 mb-2">
                 Password
               </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  id="password"
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
                   className="w-full pl-11 pr-12 py-3 bg-slate-900/50 border border-purple-500/20 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition text-white placeholder-gray-500"
                   placeholder="••••••••"
                   disabled={loading}
-                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition"
                   disabled={loading}
-                  tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -363,31 +543,27 @@ function AuthForm() {
               )}
             </div>
 
-            {/* Confirm Password Field (Sign Up Only) */}
             {mode === 'signup' && (
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-300 mb-2">
+                <label className="block text-sm font-semibold text-gray-300 mb-2">
                   Confirm Password
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
-                    id="confirmPassword"
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleInputChange}
                     className="w-full pl-11 pr-12 py-3 bg-slate-900/50 border border-purple-500/20 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition text-white placeholder-gray-500"
                     placeholder="••••••••"
                     disabled={loading}
-                    autoComplete="new-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition"
                     disabled={loading}
-                    tabIndex={-1}
                   >
                     {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -395,7 +571,6 @@ function AuthForm() {
               </div>
             )}
 
-            {/* Remember Me & Forgot Password (Sign In Only) */}
             {mode === 'signin' && (
               <div className="flex items-center justify-between text-sm">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -405,15 +580,17 @@ function AuthForm() {
                   />
                   <span className="text-gray-400">Remember me</span>
                 </label>
-                <a href="/forgot-password" className="text-purple-400 hover:text-purple-300 font-medium">
+                <button
+                  type="button"
+                  className="text-purple-400 hover:text-purple-300 font-medium"
+                >
                   Forgot password?
-                </a>
+                </button>
               </div>
             )}
 
-            {/* Submit Button */}
             <button
-              type="submit"
+              onClick={handleSubmit}
               disabled={loading}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3.5 rounded-xl font-semibold hover:shadow-2xl hover:shadow-purple-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
             >
@@ -429,20 +606,15 @@ function AuthForm() {
                 </>
               )}
             </button>
-          </form>
+          </div>
 
-          {/* Terms (Sign Up Only) */}
           {mode === 'signup' && (
             <p className="text-xs text-gray-500 text-center mt-4">
-              By signing up, you agree to our{' '}
-              <a href="/terms" className="text-purple-400 hover:text-purple-300">Terms of Service</a>
-              {' '}and{' '}
-              <a href="/privacy" className="text-purple-400 hover:text-purple-300">Privacy Policy</a>
+              By signing up, you agree to our Terms of Service and Privacy Policy
             </p>
           )}
         </div>
 
-        {/* Trust Badges */}
         <div className="mt-6 flex items-center justify-center gap-6 text-gray-500 text-sm">
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-purple-400" />
@@ -457,33 +629,7 @@ function AuthForm() {
             <span>Encrypted</span>
           </div>
         </div>
-
-        {/* Debug Info (development only) */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mt-6 p-4 bg-slate-800/50 rounded-xl border border-purple-500/20 text-xs text-gray-400">
-            <p className="font-semibold mb-2 text-purple-400">🔧 Debug Info:</p>
-            <p>• API: {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}</p>
-            <p>• Mode: {mode}</p>
-            <p>• Check console (F12) for detailed logs</p>
-          </div>
-        )}
       </div>
     </div>
-  );
-}
-
-// Main component with Suspense wrapper
-export default function UnifiedAuthPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-purple-400 animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Loading...</p>
-        </div>
-      </div>
-    }>
-      <AuthForm />
-    </Suspense>
   );
 }

@@ -8,14 +8,16 @@ app:
 spring:
   application:
     name: notifications-service
+
   web:
     resources:
       add-mappings: false
 
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:postgres}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fintrack}
-    username: ${POSTGRES_USER:fintrack_user}
-    password: ${POSTGRES_PASSWORD:fintrack_pass}
+    # ⭐ Fixed for Neon Local — NO search_path, NO currentSchema
+    url: jdbc:postgresql://${POSTGRES_HOST:ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech}:${POSTGRES_PORT:5432}/${POSTGRES_DB:neondb}?sslmode=require
+    username: ${POSTGRES_USER:neondb_owner}
+    password: ${POSTGRES_PASSWORD:npg_xxxxxxxxxxxxxxxxxxxxx}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -36,7 +38,6 @@ spring:
         order_inserts: true
         order_updates: true
 
-# Logging
 logging:
   level:
     root: INFO
@@ -47,7 +48,6 @@ logging:
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
 
-# Management/Actuator
 management:
   endpoints:
     web:
