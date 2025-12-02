@@ -35,7 +35,7 @@ public class Goal {
 
     @Column(name = "current_amount", precision = 15, scale = 2)
     @JsonProperty("current")
-    @Builder.Default // Fix for warning
+    @Builder.Default
     private BigDecimal currentAmount = BigDecimal.ZERO;
 
     private LocalDate deadline;
@@ -47,8 +47,12 @@ public class Goal {
     private String color;
 
     @Column(name = "monthly_contribution", precision = 15, scale = 2)
-    @Builder.Default // Fix for warning
+    @Builder.Default
     private BigDecimal monthlyContribution = BigDecimal.ZERO;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean achieved = false;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -65,6 +69,9 @@ public class Goal {
         }
         if (monthlyContribution == null) {
             monthlyContribution = BigDecimal.ZERO;
+        }
+        if (achieved == null) {
+            achieved = false;
         }
     }
 
@@ -85,5 +92,12 @@ public class Goal {
         return currentAmount.divide(targetAmount, 4, java.math.RoundingMode.HALF_UP)
                 .multiply(new BigDecimal(100))
                 .doubleValue();
+    }
+
+    // Helper method to check if goal is achieved
+    @Transient
+    public boolean isGoalAchieved() {
+        return currentAmount != null && targetAmount != null
+                && currentAmount.compareTo(targetAmount) >= 0;
     }
 }

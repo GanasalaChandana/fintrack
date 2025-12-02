@@ -9,13 +9,18 @@ import java.util.List;
 @Repository
 public interface GoalRepository extends JpaRepository<Goal, Long> {
 
-    // Your existing method...
+    /**
+     * Find all goals for a specific user
+     */
     List<Goal> findByUserId(Long userId);
-
-    // ========== OPTIONAL: NEW METHOD FOR ACTIVE GOALS ==========
 
     /**
      * Find active (not achieved) goals for a user
      */
-    List<Goal> findByUserIdAndIsAchievedFalse(Long userId);
+    List<Goal> findByUserIdAndAchievedFalse(Long userId);
+
+    /**
+     * Find achieved goals for a user
+     */
+    List<Goal> findByUserIdAndAchievedTrue(Long userId);
 }
