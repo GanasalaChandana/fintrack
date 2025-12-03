@@ -1,5 +1,5 @@
 ﻿"use client";
-import { useRouter } from 'next/navigation';
+import { useRouter } from "next/navigation";
 import React, { useState, useEffect } from "react";
 import {
   AreaChart,
@@ -27,10 +27,23 @@ import {
 } from "lucide-react";
 import { reportsService, type ReportsData } from "@/lib/api/services/reports.service";
 
+// ✅ NEW: advanced charts import
+import {
+  IncomeExpenseComparison,
+  SpendingPatternRadar,
+  TransactionScatter,
+} from "@/components/charts/AdvancedCharts";
+
 /* ---------- Types ---------- */
 
 type ReportTab = "monthly" | "comparison" | "forecast";
-type DateRange = "last-7-days" | "last-30-days" | "last-3-months" | "last-6-months" | "last-year" | "custom";
+type DateRange =
+  | "last-7-days"
+  | "last-30-days"
+  | "last-3-months"
+  | "last-6-months"
+  | "last-year"
+  | "custom";
 
 interface StatCardProps {
   title: string;
@@ -50,11 +63,19 @@ const formatCurrency = (value: number) =>
     minimumFractionDigits: 2,
   }).format(value);
 
-const formatPercentage = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
+const formatPercentage = (value: number) =>
+  `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 
 /* ---------- Small UI pieces ---------- */
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, change, trend, icon: Icon, color }) => (
+const StatCard: React.FC<StatCardProps> = ({
+  title,
+  value,
+  change,
+  trend,
+  icon: Icon,
+  color,
+}) => (
   <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
     <div className="flex items-center justify-between mb-4">
       <div className={`p-3 rounded-lg ${color}`}>
@@ -66,7 +87,11 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, change, trend, icon: 
             trend === "up" ? "text-green-600" : "text-red-600"
           }`}
         >
-          {trend === "up" ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+          {trend === "up" ? (
+            <ArrowUp className="w-4 h-4" />
+          ) : (
+            <ArrowDown className="w-4 h-4" />
+          )}
           {change}
         </div>
       )}
@@ -82,7 +107,10 @@ const LoadingSpinner: React.FC = () => (
   </div>
 );
 
-const ErrorMessage: React.FC<{ message: string; onRetry?: () => void }> = ({ message, onRetry }) => (
+const ErrorMessage: React.FC<{ message: string; onRetry?: () => void }> = ({
+  message,
+  onRetry,
+}) => (
   <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center">
     <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-3" />
     <h3 className="text-lg font-bold text-red-900 mb-2">Error Loading Data</h3>
@@ -104,21 +132,27 @@ const FinancialReports: React.FC = () => {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedReport, setSelectedReport] = useState<ReportTab>("monthly");
-  const [dateRange, setDateRange] = useState<DateRange>("last-30-days");
-  
+  const [selectedReport, setSelectedReport] =
+    useState<ReportTab>("monthly");
+  const [dateRange, setDateRange] =
+    useState<DateRange>("last-30-days");
+
   // Data states
-  const [reportsData, setReportsData] = useState<ReportsData | null>(null);
+  const [reportsData, setReportsData] = useState<ReportsData | null>(
+    null,
+  );
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
 
   // Auth check
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('ft_token');
-      
+    if (typeof window !== "undefined") {
+      const token =
+        localStorage.getItem("authToken") ||
+        localStorage.getItem("ft_token");
+
       if (!token) {
-        router.replace('/register?mode=signin');
+        router.replace("/register?mode=signin");
       } else {
         setIsAuthenticated(true);
         setIsLoading(false);
@@ -130,13 +164,17 @@ const FinancialReports: React.FC = () => {
   const fetchReportsData = async () => {
     setDataLoading(true);
     setDataError(null);
-    
+
     try {
       const data = await reportsService.getFinancialReports(dateRange);
       setReportsData(data);
     } catch (error) {
-      console.error('Error fetching reports:', error);
-      setDataError(error instanceof Error ? error.message : 'Failed to load reports data');
+      console.error("Error fetching reports:", error);
+      setDataError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load reports data",
+      );
     } finally {
       setDataLoading(false);
     }
@@ -144,7 +182,7 @@ const FinancialReports: React.FC = () => {
 
   // Load data when authenticated and date range changes
   useEffect(() => {
-    if (isAuthenticated && selectedReport === 'monthly') {
+    if (isAuthenticated && selectedReport === "monthly") {
       fetchReportsData();
     }
   }, [isAuthenticated, dateRange, selectedReport]);
@@ -154,16 +192,18 @@ const FinancialReports: React.FC = () => {
     try {
       const blob = await reportsService.exportReportPDF(dateRange);
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = `financial-report-${dateRange}-${new Date().toISOString().split('T')[0]}.pdf`;
+      a.download = `financial-report-${dateRange}-${new Date()
+        .toISOString()
+        .split("T")[0]}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
-      console.error('Error exporting PDF:', error);
-      alert('Failed to export PDF. Please try again.');
+      console.error("Error exporting PDF:", error);
+      alert("Failed to export PDF. Please try again.");
     }
   };
 
@@ -173,14 +213,28 @@ const FinancialReports: React.FC = () => {
     }
 
     if (dataError) {
-      return <ErrorMessage message={dataError} onRetry={fetchReportsData} />;
+      return (
+        <ErrorMessage message={dataError} onRetry={fetchReportsData} />
+      );
     }
 
     if (!reportsData) {
-      return <ErrorMessage message="No data available" onRetry={fetchReportsData} />;
+      return (
+        <ErrorMessage
+          message="No data available"
+          onRetry={fetchReportsData}
+        />
+      );
     }
 
-    const { summary, monthlyData, categoryBreakdown, savingsGoals, topExpenses, insights } = reportsData;
+    const {
+      summary,
+      monthlyData,
+      categoryBreakdown,
+      savingsGoals,
+      topExpenses,
+      insights,
+    } = reportsData;
 
     return (
       <div className="space-y-6">
@@ -224,8 +278,12 @@ const FinancialReports: React.FC = () => {
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Income vs Expenses</h3>
-              <p className="text-sm text-gray-500">Trend analysis over selected period</p>
+              <h3 className="text-lg font-bold text-gray-900">
+                Income vs Expenses
+              </h3>
+              <p className="text-sm text-gray-500">
+                Trend analysis over selected period
+              </p>
             </div>
           </div>
 
@@ -233,24 +291,62 @@ const FinancialReports: React.FC = () => {
             <AreaChart data={monthlyData}>
               <defs>
                 <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  <stop
+                    offset="5%"
+                    stopColor="#10b981"
+                    stopOpacity={0.3}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor="#10b981"
+                    stopOpacity={0}
+                  />
                 </linearGradient>
-                <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                <linearGradient
+                  id="colorExpenses"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="5%"
+                    stopColor="#ef4444"
+                    stopOpacity={0.3}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor="#ef4444"
+                    stopOpacity={0}
+                  />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" stroke="#9ca3af" />
               <YAxis stroke="#9ca3af" />
               <Tooltip
-                contentStyle={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", borderRadius: 8 }}
+                contentStyle={{
+                  backgroundColor: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 8,
+                }}
                 formatter={(v: number) => formatCurrency(v)}
               />
               <Legend />
-              <Area type="monotone" dataKey="income" stroke="#10b981" fill="url(#colorIncome)" strokeWidth={2} />
-              <Area type="monotone" dataKey="expenses" stroke="#ef4444" fill="url(#colorExpenses)" strokeWidth={2} />
+              <Area
+                type="monotone"
+                dataKey="income"
+                stroke="#10b981"
+                fill="url(#colorIncome)"
+                strokeWidth={2}
+              />
+              <Area
+                type="monotone"
+                dataKey="expenses"
+                stroke="#ef4444"
+                fill="url(#colorExpenses)"
+                strokeWidth={2}
+              />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -258,20 +354,31 @@ const FinancialReports: React.FC = () => {
         {/* Category Breakdown & Top Expenses */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-6">Spending by Category</h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-6">
+              Spending by Category
+            </h3>
             <div className="space-y-4">
               {categoryBreakdown.map((category) => (
                 <div key={category.name} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: category.color }} />
-                      <span className="font-medium text-gray-900">{category.name}</span>
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: category.color }}
+                      />
+                      <span className="font-medium text-gray-900">
+                        {category.name}
+                      </span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-gray-600">{formatCurrency(category.amount)}</span>
+                      <span className="text-gray-600">
+                        {formatCurrency(category.amount)}
+                      </span>
                       <span
                         className={`font-semibold ${
-                          category.amount > category.budget ? "text-red-600" : "text-green-600"
+                          category.amount > category.budget
+                            ? "text-red-600"
+                            : "text-green-600"
                         }`}
                       >
                         {category.percentage}%
@@ -283,16 +390,27 @@ const FinancialReports: React.FC = () => {
                       <div
                         className="h-full rounded-full transition-all duration-500"
                         style={{
-                          width: `${Math.min((category.amount / category.budget) * 100, 100)}%`,
-                          backgroundColor: category.amount > category.budget ? "#ef4444" : category.color,
+                          width: `${Math.min(
+                            (category.amount / category.budget) * 100,
+                            100,
+                          )}%`,
+                          backgroundColor:
+                            category.amount > category.budget
+                              ? "#ef4444"
+                              : category.color,
                         }}
                       />
                     </div>
                     <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>Budget: {formatCurrency(category.budget)}</span>
+                      <span>
+                        Budget: {formatCurrency(category.budget)}
+                      </span>
                       {category.amount > category.budget && (
                         <span className="text-red-600 font-semibold">
-                          Over by {formatCurrency(category.amount - category.budget)}
+                          Over by{" "}
+                          {formatCurrency(
+                            category.amount - category.budget,
+                          )}
                         </span>
                       )}
                     </div>
@@ -303,7 +421,9 @@ const FinancialReports: React.FC = () => {
           </div>
 
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-6">Top Expenses This Period</h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-6">
+              Top Expenses This Period
+            </h3>
             <div className="space-y-3">
               {topExpenses.map((expense, idx) => (
                 <div
@@ -315,16 +435,23 @@ const FinancialReports: React.FC = () => {
                       {idx + 1}
                     </div>
                     <div>
-                      <div className="font-semibold text-gray-900">{expense.vendor}</div>
+                      <div className="font-semibold text-gray-900">
+                        {expense.vendor}
+                      </div>
                       <div className="text-xs text-gray-500">
                         {expense.category} • {expense.frequency}x
                       </div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-bold text-gray-900">{formatCurrency(expense.amount)}</div>
+                    <div className="font-bold text-gray-900">
+                      {formatCurrency(expense.amount)}
+                    </div>
                     <div className="text-xs text-gray-500">
-                      {formatCurrency(expense.amount / expense.frequency)}/transaction
+                      {formatCurrency(
+                        expense.amount / expense.frequency,
+                      )}
+                      /transaction
                     </div>
                   </div>
                 </div>
@@ -335,13 +462,20 @@ const FinancialReports: React.FC = () => {
 
         {/* Savings Goals */}
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900 mb-6">Savings Goals Progress</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-6">
+            Savings Goals Progress
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {savingsGoals.map((goal) => (
               <div key={goal.name} className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-gray-900">{goal.name}</h4>
-                  <span className="text-sm font-bold" style={{ color: goal.color }}>
+                  <h4 className="font-semibold text-gray-900">
+                    {goal.name}
+                  </h4>
+                  <span
+                    className="text-sm font-bold"
+                    style={{ color: goal.color }}
+                  >
                     {goal.progress}%
                   </span>
                 </div>
@@ -349,13 +483,18 @@ const FinancialReports: React.FC = () => {
                   <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${goal.progress}%`, backgroundColor: goal.color }}
+                      style={{
+                        width: `${goal.progress}%`,
+                        backgroundColor: goal.color,
+                      }}
                     />
                   </div>
                 </div>
                 <div className="flex justify-between text-sm text-gray-600">
                   <span>{formatCurrency(goal.current)}</span>
-                  <span className="font-semibold">{formatCurrency(goal.target)}</span>
+                  <span className="font-semibold">
+                    {formatCurrency(goal.target)}
+                  </span>
                 </div>
                 <div className="text-xs text-gray-500">
                   {formatCurrency(goal.target - goal.current)} remaining
@@ -373,11 +512,18 @@ const FinancialReports: React.FC = () => {
                 <AlertCircle className="w-6 h-6 text-white" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 mb-3">Key Insights</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-3">
+                  Key Insights
+                </h3>
                 <ul className="space-y-2 text-sm text-gray-700">
                   {insights.map((insight, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      <span className="text-blue-600 font-bold">•</span>
+                    <li
+                      key={idx}
+                      className="flex items-start gap-2"
+                    >
+                      <span className="text-blue-600 font-bold">
+                        •
+                      </span>
                       <span>{insight}</span>
                     </li>
                   ))}
@@ -389,6 +535,30 @@ const FinancialReports: React.FC = () => {
       </div>
     );
   };
+
+  // ----- Example data for the advanced charts tab (can later be wired to API) -----
+  const comparisonData = [
+    { month: "Jan", income: 5000, expenses: 3500, savings: 1500 },
+    { month: "Feb", income: 5200, expenses: 3800, savings: 1400 },
+    { month: "Mar", income: 5100, expenses: 3600, savings: 1500 },
+    { month: "Apr", income: 5300, expenses: 3900, savings: 1400 },
+  ];
+
+  const radarData = [
+    { category: "Food", current: 450, previous: 380 },
+    { category: "Transport", current: 200, previous: 180 },
+    { category: "Shopping", current: 300, previous: 250 },
+    { category: "Bills", current: 500, previous: 520 },
+    { category: "Entertainment", current: 220, previous: 210 },
+  ];
+
+  const scatterData = [
+    { day: 1, amount: 45.5, type: "expense", z: 100 },
+    { day: 2, amount: 3000, type: "income", z: 200 },
+    { day: 3, amount: 120.75, type: "expense", z: 120 },
+    { day: 4, amount: 60.2, type: "expense", z: 90 },
+    { day: 5, amount: 450, type: "income", z: 150 },
+  ];
 
   // Show loading while checking auth
   if (isLoading || !isAuthenticated) {
@@ -409,13 +579,19 @@ const FinancialReports: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-1">Financial Reports</h1>
-              <p className="text-gray-600">Comprehensive analysis of your financial health</p>
+              <h1 className="text-3xl font-bold text-gray-900 mb-1">
+                Financial Reports
+              </h1>
+              <p className="text-gray-600">
+                Comprehensive analysis of your financial health
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <select
                 value={dateRange}
-                onChange={(e) => setDateRange(e.target.value as DateRange)}
+                onChange={(e) =>
+                  setDateRange(e.target.value as DateRange)
+                }
                 className="px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 focus:border-blue-500 focus:outline-none transition-colors"
               >
                 <option value="last-7-days">Last 7 Days</option>
@@ -447,12 +623,18 @@ const FinancialReports: React.FC = () => {
           <div className="flex gap-1 overflow-x-auto">
             {[
               { id: "monthly", label: "Monthly Overview", icon: DollarSign },
-              { id: "comparison", label: "Period Comparison", icon: TrendingUp },
+              {
+                id: "comparison",
+                label: "Period Comparison",
+                icon: TrendingUp,
+              },
               { id: "forecast", label: "Forecast", icon: Target },
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setSelectedReport(tab.id as ReportTab)}
+                onClick={() =>
+                  setSelectedReport(tab.id as ReportTab)
+                }
                 className={`flex items-center gap-2 px-6 py-4 font-semibold border-b-2 transition-colors whitespace-nowrap ${
                   selectedReport === (tab.id as ReportTab)
                     ? "border-blue-600 text-blue-600"
@@ -470,18 +652,24 @@ const FinancialReports: React.FC = () => {
       {/* Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         {selectedReport === "monthly" && renderMonthlyReport()}
+
         {selectedReport === "comparison" && (
-          <div className="text-center py-20">
-            <TrendingUp className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Period Comparison</h3>
-            <p className="text-gray-600">Compare your financial metrics across different time periods</p>
+          <div className="space-y-6">
+            <IncomeExpenseComparison data={comparisonData} />
+            <SpendingPatternRadar data={radarData} />
+            <TransactionScatter data={scatterData} />
           </div>
         )}
+
         {selectedReport === "forecast" && (
           <div className="text-center py-20">
             <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Financial Forecast</h3>
-            <p className="text-gray-600">AI-powered predictions of your future financial trajectory</p>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">
+              Financial Forecast
+            </h3>
+            <p className="text-gray-600">
+              AI-powered predictions of your future financial trajectory
+            </p>
           </div>
         )}
       </main>

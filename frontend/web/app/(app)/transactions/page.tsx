@@ -1,5 +1,5 @@
 ﻿"use client";
-import { useRouter } from 'next/navigation';
+import { useRouter } from "next/navigation";
 import * as React from "react";
 import {
   Search,
@@ -7,15 +7,17 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Tag,
   DollarSign,
   TrendingUp,
   TrendingDown,
   Sparkles,
   X as Close,
   Check,
+  Wallet,
 } from "lucide-react";
-import { transactionsAPI, type Transaction as ApiTransaction } from '@/lib/api';
+import { transactionsAPI, type Transaction as ApiTransaction } from "@/lib/api";
+import { SearchAndFilters } from "@/components/SearchAndFilters";
+import { EmptyState } from "@/components/EmptyState";
 
 /* =========================
    Types
@@ -42,7 +44,7 @@ interface Category {
   badgeText: string;
 }
 
-interface Transaction extends Omit<ApiTransaction, 'category'> {
+interface Transaction extends Omit<ApiTransaction, "category"> {
   category: Exclude<CategoryId, "all">;
   status: TxStatus;
   paymentMethod: string;
@@ -61,6 +63,13 @@ interface NewTxForm {
   paymentMethod: string;
 }
 
+interface TxFilters {
+  search?: string;
+  type?: "all" | TxType;
+  category?: string; // category label from SearchAndFilters (e.g. "Food & Dining")
+  sort?: "date-desc" | "date-asc" | "amount-desc" | "amount-asc";
+}
+
 /* =========================
    Helpers
    ========================= */
@@ -69,7 +78,11 @@ const dtUS = (d: Date, opts?: Intl.DateTimeFormatOptions) =>
   new Intl.DateTimeFormat("en-US", opts).format(d);
 
 const formatAbsolute = (iso: string) =>
-  dtUS(new Date(iso), { month: "short", day: "numeric", year: "numeric" });
+  dtUS(new Date(iso), {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 
 const useIsMounted = () => {
   const [m, setM] = React.useState(false);
@@ -96,35 +109,38 @@ const formatCurrency = (value: number) =>
 
 const mapCategoryToUI = (category: string): Exclude<CategoryId, "all"> => {
   const map: Record<string, Exclude<CategoryId, "all">> = {
-    'Food & Dining': 'food',
-    'Transportation': 'transport',
-    'Shopping': 'shopping',
-    'Entertainment': 'entertainment',
-    'Bills & Utilities': 'bills',
-    'Healthcare': 'health',
-    'Income': 'income',
-    'Salary': 'income',
-    'Freelance': 'income',
-    'Business': 'income',
-    'Investment': 'income',
+    "Food & Dining": "food",
+    Transportation: "transport",
+    Shopping: "shopping",
+    Entertainment: "entertainment",
+    "Bills & Utilities": "bills",
+    Healthcare: "health",
+    Income: "income",
+    Salary: "income",
+    Freelance: "income",
+    Business: "income",
+    Investment: "income",
   };
-  return map[category] || 'other';
+  return map[category] || "other";
 };
 
-const mapCategoryToBackend = (category: Exclude<CategoryId, "all">, type: TxType): string => {
-  if (type === 'income') return 'Income';
-  
+const mapCategoryToBackend = (
+  category: Exclude<CategoryId, "all">,
+  type: TxType
+): string => {
+  if (type === "income") return "Income";
+
   const map: Record<Exclude<CategoryId, "all">, string> = {
-    'food': 'Food & Dining',
-    'transport': 'Transportation',
-    'shopping': 'Shopping',
-    'entertainment': 'Entertainment',
-    'bills': 'Bills & Utilities',
-    'health': 'Healthcare',
-    'income': 'Income',
-    'other': 'Other',
+    food: "Food & Dining",
+    transport: "Transportation",
+    shopping: "Shopping",
+    entertainment: "Entertainment",
+    bills: "Bills & Utilities",
+    health: "Healthcare",
+    income: "Income",
+    other: "Other",
   };
-  return map[category] || 'Other';
+  return map[category] || "Other";
 };
 
 /* =========================
@@ -132,15 +148,69 @@ const mapCategoryToBackend = (category: Exclude<CategoryId, "all">, type: TxType
    ========================= */
 
 const CATEGORIES: Category[] = [
-  { id: "all", name: "All Categories", icon: "📊", badgeBg: "bg-gray-100", badgeText: "text-gray-700" },
-  { id: "food", name: "Food & Dining", icon: "🍔", badgeBg: "bg-blue-100", badgeText: "text-blue-700" },
-  { id: "transport", name: "Transportation", icon: "🚗", badgeBg: "bg-purple-100", badgeText: "text-purple-700" },
-  { id: "shopping", name: "Shopping", icon: "🛍️", badgeBg: "bg-pink-100", badgeText: "text-pink-700" },
-  { id: "entertainment", name: "Entertainment", icon: "🎮", badgeBg: "bg-orange-100", badgeText: "text-orange-700" },
-  { id: "bills", name: "Bills & Utilities", icon: "💡", badgeBg: "bg-green-100", badgeText: "text-green-700" },
-  { id: "health", name: "Healthcare", icon: "⚕️", badgeBg: "bg-red-100", badgeText: "text-red-700" },
-  { id: "income", name: "Income", icon: "💰", badgeBg: "bg-emerald-100", badgeText: "text-emerald-700" },
-  { id: "other", name: "Other", icon: "📦", badgeBg: "bg-gray-100", badgeText: "text-gray-700" },
+  {
+    id: "all",
+    name: "All Categories",
+    icon: "📊",
+    badgeBg: "bg-gray-100",
+    badgeText: "text-gray-700",
+  },
+  {
+    id: "food",
+    name: "Food & Dining",
+    icon: "🍔",
+    badgeBg: "bg-blue-100",
+    badgeText: "text-blue-700",
+  },
+  {
+    id: "transport",
+    name: "Transportation",
+    icon: "🚗",
+    badgeBg: "bg-purple-100",
+    badgeText: "text-purple-700",
+  },
+  {
+    id: "shopping",
+    name: "Shopping",
+    icon: "🛍️",
+    badgeBg: "bg-pink-100",
+    badgeText: "text-pink-700",
+  },
+  {
+    id: "entertainment",
+    name: "Entertainment",
+    icon: "🎮",
+    badgeBg: "bg-orange-100",
+    badgeText: "text-orange-700",
+  },
+  {
+    id: "bills",
+    name: "Bills & Utilities",
+    icon: "💡",
+    badgeBg: "bg-green-100",
+    badgeText: "text-green-700",
+  },
+  {
+    id: "health",
+    name: "Healthcare",
+    icon: "⚕️",
+    badgeBg: "bg-red-100",
+    badgeText: "text-red-700",
+  },
+  {
+    id: "income",
+    name: "Income",
+    icon: "💰",
+    badgeBg: "bg-emerald-100",
+    badgeText: "text-emerald-700",
+  },
+  {
+    id: "other",
+    name: "Other",
+    icon: "📦",
+    badgeBg: "bg-gray-100",
+    badgeText: "text-gray-700",
+  },
 ];
 
 /* =========================
@@ -155,24 +225,25 @@ export default function TransactionManager() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [searchQuery, setSearchQuery] = React.useState<string>("");
-  const [selectedCategory, setSelectedCategory] = React.useState<CategoryId>("all");
-  const [selectedType, setSelectedType] = React.useState<"all" | TxType>("all");
-  const [sortBy, setSortBy] = React.useState<
-    "date-desc" | "date-asc" | "amount-desc" | "amount-asc"
-  >("date-desc");
   const [transactions, setTransactions] = React.useState<Transaction[]>([]);
-  const [selectedTransactions, setSelectedTransactions] = React.useState<string[]>([]);
+  const [filteredTransactions, setFilteredTransactions] = React.useState<
+    Transaction[]
+  >([]);
+  const [selectedTransactions, setSelectedTransactions] = React.useState<
+    string[]
+  >([]);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editForm, setEditForm] = React.useState<Partial<Transaction>>({});
 
   // ---------- Auth Check ----------
   React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('ft_token');
-      
+    if (typeof window !== "undefined") {
+      const token =
+        localStorage.getItem("authToken") ||
+        localStorage.getItem("ft_token");
+
       if (!token) {
-        router.replace('/register?mode=signin');
+        router.replace("/register?mode=signin");
       } else {
         setIsAuthenticated(true);
         loadTransactions();
@@ -185,50 +256,39 @@ export default function TransactionManager() {
     try {
       setIsLoading(true);
       setError(null);
-      
-      console.log('🔄 Loading transactions...');
+
       const data = await transactionsAPI.getAll();
-      
-      console.log('📦 Received data:', data);
-      console.log('📦 Data type:', typeof data);
-      console.log('📦 Is array?', Array.isArray(data));
-      
-      // ✅ CRITICAL FIX: Validate that data is actually an array
+
       if (!Array.isArray(data)) {
-        console.error('❌ Error: Expected array but got:', data);
-        throw new Error('Invalid response format: expected array of transactions');
+        throw new Error("Invalid response format: expected array of transactions");
       }
-      
-      // Transform API data to UI format
-      const transformed: Transaction[] = data.map(t => ({
+
+      const transformed: Transaction[] = data.map((t) => ({
         ...t,
         id: t.id!,
         category: mapCategoryToUI(t.category),
-        status: 'completed' as TxStatus,
-        paymentMethod: 'Credit Card •••• 4242',
+        status: "completed" as TxStatus,
+        paymentMethod: "Credit Card •••• 4242",
         tags: [],
         aiSuggested: false,
       }));
-      
-      console.log('✅ Transformed transactions:', transformed.length);
+
       setTransactions(transformed);
-      
+      setFilteredTransactions(transformed);
     } catch (err: any) {
-      console.error('❌ Failed to load transactions:', err);
-      
-      // Check if it's an authentication error
-      if (err.message?.includes('401') || err.message?.includes('Unauthorized')) {
-        setError('Authentication failed. Please sign in again.');
+      if (err.message?.includes("401") || err.message?.includes("Unauthorized")) {
+        setError("Authentication failed. Please sign in again.");
         setTimeout(() => {
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('ft_token');
-          router.replace('/register?mode=signin');
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("ft_token");
+          router.replace("/register?mode=signin");
         }, 2000);
       } else {
-        setError(err.message || 'Failed to load transactions');
+        setError(err.message || "Failed to load transactions");
       }
-      
+
       setTransactions([]);
+      setFilteredTransactions([]);
     } finally {
       setIsLoading(false);
     }
@@ -246,40 +306,14 @@ export default function TransactionManager() {
     status: "completed",
     paymentMethod: "Credit Card •••• 4242",
   });
-  const [formErrors, setFormErrors] = React.useState<Partial<Record<keyof NewTxForm, string>>>({});
+  const [formErrors, setFormErrors] = React.useState<
+    Partial<Record<keyof NewTxForm, string>>
+  >({});
 
   const getCategoryInfo = React.useCallback(
     (id: CategoryId): Category => CATEGORIES.find((c) => c.id === id)!,
     []
   );
-
-  const filteredTransactions = React.useMemo(() => {
-    const list = transactions
-      .filter((t) => (selectedCategory !== "all" ? t.category === selectedCategory : true))
-      .filter((t) => (selectedType !== "all" ? t.type === selectedType : true))
-      .filter((t) => {
-        if (!searchQuery) return true;
-        const q = searchQuery.toLowerCase();
-        return (
-          t.merchant.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)
-        );
-      })
-      .sort((a, b) => {
-        switch (sortBy) {
-          case "date-desc":
-            return +new Date(b.date) - +new Date(a.date);
-          case "date-asc":
-            return +new Date(a.date) - +new Date(b.date);
-          case "amount-desc":
-            return Math.abs(b.amount) - Math.abs(a.amount);
-          case "amount-asc":
-            return Math.abs(a.amount) - Math.abs(b.amount);
-          default:
-            return 0;
-        }
-      });
-    return list;
-  }, [transactions, selectedCategory, selectedType, searchQuery, sortBy]);
 
   const totals = React.useMemo(() => {
     const income = transactions
@@ -298,19 +332,29 @@ export default function TransactionManager() {
   };
 
   const onToggleSelectAll = (checked: boolean) => {
-    setSelectedTransactions(checked ? filteredTransactions.map((t) => t.id!) : []);
+    setSelectedTransactions(
+      checked ? filteredTransactions.map((t) => t.id!) : []
+    );
   };
 
   const handleBulkDelete = async () => {
     if (selectedTransactions.length === 0) return;
-    if (!confirm(`Delete ${selectedTransactions.length} transaction(s)?`)) return;
+    if (!confirm(`Delete ${selectedTransactions.length} transaction(s)?`))
+      return;
 
     try {
-      await Promise.all(selectedTransactions.map(id => transactionsAPI.delete(id)));
-      setTransactions(prev => prev.filter(t => !selectedTransactions.includes(t.id!)));
+      await Promise.all(
+        selectedTransactions.map((id) => transactionsAPI.delete(id))
+      );
+      setTransactions((prev) =>
+        prev.filter((t) => !selectedTransactions.includes(t.id!))
+      );
+      setFilteredTransactions((prev) =>
+        prev.filter((t) => !selectedTransactions.includes(t.id!))
+      );
       setSelectedTransactions([]);
     } catch (err) {
-      alert('Failed to delete transactions');
+      alert("Failed to delete transactions");
       console.error(err);
     }
   };
@@ -322,10 +366,13 @@ export default function TransactionManager() {
 
   const handleSaveEdit = async () => {
     if (!editingId) return;
-    
+
     try {
-      const backendCategory = mapCategoryToBackend(editForm.category as Exclude<CategoryId, "all">, editForm.type as TxType);
-      
+      const backendCategory = mapCategoryToBackend(
+        editForm.category as Exclude<CategoryId, "all">,
+        editForm.type as TxType
+      );
+
       const updated = await transactionsAPI.update(editingId, {
         date: editForm.date,
         description: editForm.description,
@@ -334,33 +381,41 @@ export default function TransactionManager() {
         amount: editForm.amount,
         type: editForm.type,
       });
-      
-      setTransactions(prev => 
-        prev.map(t => t.id === editingId ? {
-          ...t,
-          ...updated,
-          category: mapCategoryToUI(updated.category),
-          status: editForm.status as TxStatus,
-          paymentMethod: editForm.paymentMethod || t.paymentMethod,
-        } : t)
-      );
-      
+
+      const updateFn = (list: Transaction[]) =>
+        list.map((t) =>
+          t.id === editingId
+            ? {
+                ...t,
+                ...updated,
+                category: mapCategoryToUI(updated.category),
+                status: editForm.status as TxStatus,
+                paymentMethod: editForm.paymentMethod || t.paymentMethod,
+              }
+            : t
+        );
+
+      setTransactions(updateFn);
+      setFilteredTransactions(updateFn);
+
       setEditingId(null);
       setEditForm({});
     } catch (err) {
-      alert('Failed to update transaction');
+      alert("Failed to update transaction");
       console.error(err);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this transaction?')) return;
+    if (!confirm("Delete this transaction?")) return;
 
     try {
       await transactionsAPI.delete(id);
-      setTransactions(prev => prev.filter(t => t.id !== id));
+      setTransactions((prev) => prev.filter((t) => t.id !== id));
+      setFilteredTransactions((prev) => prev.filter((t) => t.id !== id));
+      setSelectedTransactions((prev) => prev.filter((x) => x !== id));
     } catch (err) {
-      alert('Failed to delete transaction');
+      alert("Failed to delete transaction");
       console.error(err);
     }
   };
@@ -370,7 +425,8 @@ export default function TransactionManager() {
     if (!f.date) e.date = "Date is required";
     if (!f.merchant.trim()) e.merchant = "Merchant is required";
     if (!f.description.trim()) e.description = "Description is required";
-    if (f.amount.trim() === "" || isNaN(Number(f.amount))) e.amount = "Enter a valid amount";
+    if (f.amount.trim() === "" || isNaN(Number(f.amount)))
+      e.amount = "Enter a valid amount";
     if (!f.category) e.category = "Category is required";
     if (!f.type) e.type = "Type is required";
     return e;
@@ -383,7 +439,8 @@ export default function TransactionManager() {
     if (Object.keys(eMap).length) return;
 
     const parsed = Number(form.amount);
-    const normalizedAmount = form.type === "income" ? Math.abs(parsed) : Math.abs(parsed);
+    const normalizedAmount =
+      form.type === "income" ? Math.abs(parsed) : Math.abs(parsed);
     const backendCategory = mapCategoryToBackend(form.category, form.type);
 
     try {
@@ -407,11 +464,17 @@ export default function TransactionManager() {
       };
 
       setTransactions((prev) => [newTx, ...prev]);
+      setFilteredTransactions((prev) => [newTx, ...prev]);
       setShowAdd(false);
-      setForm((f) => ({ ...f, merchant: "", description: "", amount: "" }));
+      setForm((f) => ({
+        ...f,
+        merchant: "",
+        description: "",
+        amount: "",
+      }));
       setFormErrors({});
     } catch (err) {
-      alert('Failed to create transaction');
+      alert("Failed to create transaction");
       console.error(err);
     }
   };
@@ -420,15 +483,68 @@ export default function TransactionManager() {
     try {
       const blob = await transactionsAPI.exportCsv();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = `transactions-${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `transactions-${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
       a.click();
     } catch (err) {
-      alert('Failed to export transactions');
+      alert("Failed to export transactions");
       console.error(err);
     }
   };
+
+  // ---------- Filters via SearchAndFilters ----------
+  const categoriesForFilters = React.useMemo(
+    () => CATEGORIES.filter((c) => c.id !== "all").map((c) => c.name),
+    []
+  );
+
+  const handleFilterChange = React.useCallback(
+    (filters: TxFilters) => {
+      let filtered = [...transactions];
+
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        filtered = filtered.filter(
+          (t) =>
+            t.merchant.toLowerCase().includes(q) ||
+            t.description.toLowerCase().includes(q)
+        );
+      }
+
+      if (filters.type && filters.type !== "all") {
+        filtered = filtered.filter((t) => t.type === filters.type);
+      }
+
+      if (filters.category) {
+        // filters.category is a label like "Food & Dining"
+        const catId = mapCategoryToUI(filters.category);
+        filtered = filtered.filter((t) => t.category === catId);
+      }
+
+      const sort = filters.sort || "date-desc";
+      filtered = filtered.sort((a, b) => {
+        switch (sort) {
+          case "date-desc":
+            return +new Date(b.date) - +new Date(a.date);
+          case "date-asc":
+            return +new Date(a.date) - +new Date(b.date);
+          case "amount-desc":
+            return Math.abs(b.amount) - Math.abs(a.amount);
+          case "amount-asc":
+            return Math.abs(a.amount) - Math.abs(b.amount);
+          default:
+            return 0;
+        }
+      });
+
+      setFilteredTransactions(filtered);
+      setSelectedTransactions([]); // reset selection on new filters
+    },
+    [transactions]
+  );
 
   if (isLoading) {
     return (
@@ -446,7 +562,9 @@ export default function TransactionManager() {
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="text-center max-w-md mx-auto p-6">
           <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 mb-4">
-            <p className="text-red-600 font-semibold mb-2">⚠️ Error Loading Transactions</p>
+            <p className="text-red-600 font-semibold mb-2">
+              ⚠️ Error Loading Transactions
+            </p>
             <p className="text-red-700 text-sm">{error}</p>
           </div>
           <button
@@ -455,6 +573,24 @@ export default function TransactionManager() {
           >
             Try Again
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔹 Global empty state when there are no transactions at all
+  if (transactions.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center px-4">
+        <div className="max-w-md w-full">
+          <EmptyState
+            icon={Wallet}
+            title="No Transactions Yet"
+            description="Start tracking your finances by adding your first transaction. It only takes a few seconds!"
+            actionLabel="Add Transaction"
+            onAction={() => setShowAdd(true)}
+            gradient="from-blue-500 to-purple-500"
+          />
         </div>
       </div>
     );
@@ -473,9 +609,10 @@ export default function TransactionManager() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <button 
+              <button
                 onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
                 <Download className="w-4 h-4" />
                 Export
               </button>
@@ -496,7 +633,9 @@ export default function TransactionManager() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Total Income</span>
+              <span className="text-sm font-medium text-gray-600">
+                Total Income
+              </span>
               <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
                 <TrendingUp className="w-4 h-4 text-white" />
               </div>
@@ -508,7 +647,9 @@ export default function TransactionManager() {
 
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Total Expenses</span>
+              <span className="text-sm font-medium text-gray-600">
+                Total Expenses
+              </span>
               <div className="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center">
                 <TrendingDown className="w-4 h-4 text-white" />
               </div>
@@ -520,7 +661,9 @@ export default function TransactionManager() {
 
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Net Amount</span>
+              <span className="text-sm font-medium text-gray-600">
+                Net Amount
+              </span>
               <div
                 className={`w-8 h-8 bg-gradient-to-br ${
                   totals.net >= 0
@@ -541,71 +684,12 @@ export default function TransactionManager() {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Filters (via SearchAndFilters) */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search transactions..."
-                value={searchQuery}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setSearchQuery(e.target.value)
-                }
-                className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
-              />
-            </div>
-
-            {/* Category */}
-            <select
-              value={selectedCategory}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                setSelectedCategory(e.target.value as CategoryId)
-              }
-              className="px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none transition-colors font-medium"
-            >
-              {CATEGORIES.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.icon} {cat.name}
-                </option>
-              ))}
-            </select>
-
-            {/* Type */}
-            <select
-              value={selectedType}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                setSelectedType(e.target.value as "all" | TxType)
-              }
-              className="px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none transition-colors font-medium"
-            >
-              <option value="all">All Types</option>
-              <option value="income">Income</option>
-              <option value="expense">Expense</option>
-            </select>
-
-            {/* Sort */}
-            <select
-              value={sortBy}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                setSortBy(
-                  e.target.value as
-                    | "date-desc"
-                    | "date-asc"
-                    | "amount-desc"
-                    | "amount-asc"
-                )
-              }
-              className="px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none transition-colors font-medium"
-            >
-              <option value="date-desc">Newest First</option>
-              <option value="date-asc">Oldest First</option>
-              <option value="amount-desc">Highest Amount</option>
-              <option value="amount-asc">Lowest Amount</option>
-            </select>
-          </div>
+          <SearchAndFilters
+            onFilterChange={handleFilterChange}
+            categories={categoriesForFilters}
+          />
 
           {/* Bulk actions */}
           {selectedTransactions.length > 0 && (
@@ -635,7 +719,8 @@ export default function TransactionManager() {
                       type="checkbox"
                       checked={
                         filteredTransactions.length > 0 &&
-                        selectedTransactions.length === filteredTransactions.length
+                        selectedTransactions.length ===
+                          filteredTransactions.length
                       }
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         onToggleSelectAll(e.target.checked)
@@ -670,9 +755,12 @@ export default function TransactionManager() {
                 {filteredTransactions.map((t) => {
                   const cat = getCategoryInfo(t.category);
                   const isEditing = editingId === t.id;
-                  
+
                   return (
-                    <tr key={t.id} className="hover:bg-gray-50 transition-colors">
+                    <tr
+                      key={t.id}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
                       <td className="px-6 py-4">
                         <input
                           type="checkbox"
@@ -686,7 +774,12 @@ export default function TransactionManager() {
                           <input
                             type="date"
                             value={editForm.date}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, date: e.target.value }))}
+                            onChange={(e) =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                date: e.target.value,
+                              }))
+                            }
                             className="px-2 py-1 border border-gray-300 rounded text-sm"
                           />
                         ) : (
@@ -708,14 +801,24 @@ export default function TransactionManager() {
                             <input
                               type="text"
                               value={editForm.merchant}
-                              onChange={(e) => setEditForm(prev => ({ ...prev, merchant: e.target.value }))}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  merchant: e.target.value,
+                                }))
+                              }
                               className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                               placeholder="Merchant"
                             />
                             <input
                               type="text"
                               value={editForm.description}
-                              onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  description: e.target.value,
+                                }))
+                              }
                               className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                               placeholder="Description"
                             />
@@ -754,14 +857,23 @@ export default function TransactionManager() {
                         {isEditing ? (
                           <select
                             value={editForm.category}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, category: e.target.value as Exclude<CategoryId, "all"> }))}
+                            onChange={(e) =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                category:
+                                  e.target
+                                    .value as Exclude<CategoryId, "all">,
+                              }))
+                            }
                             className="px-2 py-1 border border-gray-300 rounded text-sm"
                           >
-                            {CATEGORIES.filter(c => c.id !== 'all').map((cat) => (
-                              <option key={cat.id} value={cat.id}>
-                                {cat.icon} {cat.name}
-                              </option>
-                            ))}
+                            {CATEGORIES.filter((c) => c.id !== "all").map(
+                              (cat) => (
+                                <option key={cat.id} value={cat.id}>
+                                  {cat.icon} {cat.name}
+                                </option>
+                              )
+                            )}
                           </select>
                         ) : (
                           <span
@@ -781,13 +893,20 @@ export default function TransactionManager() {
                             type="number"
                             step="0.01"
                             value={Math.abs(editForm.amount || 0)}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, amount: parseFloat(e.target.value) }))}
+                            onChange={(e) =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                amount: parseFloat(e.target.value),
+                              }))
+                            }
                             className="w-24 px-2 py-1 border border-gray-300 rounded text-sm text-right"
                           />
                         ) : (
                           <div
                             className={`text-base font-bold ${
-                              t.type === "income" ? "text-green-600" : "text-gray-900"
+                              t.type === "income"
+                                ? "text-green-600"
+                                : "text-gray-900"
                             }`}
                           >
                             {t.type === "income" ? "+" : "-"}
@@ -803,7 +922,9 @@ export default function TransactionManager() {
                               : "bg-yellow-100 text-yellow-700"
                           }`}
                         >
-                          {t.status === "completed" ? "Completed" : "Pending"}
+                          {t.status === "completed"
+                            ? "Completed"
+                            : "Pending"}
                         </span>
                       </td>
                       <td className="px-6 py-4">
@@ -870,7 +991,9 @@ export default function TransactionManager() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
           <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">Add Transaction</h3>
+              <h3 className="text-lg font-bold text-gray-900">
+                Add Transaction
+              </h3>
               <button
                 onClick={() => setShowAdd(false)}
                 className="p-2 rounded-lg hover:bg-gray-100"
@@ -889,10 +1012,16 @@ export default function TransactionManager() {
                   <input
                     type="date"
                     value={form.date}
-                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, date: e.target.value })
+                    }
                     className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none"
                   />
-                  {formErrors.date && <p className="text-xs text-red-600 mt-1">{formErrors.date}</p>}
+                  {formErrors.date && (
+                    <p className="text-xs text-red-600 mt-1">
+                      {formErrors.date}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -909,7 +1038,11 @@ export default function TransactionManager() {
                     <option value="expense">Expense</option>
                     <option value="income">Income</option>
                   </select>
-                  {formErrors.type && <p className="text-xs text-red-600 mt-1">{formErrors.type}</p>}
+                  {formErrors.type && (
+                    <p className="text-xs text-red-600 mt-1">
+                      {formErrors.type}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -920,11 +1053,15 @@ export default function TransactionManager() {
                     type="text"
                     placeholder="e.g., Starbucks"
                     value={form.merchant}
-                    onChange={(e) => setForm({ ...form, merchant: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, merchant: e.target.value })
+                    }
                     className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none"
                   />
                   {formErrors.merchant && (
-                    <p className="text-xs text-red-600 mt-1">{formErrors.merchant}</p>
+                    <p className="text-xs text-red-600 mt-1">
+                      {formErrors.merchant}
+                    </p>
                   )}
                 </div>
 
@@ -937,11 +1074,15 @@ export default function TransactionManager() {
                     step="0.01"
                     placeholder="e.g., 12.99"
                     value={form.amount}
-                    onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, amount: e.target.value })
+                    }
                     className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none"
                   />
                   {formErrors.amount && (
-                    <p className="text-xs text-red-600 mt-1">{formErrors.amount}</p>
+                    <p className="text-xs text-red-600 mt-1">
+                      {formErrors.amount}
+                    </p>
                   )}
                 </div>
 
@@ -953,11 +1094,15 @@ export default function TransactionManager() {
                     type="text"
                     placeholder="e.g., Morning coffee"
                     value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, description: e.target.value })
+                    }
                     className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none"
                   />
                   {formErrors.description && (
-                    <p className="text-xs text-red-600 mt-1">{formErrors.description}</p>
+                    <p className="text-xs text-red-600 mt-1">
+                      {formErrors.description}
+                    </p>
                   )}
                 </div>
 
@@ -970,7 +1115,8 @@ export default function TransactionManager() {
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        category: e.target.value as Exclude<CategoryId, "all">,
+                        category: e.target
+                          .value as Exclude<CategoryId, "all">,
                       })
                     }
                     className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none"
@@ -982,7 +1128,9 @@ export default function TransactionManager() {
                     ))}
                   </select>
                   {formErrors.category && (
-                    <p className="text-xs text-red-600 mt-1">{formErrors.category}</p>
+                    <p className="text-xs text-red-600 mt-1">
+                      {formErrors.category}
+                    </p>
                   )}
                 </div>
 
@@ -993,7 +1141,10 @@ export default function TransactionManager() {
                   <select
                     value={form.status}
                     onChange={(e) =>
-                      setForm({ ...form, status: e.target.value as TxStatus })
+                      setForm({
+                        ...form,
+                        status: e.target.value as TxStatus,
+                      })
                     }
                     className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none"
                   >

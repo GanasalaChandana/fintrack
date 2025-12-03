@@ -1,49 +1,52 @@
-﻿import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
-import Navigation from '@/components/Navigation';
+﻿import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import Navigation from "@/components/Navigation";
+import { MobileBottomNav } from "@/components/navigation/MobileBottomNav";
+import { DarkModeProvider, DarkModeToggle } from "@/components/providers/DarkModeProvider";
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ["latin"] });
 
 const siteConfig = {
-  name: 'FinTrack',
-  description: 'Your intelligent financial management platform. Track expenses, analyze spending patterns, and make informed financial decisions with ease.',
-  url: 'https://fintrack-liart.vercel.app',
-  ogImage: 'https://fintrack-liart.vercel.app/og-image.png',
+  name: "FinTrack",
+  description:
+    "Your intelligent financial management platform. Track expenses, analyze spending patterns, and make informed financial decisions with ease.",
+  url: "https://fintrack-liart.vercel.app",
+  ogImage: "https://fintrack-liart.vercel.app/og-image.png",
   keywords: [
-    'finance management',
-    'expense tracker',
-    'budget planner',
-    'financial analytics',
-    'money management',
-    'personal finance',
-    'spending tracker',
-    'financial dashboard',
-    'CSV import',
-    'transaction tracking'
+    "finance management",
+    "expense tracker",
+    "budget planner",
+    "financial analytics",
+    "money management",
+    "personal finance",
+    "spending tracker",
+    "financial dashboard",
+    "CSV import",
+    "transaction tracking",
   ],
 };
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   title: {
-    default: 'FinTrack - Smart Financial Management Platform',
-    template: '%s | FinTrack'
+    default: "FinTrack - Smart Financial Management Platform",
+    template: "%s | FinTrack",
   },
   description: siteConfig.description,
   keywords: siteConfig.keywords,
   authors: [
     {
-      name: 'FinTrack Team',
+      name: "FinTrack Team",
       url: siteConfig.url,
-    }
+    },
   ],
-  creator: 'FinTrack',
+  creator: "FinTrack",
   openGraph: {
-    type: 'website',
-    locale: 'en_US',
+    type: "website",
+    locale: "en_US",
     url: siteConfig.url,
-    title: 'FinTrack - Smart Financial Management Platform',
+    title: "FinTrack - Smart Financial Management Platform",
     description: siteConfig.description,
     siteName: siteConfig.name,
     images: [
@@ -51,16 +54,16 @@ export const metadata: Metadata = {
         url: siteConfig.ogImage,
         width: 1200,
         height: 630,
-        alt: 'FinTrack - Financial Management Dashboard',
-      }
+        alt: "FinTrack - Financial Management Dashboard",
+      },
     ],
   },
   twitter: {
-    card: 'summary_large_image',
-    title: 'FinTrack - Smart Financial Management Platform',
+    card: "summary_large_image",
+    title: "FinTrack - Smart Financial Management Platform",
     description: siteConfig.description,
     images: [siteConfig.ogImage],
-    creator: '@fintrack',
+    creator: "@fintrack",
   },
   robots: {
     index: true,
@@ -68,17 +71,17 @@ export const metadata: Metadata = {
     googleBot: {
       index: true,
       follow: true,
-      'max-video-preview': -1,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
     },
   },
   icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon-16x16.png',
-    apple: '/apple-touch-icon.png',
+    icon: "/favicon.ico",
+    shortcut: "/favicon-16x16.png",
+    apple: "/apple-touch-icon.png",
   },
-  manifest: '/site.webmanifest',
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({
@@ -90,14 +93,35 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
         <meta name="theme-color" content="#7c3aed" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta
+          name="apple-mobile-web-app-status-bar-style"
+          content="black-translucent"
+        />
       </head>
+
       <body className={inter.className}>
-        <Navigation />
-        {children}
+        <DarkModeProvider>
+          {/* Dark Mode Toggle Button */}
+          <div className="fixed right-4 top-4 z-50">
+            <DarkModeToggle />
+          </div>
+
+          {/* Top Navigation */}
+          <Navigation />
+
+          {/* Page Content */}
+          {children}
+
+          {/* Bottom Mobile Navigation */}
+          <MobileBottomNav />
+        </DarkModeProvider>
       </body>
     </html>
   );

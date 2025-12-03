@@ -18,15 +18,6 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = {
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://accounts.google.com",
-        "https://content-accounts.google.com",
-        "https://gsi.google.com",
-        "https://fintrack-liart.vercel.app"
-}, allowedHeaders = "*", methods = { RequestMethod.GET, RequestMethod.POST,
-        RequestMethod.OPTIONS }, allowCredentials = "true")
 public class AuthController {
 
     private final AuthService authService;

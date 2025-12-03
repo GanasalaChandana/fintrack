@@ -1,6 +1,7 @@
 ﻿"use client";
-import { useRouter } from 'next/navigation';
-import React, { useState, useEffect } from "react";
+
+import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -10,46 +11,56 @@ import {
   PiggyBank,
   AlertCircle,
   Loader2,
-  ArrowUpRight,
-  ArrowDownRight,
+  Upload,
+  BarChart3,
 } from "lucide-react";
+
 import { SpendingTrendChart } from "@/components/dashboard/SpendingTrendChart";
 import { BudgetComparisonChart } from "@/components/dashboard/BudgetComparisonChart";
 import { CategoryPieChart } from "@/components/dashboard/CategoryPieChart";
 import { GoalProgressChart } from "@/components/dashboard/GoalProgressChart";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { TransactionModal } from "@/components/modals/TransactionModal";
+import {
+  CSVImportModal,
+  type CSVRow,
+} from "@/components/CSVImportModal";
+import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 
 /* ===================== API Helper ===================== */
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 const getToken = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('ft_token') || localStorage.getItem('authToken');
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("ft_token") || localStorage.getItem("authToken");
 };
 
-const apiRequest = async <T,>(endpoint: string, options: RequestInit = {}): Promise<T> => {
+const apiRequest = async <T,>(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<T> => {
   const token = getToken();
-  
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     },
-    credentials: 'include',
+    credentials: "include",
   });
 
   if (!response.ok) {
     if (response.status === 401) {
-      localStorage.removeItem('ft_token');
-      localStorage.removeItem('authToken');
-      window.location.href = '/register?mode=signin';
+      localStorage.removeItem("ft_token");
+      localStorage.removeItem("authToken");
+      window.location.href = "/register?mode=signin";
     }
     throw new Error(`HTTP error! status: ${response.status}`);
   }
 
-  if (response.status === 204 || response.headers.get('content-length') === '0') {
+  if (response.status === 204 || response.headers.get("content-length") === "0") {
     return {} as T;
   }
 
@@ -84,12 +95,19 @@ export default function DashboardPage() {
     expensesChange: 0,
   });
 
+  // CSV modal state
+  const [showCsvModal, setShowCsvModal] = useState(false);
+
+  // Transaction modal state
+  const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<any>(null);
+
   // Auth check
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       const token = getToken();
       if (!token) {
-        router.replace('/register?mode=signin');
+        router.replace("/register?mode=signin");
       } else {
         setIsAuthenticated(true);
         setIsLoading(false);
@@ -97,66 +115,40 @@ export default function DashboardPage() {
     }
   }, [router]);
 
-  // Fetch all data
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchDashboardData();
-    }
-  }, [isAuthenticated]);
-
-  const fetchDashboardData = async () => {
-    setLoadingData(true);
-    try {
-      // Fetch in parallel
-      const [transactions, budgets, goalsData] = await Promise.all([
-        apiRequest<any[]>('/api/transactions').catch(() => []),
-        apiRequest<any[]>('/api/budgets').catch(() => []),
-        apiRequest<any[]>('/api/goals').catch(() => []),
-      ]);
-
-      // Process spending trend data (last 6 months)
-      const trendData = processSpendingTrend(transactions);
-      setSpendingTrendData(trendData);
-
-      // Process budget comparison
-      const budgetData = processBudgetComparison(budgets);
-      setBudgetComparisonData(budgetData);
-
-      // Process category breakdown
-      const catData = processCategoryBreakdown(transactions);
-      setCategoryData(catData);
-
-      // Set goals
-      setGoals(goalsData);
-
-      // Calculate stats
-      const calculatedStats = calculateStats(transactions, trendData);
-      setStats(calculatedStats);
-
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-    } finally {
-      setLoadingData(false);
-    }
-  };
-
   const processSpendingTrend = (transactions: any[]) => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
     const now = new Date();
     const data = [];
 
     for (let i = 5; i >= 0; i--) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      
-      const monthTransactions = transactions.filter(t => t.date?.startsWith(monthKey));
-      
+      const monthKey = `${date.getFullYear()}-${String(
+        date.getMonth() + 1,
+      ).padStart(2, "0")}`;
+
+      const monthTransactions = transactions.filter((t) =>
+        t.date?.startsWith(monthKey),
+      );
+
       const income = monthTransactions
-        .filter(t => t.type === 'income')
+        .filter((t) => t.type === "income")
         .reduce((sum, t) => sum + t.amount, 0);
-      
+
       const expenses = monthTransactions
-        .filter(t => t.type === 'expense')
+        .filter((t) => t.type === "expense")
         .reduce((sum, t) => sum + t.amount, 0);
 
       data.push({
@@ -171,7 +163,7 @@ export default function DashboardPage() {
   };
 
   const processBudgetComparison = (budgets: any[]) => {
-    return budgets.map(b => ({
+    return budgets.map((b) => ({
       category: b.category,
       budget: b.budget,
       spent: b.spent,
@@ -181,16 +173,23 @@ export default function DashboardPage() {
 
   const processCategoryBreakdown = (transactions: any[]) => {
     const categoryMap = new Map<string, number>();
-    
+
     transactions
-      .filter(t => t.type === 'expense')
-      .forEach(t => {
+      .filter((t) => t.type === "expense")
+      .forEach((t) => {
         const current = categoryMap.get(t.category) || 0;
         categoryMap.set(t.category, current + t.amount);
       });
 
-    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-    
+    const colors = [
+      "#3b82f6",
+      "#10b981",
+      "#f59e0b",
+      "#ef4444",
+      "#8b5cf6",
+      "#ec4899",
+    ];
+
     return Array.from(categoryMap.entries())
       .map(([name, value], index) => ({
         name,
@@ -201,24 +200,34 @@ export default function DashboardPage() {
       .slice(0, 6);
   };
 
-  const calculateStats = (transactions: any[], trendData: any[]) => {
-    const thisMonth = trendData[trendData.length - 1] || { income: 0, expenses: 0 };
-    const lastMonth = trendData[trendData.length - 2] || { income: 0, expenses: 0 };
+  const calculateStats = (transactions: any[], trendData: any[], goalsList: any[]) => {
+    const thisMonth = trendData[trendData.length - 1] || {
+      income: 0,
+      expenses: 0,
+    };
+    const lastMonth = trendData[trendData.length - 2] || {
+      income: 0,
+      expenses: 0,
+    };
 
     const totalIncome = thisMonth.income;
     const totalExpenses = thisMonth.expenses;
     const totalSavings = totalIncome - totalExpenses;
 
-    const incomeChange = lastMonth.income > 0 
-      ? ((thisMonth.income - lastMonth.income) / lastMonth.income) * 100 
-      : 0;
-    
-    const expensesChange = lastMonth.expenses > 0 
-      ? ((thisMonth.expenses - lastMonth.expenses) / lastMonth.expenses) * 100 
-      : 0;
+    const incomeChange =
+      lastMonth.income > 0
+        ? ((thisMonth.income - lastMonth.income) / lastMonth.income) * 100
+        : 0;
 
-    // Calculate net worth (simplified: sum of all savings goals + current month savings)
-    const goalsSavings = goals.reduce((sum, g) => sum + (g.current || 0), 0);
+    const expensesChange =
+      lastMonth.expenses > 0
+        ? ((thisMonth.expenses - lastMonth.expenses) / lastMonth.expenses) * 100
+        : 0;
+
+    const goalsSavings = goalsList.reduce(
+      (sum, g) => sum + (g.current || 0),
+      0,
+    );
     const netWorth = goalsSavings + totalSavings;
 
     return {
@@ -231,11 +240,164 @@ export default function DashboardPage() {
     };
   };
 
+  // Fetch all data
+  const fetchDashboardData = useCallback(async () => {
+    setLoadingData(true);
+    try {
+      const [transactions, budgets, goalsData] = await Promise.all([
+        apiRequest<any[]>("/api/transactions").catch(() => []),
+        apiRequest<any[]>("/api/budgets").catch(() => []),
+        apiRequest<any[]>("/api/goals").catch(() => []),
+      ]);
+
+      const trendData = processSpendingTrend(transactions);
+      setSpendingTrendData(trendData);
+
+      const budgetData = processBudgetComparison(budgets);
+      setBudgetComparisonData(budgetData);
+
+      const catData = processCategoryBreakdown(transactions);
+      setCategoryData(catData);
+
+      setGoals(goalsData);
+
+      const calculatedStats = calculateStats(
+        transactions,
+        trendData,
+        goalsData,
+      );
+      setStats(calculatedStats);
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+    } finally {
+      setLoadingData(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchDashboardData();
+    }
+  }, [isAuthenticated, fetchDashboardData]);
+
+  // ================= CSV IMPORT HANDLER =================
+  const handleImportTransactions = async (rows: CSVRow[]): Promise<void> => {
+    const normalizeString = (value: unknown) =>
+      (value ?? "").toString().trim();
+
+    const requests = rows.map((row) => {
+      const date = normalizeString(row["Date"] ?? row["date"]);
+      const merchant = normalizeString(row["Merchant"] ?? row["merchant"]);
+      const description = normalizeString(
+        row["Description"] ?? row["description"] ?? merchant,
+      );
+      const category = normalizeString(
+        row["Category"] ?? row["category"] ?? "Other",
+      );
+
+      const rawAmount = Number(row["Amount"] ?? row["amount"] ?? 0);
+      const typeRaw = normalizeString(row["Type"] ?? row["type"]);
+      const inferredType =
+        typeRaw.toLowerCase() === "income" ||
+        typeRaw.toLowerCase() === "credit"
+          ? "income"
+          : "expense";
+
+      const type = inferredType as "income" | "expense";
+      const amount = Math.abs(rawAmount || 0);
+
+      if (!date || !merchant || !amount) {
+        return Promise.resolve();
+      }
+
+      return apiRequest("/api/transactions", {
+        method: "POST",
+        body: JSON.stringify({
+          date,
+          merchant,
+          description,
+          amount,
+          category,
+          type,
+        }),
+      });
+    });
+
+    await Promise.all(requests);
+    await fetchDashboardData();
+  };
+
+  // ================= TRANSACTION MODAL HANDLER =================
+  const handleSaveTransaction = async (transaction: any) => {
+    const method = editingTransaction ? "PUT" : "POST";
+    const endpoint = editingTransaction
+      ? `/api/transactions/${editingTransaction.id}`
+      : "/api/transactions";
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify(transaction),
+    });
+
+    if (response.ok) {
+      await fetchDashboardData();
+      setShowTransactionModal(false);
+      setEditingTransaction(null);
+    }
+  };
+
+  // ================= KEYBOARD SHORTCUTS =================
+  const shortcuts = [
+    {
+      keys: ["n"],
+      description: "New transaction",
+      action: () => {
+        setEditingTransaction(null);
+        setShowTransactionModal(true);
+      },
+    },
+    {
+      keys: ["ctrl", "k"],
+      description: "Search",
+      action: () =>
+        document.querySelector<HTMLInputElement>('input[type="search"]')?.focus(),
+    },
+    {
+      keys: ["d"],
+      description: "Dashboard",
+      action: () => router.push("/dashboard"),
+    },
+    {
+      keys: ["b"],
+      description: "Budgets",
+      action: () => router.push("/goals-budgets?tab=budgets"),
+    },
+    {
+      keys: ["t"],
+      description: "Transactions",
+      action: () => router.push("/transactions"),
+    },
+    {
+      keys: ["r"],
+      description: "Reports",
+      action: () => router.push("/reports"),
+    },
+    {
+      keys: ["g"],
+      description: "Goals",
+      action: () => router.push("/goals-budgets?tab=goals"),
+    },
+  ];
+
   if (isLoading || !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
         <div className="text-center">
-          <Loader2 className="w-16 h-16 text-indigo-600 animate-spin mx-auto mb-4" />
+          <Loader2 className="mx-auto mb-4 h-16 w-16 animate-spin text-indigo-600" />
           <p className="text-gray-600">Loading dashboard...</p>
         </div>
       </div>
@@ -243,142 +405,236 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-1">Dashboard</h1>
-              <p className="text-gray-600">Your financial overview at a glance</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => router.push('/transactions')}
-                className="px-4 py-2 text-gray-700 bg-white border-2 border-gray-300 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
-              >
-                View Transactions
-              </button>
-              <button
-                onClick={() => router.push('/goals-budgets')}
-                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg"
-              >
-                Goals & Budgets
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+    <>
+      {/* Global keyboard shortcuts */}
+      <KeyboardShortcuts shortcuts={shortcuts} />
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {loadingData ? (
-          <div className="text-center py-12">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-2" />
-            <p className="text-gray-600">Loading data...</p>
-          </div>
-        ) : (
-          <div className="space-y-8">
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <StatCard
-                title="Total Income"
-                value={formatCurrency(stats.totalIncome)}
-                change={stats.incomeChange}
-                icon={TrendingUp}
-                color="from-green-500 to-green-600"
-                description="This month"
-              />
-              <StatCard
-                title="Total Expenses"
-                value={formatCurrency(stats.totalExpenses)}
-                change={stats.expensesChange}
-                icon={TrendingDown}
-                color="from-red-500 to-red-600"
-                description="This month"
-              />
-              <StatCard
-                title="Net Savings"
-                value={formatCurrency(stats.totalSavings)}
-                icon={PiggyBank}
-                color="from-blue-500 to-blue-600"
-                description="Income - Expenses"
-              />
-              <StatCard
-                title="Net Worth"
-                value={formatCurrency(stats.netWorth)}
-                icon={Wallet}
-                color="from-purple-500 to-purple-600"
-                description="Goals + Savings"
-              />
-            </div>
+      {/* Transaction Modal */}
+      <TransactionModal
+        isOpen={showTransactionModal}
+        onClose={() => {
+          setShowTransactionModal(false);
+          setEditingTransaction(null);
+        }}
+        onSave={handleSaveTransaction}
+        transaction={editingTransaction}
+        mode={editingTransaction ? "edit" : "add"}
+      />
 
-            {/* Charts Row 1 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <SpendingTrendChart data={spendingTrendData} />
-              <BudgetComparisonChart data={budgetComparisonData} />
-            </div>
+      {/* CSV Import Modal */}
+      <CSVImportModal
+        isOpen={showCsvModal}
+        onClose={() => setShowCsvModal(false)}
+        onImport={handleImportTransactions}
+        requiredHeaders={["Date", "Merchant", "Description", "Amount", "Category", "Type"]}
+        title="Import Transactions from CSV"
+        description="Upload a CSV export from your bank. Make sure it includes Date, Merchant, Description, Amount, Category, and Type columns."
+        maxFileSize={10}
+        sampleData={[
+          {
+            Date: "2024-01-15",
+            Merchant: "Starbucks",
+            Description: "Morning coffee",
+            Amount: -5.5,
+            Category: "Food & Dining",
+            Type: "expense",
+          },
+          {
+            Date: "2024-01-15",
+            Merchant: "Salary",
+            Description: "Monthly salary",
+            Amount: 5000,
+            Category: "Income",
+            Type: "income",
+          },
+          {
+            Date: "2024-01-16",
+            Merchant: "Uber",
+            Description: "Ride to work",
+            Amount: -15,
+            Category: "Transportation",
+            Type: "expense",
+          },
+        ]}
+      />
 
-            {/* Charts Row 2 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <CategoryPieChart data={categoryData} />
-              <GoalProgressChart goals={goals} />
-            </div>
-
-            {/* Quick Actions */}
-            <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl shadow-xl p-8 text-white">
-              <h3 className="text-2xl font-bold mb-4">Quick Actions</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+        {/* Header */}
+        <header className="border-b border-gray-200 bg-white">
+          <div className="mx-auto max-w-7xl px-6 py-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h1 className="mb-1 text-3xl font-bold text-gray-900">
+                  Dashboard
+                </h1>
+                <p className="text-gray-600">
+                  Your financial overview at a glance
+                </p>
+              </div>
+              <div className="flex gap-3">
                 <button
-                  onClick={() => router.push('/transactions?action=add')}
-                  className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-xl p-4 text-left transition-all"
+                  onClick={() => router.push("/transactions")}
+                  className="rounded-lg border-2 border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
                 >
-                  <DollarSign className="w-8 h-8 mb-2" /><p className="font-semibold">Add Transaction</p>
-                  <p className="text-sm text-blue-100">Record income or expense</p>
+                  View Transactions
                 </button>
                 <button
-                  onClick={() => router.push('/goals-budgets?tab=goals')}
-                  className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-xl p-4 text-left transition-all"
+                  onClick={() => router.push("/goals-budgets")}
+                  className="rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2 font-semibold text-white shadow-lg transition-all hover:from-blue-700 hover:to-blue-800"
                 >
-                  <Target className="w-8 h-8 mb-2" />
-                  <p className="font-semibold">Create Goal</p>
-                  <p className="text-sm text-blue-100">Set a new savings target</p>
-                </button>
-                <button
-                  onClick={() => router.push('/goals-budgets?tab=budgets')}
-                  className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-xl p-4 text-left transition-all"
-                >
-                  <Wallet className="w-8 h-8 mb-2" />
-                  <p className="font-semibold">Add Budget</p>
-                  <p className="text-sm text-blue-100">Set spending limits</p>
+                  Goals & Budgets
                 </button>
               </div>
             </div>
+          </div>
+        </header>
 
-            {/* Alerts Section */}
-            {(budgetComparisonData.some(b => b.spent > b.budget) || 
-              stats.expensesChange > 20) && (
-              <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-6">
-                <div className="flex items-start gap-4">
-                  <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-1" />
-                  <div>
-                    <h3 className="font-bold text-amber-900 mb-2">Financial Alerts</h3>
-                    <ul className="space-y-2 text-sm text-amber-800">
-                      {budgetComparisonData.filter(b => b.spent > b.budget).map((b, i) => (
-                        <li key={i}>
-                          • <span className="font-semibold">{b.category}</span> is over budget by {formatCurrency(b.spent - b.budget)}
-                        </li>
-                      ))}
-                      {stats.expensesChange > 20 && (
-                        <li>• Your expenses increased by {stats.expensesChange.toFixed(1)}% this month</li>
-                      )}
-                    </ul>
-                  </div>
+        <main className="mx-auto max-w-7xl px-6 py-8">
+          {loadingData ? (
+            <div className="py-12 text-center">
+              <Loader2 className="mx-auto mb-2 h-8 w-8 animate-spin text-blue-600" />
+              <p className="text-gray-600">Loading data...</p>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <StatCard
+                  title="Total Income"
+                  value={formatCurrency(stats.totalIncome)}
+                  change={stats.incomeChange}
+                  icon={TrendingUp}
+                  color="from-green-500 to-green-600"
+                  description="This month"
+                />
+                <StatCard
+                  title="Total Expenses"
+                  value={formatCurrency(stats.totalExpenses)}
+                  change={stats.expensesChange}
+                  icon={TrendingDown}
+                  color="from-red-500 to-red-600"
+                  description="This month"
+                />
+                <StatCard
+                  title="Net Savings"
+                  value={formatCurrency(stats.totalSavings)}
+                  icon={PiggyBank}
+                  color="from-blue-500 to-blue-600"
+                  description="Income - Expenses"
+                />
+                <StatCard
+                  title="Net Worth"
+                  value={formatCurrency(stats.netWorth)}
+                  icon={Wallet}
+                  color="from-purple-500 to-purple-600"
+                  description="Goals + Savings"
+                />
+              </div>
+
+              {/* Charts Row 1 */}
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <SpendingTrendChart data={spendingTrendData} />
+                <BudgetComparisonChart data={budgetComparisonData} />
+              </div>
+
+              {/* Charts Row 2 */}
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <CategoryPieChart data={categoryData} />
+                <GoalProgressChart goals={goals} />
+              </div>
+
+              {/* Quick Actions */}
+              <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-purple-600 p-8 text-white shadow-xl">
+                <h3 className="mb-4 text-2xl font-bold">Quick Actions</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                  {/* Add Transaction */}
+                  <button
+                    onClick={() => setShowTransactionModal(true)}
+                    className="rounded-xl bg-white/20 p-4 text-left backdrop-blur-sm transition-all hover:bg-white/30"
+                  >
+                    <DollarSign className="mb-2 h-8 w-8" />
+                    <p className="font-semibold">Add Transaction</p>
+                    <p className="text-sm text-blue-100">
+                      Record income or expense
+                    </p>
+                  </button>
+
+                  {/* Import CSV */}
+                  <button
+                    onClick={() => setShowCsvModal(true)}
+                    className="rounded-xl bg-white/20 p-4 text-left backdrop-blur-sm transition-all hover:bg-white/30"
+                  >
+                    <Upload className="mb-2 h-8 w-8" />
+                    <p className="font-semibold">Import CSV</p>
+                    <p className="text-sm text-blue-100">
+                      Upload transactions from your bank
+                    </p>
+                  </button>
+
+                  {/* Set Budget */}
+                  <button
+                    onClick={() => router.push("/goals-budgets?tab=budgets")}
+                    className="rounded-xl bg-white/20 p-4 text-left backdrop-blur-sm transition-all hover:bg-white/30"
+                  >
+                    <Wallet className="mb-2 h-8 w-8" />
+                    <p className="font-semibold">Set Budget</p>
+                    <p className="text-sm text-blue-100">
+                      Create or update spending limits
+                    </p>
+                  </button>
+
+                  {/* View Reports */}
+                  <button
+                    onClick={() => router.push("/reports")}
+                    className="rounded-xl bg-white/20 p-4 text-left backdrop-blur-sm transition-all hover:bg-white/30"
+                  >
+                    <BarChart3 className="mb-2 h-8 w-8" />
+                    <p className="font-semibold">View Reports</p>
+                    <p className="text-sm text-blue-100">
+                      See insights and trends
+                    </p>
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
-        )}
-      </main>
-    </div>
+
+              {/* Alerts Section */}
+              {(budgetComparisonData.some((b) => b.spent > b.budget) ||
+                stats.expensesChange > 20) && (
+                <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-6">
+                  <div className="flex items-start gap-4">
+                    <AlertCircle className="mt-1 h-6 w-6 flex-shrink-0 text-amber-600" />
+                    <div>
+                      <h3 className="mb-2 font-bold text-amber-900">
+                        Financial Alerts
+                      </h3>
+                      <ul className="space-y-2 text-sm text-amber-800">
+                        {budgetComparisonData
+                          .filter((b) => b.spent > b.budget)
+                          .map((b, i) => (
+                            <li key={i}>
+                              •{" "}
+                              <span className="font-semibold">
+                                {b.category}
+                              </span>{" "}
+                              is over budget by{" "}
+                              {formatCurrency(b.spent - b.budget)}
+                            </li>
+                          ))}
+                        {stats.expensesChange > 20 && (
+                          <li>
+                            • Your expenses increased by{" "}
+                            {stats.expensesChange.toFixed(1)}% this month
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
+    </>
   );
 }

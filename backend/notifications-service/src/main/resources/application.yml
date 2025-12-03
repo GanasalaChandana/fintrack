@@ -17,7 +17,7 @@ spring:
     # ⭐ Fixed for Neon Local — NO search_path, NO currentSchema
     url: jdbc:postgresql://${POSTGRES_HOST:ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech}:${POSTGRES_PORT:5432}/${POSTGRES_DB:neondb}?sslmode=require
     username: ${POSTGRES_USER:neondb_owner}
-    password: ${POSTGRES_PASSWORD:npg_xxxxxxxxxxxxxxxxxxxxx}
+    password: ${POSTGRES_PASSWORD:npg_eVXG4qfL1FzP}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10

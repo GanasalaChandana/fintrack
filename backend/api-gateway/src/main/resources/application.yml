@@ -10,9 +10,6 @@ spring:
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
 
-      # DO NOT ADD globalcors here - it conflicts with GlobalCorsConfiguration.java
-      # CORS is handled by GlobalCorsConfiguration.java
-
       routes:
         # ================= AUTH (NO AUTH REQUIRED) =================
         - id: users-service-auth
@@ -24,6 +21,39 @@ spring:
               args:
                 regexp: /api/auth/(?<segment>.*)
                 replacement: /api/auth/${segment}
+
+        # ✅ NEW: OAUTH2 LOGIN ROUTES (NO AUTH REQUIRED)
+        - id: oauth2-login
+          uri: ${USERS_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/oauth2/**
+          filters:
+            - name: RewritePath
+              args:
+                regexp: /oauth2/(?<segment>.*)
+                replacement: /oauth2/${segment}
+
+        # ✅ NEW: LOGIN CALLBACK ROUTES (NO AUTH REQUIRED)
+        - id: login-oauth2-code
+          uri: ${USERS_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/login/oauth2/code/**
+          filters:
+            - name: RewritePath
+              args:
+                regexp: /login/oauth2/code/(?<segment>.*)
+                replacement: /login/oauth2/code/${segment}
+
+        # ✅ NEW: GOOGLE AUTH CALLBACK (NO AUTH REQUIRED)
+        - id: google-auth-callback
+          uri: ${USERS_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/auth/google/callback
+          filters:
+            - name: RewritePath
+              args:
+                regexp: /api/auth/google/callback
+                replacement: /api/auth/google/callback
 
         # ================= NOTIFICATIONS (WITH AUTH) =================
         - id: notifications-service
@@ -135,15 +165,17 @@ management:
     gateway:
       enabled: true
 
-# Logging
+# Logging - Enhanced for debugging OAuth
 logging:
   level:
     root: INFO
     com.fintrack: DEBUG
-    org.springframework.cloud.gateway: TRACE
-    org.springframework.cloud.gateway.handler.RoutePredicateHandlerMapping: TRACE
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.cloud.gateway.handler.RoutePredicateHandlerMapping: DEBUG
     org.springframework.web: DEBUG
-    org.springframework.web.server.adapter.HttpWebHandlerAdapter: TRACE
-    reactor.netty.http.server: INFO
+    org.springframework.web.server.adapter.HttpWebHandlerAdapter: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.security.oauth2: DEBUG
+    reactor.netty.http.server: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n%wEx"
