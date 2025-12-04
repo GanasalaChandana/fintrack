@@ -1,4 +1,5 @@
 ﻿"use client";
+
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import {
@@ -15,6 +16,7 @@ import {
   Check,
   Wallet,
 } from "lucide-react";
+
 import { transactionsAPI, type Transaction as ApiTransaction } from "@/lib/api";
 import { SearchAndFilters } from "@/components/SearchAndFilters";
 import { EmptyState } from "@/components/EmptyState";
@@ -22,6 +24,7 @@ import { EmptyState } from "@/components/EmptyState";
 /* =========================
    Types
    ========================= */
+
 type TxType = "income" | "expense";
 type TxStatus = "completed" | "pending";
 
@@ -44,8 +47,15 @@ interface Category {
   badgeText: string;
 }
 
-interface Transaction extends Omit<ApiTransaction, "category"> {
+/**
+ * UI Transaction type
+ * - We override ApiTransaction.category and ApiTransaction.type
+ * - In the UI we always use lowercase "income" / "expense"
+ */
+interface Transaction
+  extends Omit<ApiTransaction, "category" | "type"> {
   category: Exclude<CategoryId, "all">;
+  type: TxType;
   status: TxStatus;
   paymentMethod: string;
   tags: string[];
@@ -66,7 +76,7 @@ interface NewTxForm {
 interface TxFilters {
   search?: string;
   type?: "all" | TxType;
-  category?: string; // category label from SearchAndFilters (e.g. "Food & Dining")
+  category?: string; // label from SearchAndFilters (e.g. "Food & Dining")
   sort?: "date-desc" | "date-asc" | "amount-desc" | "amount-asc";
 }
 
@@ -124,6 +134,9 @@ const mapCategoryToUI = (category: string): Exclude<CategoryId, "all"> => {
   return map[category] || "other";
 };
 
+/**
+ * Map UI category + type -> backend category label
+ */
 const mapCategoryToBackend = (
   category: Exclude<CategoryId, "all">,
   type: TxType
@@ -142,6 +155,18 @@ const mapCategoryToBackend = (
   };
   return map[category] || "Other";
 };
+
+/**
+ * Map UI type -> backend enum value
+ */
+const toBackendType = (type: TxType | undefined) =>
+  type === "income" ? "INCOME" : "EXPENSE";
+
+/**
+ * Map backend enum -> UI type
+ */
+const fromBackendType = (type: ApiTransaction["type"]): TxType =>
+  type === "INCOME" ? "income" : "expense";
 
 /* =========================
    Data
@@ -246,7 +271,7 @@ export default function TransactionManager() {
         router.replace("/register?mode=signin");
       } else {
         setIsAuthenticated(true);
-        loadTransactions();
+        void loadTransactions();
       }
     }
   }, [router]);
@@ -266,6 +291,7 @@ export default function TransactionManager() {
       const transformed: Transaction[] = data.map((t) => ({
         ...t,
         id: t.id!,
+        type: fromBackendType(t.type),      // 👈 normalize enum to "income"/"expense"
         category: mapCategoryToUI(t.category),
         status: "completed" as TxStatus,
         paymentMethod: "Credit Card •••• 4242",
@@ -276,6 +302,8 @@ export default function TransactionManager() {
       setTransactions(transformed);
       setFilteredTransactions(transformed);
     } catch (err: any) {
+      console.error("❌ Failed to load transactions:", err);
+
       if (err.message?.includes("401") || err.message?.includes("Unauthorized")) {
         setError("Authentication failed. Please sign in again.");
         setTimeout(() => {
@@ -379,7 +407,7 @@ export default function TransactionManager() {
         merchant: editForm.merchant,
         category: backendCategory,
         amount: editForm.amount,
-        type: editForm.type,
+        type: toBackendType(editForm.type as TxType), // 👈 send enum to backend
       });
 
       const updateFn = (list: Transaction[]) =>
@@ -388,6 +416,7 @@ export default function TransactionManager() {
             ? {
                 ...t,
                 ...updated,
+                type: fromBackendType(updated.type), // 👈 normalize back to UI
                 category: mapCategoryToUI(updated.category),
                 status: editForm.status as TxStatus,
                 paymentMethod: editForm.paymentMethod || t.paymentMethod,
@@ -439,9 +468,9 @@ export default function TransactionManager() {
     if (Object.keys(eMap).length) return;
 
     const parsed = Number(form.amount);
-    const normalizedAmount =
-      form.type === "income" ? Math.abs(parsed) : Math.abs(parsed);
+    const normalizedAmount = Math.abs(parsed);
     const backendCategory = mapCategoryToBackend(form.category, form.type);
+    const backendType = toBackendType(form.type); // 👈 enum
 
     try {
       const created = await transactionsAPI.create({
@@ -450,12 +479,13 @@ export default function TransactionManager() {
         description: form.description.trim(),
         amount: normalizedAmount,
         category: backendCategory,
-        type: form.type,
+        type: backendType, // 👈 send INCOME / EXPENSE
       });
 
       const newTx: Transaction = {
         ...created,
         id: created.id!,
+        type: fromBackendType(created.type), // 👈 normalize to UI
         category: mapCategoryToUI(created.category),
         status: form.status,
         paymentMethod: form.paymentMethod.trim(),
@@ -519,7 +549,6 @@ export default function TransactionManager() {
       }
 
       if (filters.category) {
-        // filters.category is a label like "Food & Dining"
         const catId = mapCategoryToUI(filters.category);
         filtered = filtered.filter((t) => t.category === catId);
       }
