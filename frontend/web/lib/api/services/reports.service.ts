@@ -3,7 +3,7 @@
 import { apiRequest, getToken } from "@/lib/api";
 
 const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8084"
 ).replace(/\/$/, "");
 
 // ---------- Types ----------
