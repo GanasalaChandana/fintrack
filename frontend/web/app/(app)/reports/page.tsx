@@ -1,4 +1,5 @@
 ﻿"use client";
+
 import { useRouter } from "next/navigation";
 import React, { useState, useEffect } from "react";
 import {
@@ -25,9 +26,15 @@ import {
   Loader2,
   type LucideIcon,
 } from "lucide-react";
-import { reportsService, type ReportsData } from "@/lib/api/services/reports.service";
 
-// ✅ NEW: advanced charts import
+import { isAuthenticated } from "@/lib/api";
+import {
+  reportsService,
+  type ReportsData,
+  type ReportsRange,
+} from "@/lib/api/services/reports.service";
+
+// ✅ advanced charts
 import {
   IncomeExpenseComparison,
   SpendingPatternRadar,
@@ -37,6 +44,7 @@ import {
 /* ---------- Types ---------- */
 
 type ReportTab = "monthly" | "comparison" | "forecast";
+
 type DateRange =
   | "last-7-days"
   | "last-30-days"
@@ -130,33 +138,27 @@ const ErrorMessage: React.FC<{ message: string; onRetry?: () => void }> = ({
 
 const FinancialReports: React.FC = () => {
   const router = useRouter();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isAuth, setIsAuth] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
   const [selectedReport, setSelectedReport] =
     useState<ReportTab>("monthly");
   const [dateRange, setDateRange] =
     useState<DateRange>("last-30-days");
 
-  // Data states
-  const [reportsData, setReportsData] = useState<ReportsData | null>(
-    null,
-  );
+  const [reportsData, setReportsData] = useState<ReportsData | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
 
-  // Auth check
+  // Auth check – uses shared helper (respects localStorage + cookie)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token =
-        localStorage.getItem("authToken") ||
-        localStorage.getItem("ft_token");
+    if (typeof window === "undefined") return;
 
-      if (!token) {
-        router.replace("/register?mode=signin");
-      } else {
-        setIsAuthenticated(true);
-        setIsLoading(false);
-      }
+    if (!isAuthenticated()) {
+      router.replace("/register?mode=signin");
+    } else {
+      setIsAuth(true);
+      setIsCheckingAuth(false);
     }
   }, [router]);
 
@@ -166,7 +168,9 @@ const FinancialReports: React.FC = () => {
     setDataError(null);
 
     try {
-      const data = await reportsService.getFinancialReports(dateRange);
+      const data = await reportsService.getFinancialReports(
+        dateRange as ReportsRange,
+      );
       setReportsData(data);
     } catch (error) {
       console.error("Error fetching reports:", error);
@@ -180,17 +184,19 @@ const FinancialReports: React.FC = () => {
     }
   };
 
-  // Load data when authenticated and date range changes
+  // Load data when authenticated and date range / tab changes
   useEffect(() => {
-    if (isAuthenticated && selectedReport === "monthly") {
-      fetchReportsData();
+    if (isAuth && selectedReport === "monthly") {
+      void fetchReportsData();
     }
-  }, [isAuthenticated, dateRange, selectedReport]);
+  }, [isAuth, dateRange, selectedReport]);
 
   // Handle PDF export
   const handleExportPDF = async () => {
     try {
-      const blob = await reportsService.exportReportPDF(dateRange);
+      const blob = await reportsService.exportReportPDF(
+        dateRange as ReportsRange,
+      );
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -208,24 +214,20 @@ const FinancialReports: React.FC = () => {
   };
 
   const renderMonthlyReport = () => {
-    if (dataLoading) {
-      return <LoadingSpinner />;
-    }
+    if (dataLoading) return <LoadingSpinner />;
 
-    if (dataError) {
+    if (dataError)
       return (
         <ErrorMessage message={dataError} onRetry={fetchReportsData} />
       );
-    }
 
-    if (!reportsData) {
+    if (!reportsData)
       return (
         <ErrorMessage
           message="No data available"
           onRetry={fetchReportsData}
         />
       );
-    }
 
     const {
       summary,
@@ -291,16 +293,8 @@ const FinancialReports: React.FC = () => {
             <AreaChart data={monthlyData}>
               <defs>
                 <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="5%"
-                    stopColor="#10b981"
-                    stopOpacity={0.3}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor="#10b981"
-                    stopOpacity={0}
-                  />
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient
                   id="colorExpenses"
@@ -309,16 +303,8 @@ const FinancialReports: React.FC = () => {
                   x2="0"
                   y2="1"
                 >
-                  <stop
-                    offset="5%"
-                    stopColor="#ef4444"
-                    stopOpacity={0.3}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor="#ef4444"
-                    stopOpacity={0}
-                  />
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -517,13 +503,8 @@ const FinancialReports: React.FC = () => {
                 </h3>
                 <ul className="space-y-2 text-sm text-gray-700">
                   {insights.map((insight, idx) => (
-                    <li
-                      key={idx}
-                      className="flex items-start gap-2"
-                    >
-                      <span className="text-blue-600 font-bold">
-                        •
-                      </span>
+                    <li key={idx} className="flex items-start gap-2">
+                      <span className="text-blue-600 font-bold">•</span>
                       <span>{insight}</span>
                     </li>
                   ))}
@@ -536,7 +517,7 @@ const FinancialReports: React.FC = () => {
     );
   };
 
-  // ----- Example data for the advanced charts tab (can later be wired to API) -----
+  // Example data for advanced charts tab
   const comparisonData = [
     { month: "Jan", income: 5000, expenses: 3500, savings: 1500 },
     { month: "Feb", income: 5200, expenses: 3800, savings: 1400 },
@@ -561,11 +542,11 @@ const FinancialReports: React.FC = () => {
   ];
 
   // Show loading while checking auth
-  if (isLoading || !isAuthenticated) {
+  if (isCheckingAuth || !isAuth) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>

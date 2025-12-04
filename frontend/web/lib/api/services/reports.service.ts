@@ -1,6 +1,20 @@
 // services/reports.service.ts
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8084';
+import { apiRequest, getToken } from "@/lib/api";
+
+const API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8084"
+).replace(/\/$/, "");
+
+// ---------- Types ----------
+
+export type ReportsRange =
+  | "last-7-days"
+  | "last-30-days"
+  | "last-3-months"
+  | "last-6-months"
+  | "last-year"
+  | "custom";
 
 export interface MonthlyReportData {
   month: string;
@@ -53,261 +67,142 @@ export interface ReportsData {
   insights: string[];
 }
 
+// ---------- Helpers ----------
+
+const buildUrl = (path: string) =>
+  `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+
+// ---------- Service ----------
+
 class ReportsService {
-  private getAuthToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('authToken') || localStorage.getItem('ft_token');
-  }
-
-  private getHeaders(): HeadersInit {
-    const token = this.getAuthToken();
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-    
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    
-    return headers;
-  }
-
   /**
    * Fetch comprehensive financial reports
    */
-  async getFinancialReports(dateRange: string = 'last-30-days'): Promise<ReportsData> {
-    try {
-      console.log('Fetching reports from:', `${API_BASE_URL}/api/reports/financial?range=${dateRange}`);
-      
-      const response = await fetch(
-        `${API_BASE_URL}/api/reports/financial?range=${dateRange}`,
-        {
-          method: 'GET',
-          headers: this.getHeaders(),
-          credentials: 'include',
-        }
-      );
+  async getFinancialReports(
+    dateRange: ReportsRange = "last-30-days",
+  ): Promise<ReportsData> {
+    const endpoint = `/api/reports/financial?range=${encodeURIComponent(
+      dateRange,
+    )}`;
 
-      console.log('Response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error(`Failed to fetch reports: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log('Reports data received:', data);
-      return data;
-    } catch (error) {
-      console.error('Error fetching financial reports:', error);
-      throw error;
-    }
+    // Uses shared apiRequest → automatically attaches Authorization header
+    return apiRequest<ReportsData>(endpoint, { method: "GET" });
   }
 
   /**
    * Fetch monthly summary data
    */
-  async getMonthlySummary(dateRange: string = 'last-6-months'): Promise<MonthlyReportData[]> {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/reports/monthly-summary?range=${dateRange}`,
-        {
-          method: 'GET',
-          headers: this.getHeaders(),
-          credentials: 'include',
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch monthly summary: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error fetching monthly summary:', error);
-      throw error;
-    }
+  async getMonthlySummary(
+    dateRange: ReportsRange = "last-6-months",
+  ): Promise<MonthlyReportData[]> {
+    const endpoint = `/api/reports/monthly-summary?range=${encodeURIComponent(
+      dateRange,
+    )}`;
+    return apiRequest<MonthlyReportData[]>(endpoint, { method: "GET" });
   }
 
   /**
    * Fetch category breakdown
    */
-  async getCategoryBreakdown(dateRange: string = 'last-30-days'): Promise<CategoryBreakdown[]> {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/reports/category-breakdown?range=${dateRange}`,
-        {
-          method: 'GET',
-          headers: this.getHeaders(),
-          credentials: 'include',
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch category breakdown: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error fetching category breakdown:', error);
-      throw error;
-    }
+  async getCategoryBreakdown(
+    dateRange: ReportsRange = "last-30-days",
+  ): Promise<CategoryBreakdown[]> {
+    const endpoint = `/api/reports/category-breakdown?range=${encodeURIComponent(
+      dateRange,
+    )}`;
+    return apiRequest<CategoryBreakdown[]>(endpoint, { method: "GET" });
   }
 
   /**
    * Fetch savings goals
    */
   async getSavingsGoals(): Promise<SavingsGoal[]> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/reports/savings-goals`, {
-        method: 'GET',
-        headers: this.getHeaders(),
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch savings goals: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error fetching savings goals:', error);
-      throw error;
-    }
+    const endpoint = `/api/reports/savings-goals`;
+    return apiRequest<SavingsGoal[]>(endpoint, { method: "GET" });
   }
 
   /**
    * Fetch top expenses
    */
-  async getTopExpenses(dateRange: string = 'last-30-days', limit: number = 5): Promise<TopExpense[]> {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/reports/top-expenses?range=${dateRange}&limit=${limit}`,
-        {
-          method: 'GET',
-          headers: this.getHeaders(),
-          credentials: 'include',
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch top expenses: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error fetching top expenses:', error);
-      throw error;
-    }
+  async getTopExpenses(
+    dateRange: ReportsRange = "last-30-days",
+    limit: number = 5,
+  ): Promise<TopExpense[]> {
+    const endpoint = `/api/reports/top-expenses?range=${encodeURIComponent(
+      dateRange,
+    )}&limit=${limit}`;
+    return apiRequest<TopExpense[]>(endpoint, { method: "GET" });
   }
 
   /**
    * Fetch financial insights
    */
-  async getFinancialInsights(dateRange: string = 'last-30-days'): Promise<string[]> {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/reports/insights?range=${dateRange}`,
-        {
-          method: 'GET',
-          headers: this.getHeaders(),
-          credentials: 'include',
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch insights: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error fetching insights:', error);
-      throw error;
-    }
+  async getFinancialInsights(
+    dateRange: ReportsRange = "last-30-days",
+  ): Promise<string[]> {
+    const endpoint = `/api/reports/insights?range=${encodeURIComponent(
+      dateRange,
+    )}`;
+    return apiRequest<string[]>(endpoint, { method: "GET" });
   }
 
   /**
    * Export report as PDF
+   * (uses raw fetch because we need a Blob, not JSON)
    */
-  async exportReportPDF(dateRange: string = 'last-30-days'): Promise<Blob> {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/reports/export/pdf?range=${dateRange}`,
-        {
-          method: 'GET',
-          headers: this.getHeaders(),
-          credentials: 'include',
-        }
-      );
+  async exportReportPDF(
+    dateRange: ReportsRange = "last-30-days",
+  ): Promise<Blob> {
+    const url = buildUrl(
+      `/api/reports/export/pdf?range=${encodeURIComponent(dateRange)}`,
+    );
+    const token = getToken();
 
-      if (!response.ok) {
-        throw new Error(`Failed to export PDF: ${response.statusText}`);
-      }
+    console.log("📄 Export PDF request:", {
+      url,
+      hasToken: !!token,
+    });
 
-      const blob = await response.blob();
-      return blob;
-    } catch (error) {
-      console.error('Error exporting PDF:', error);
-      throw error;
+    const headers: HeadersInit = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
     }
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers,
+      credentials: "include",
+    });
+
+    console.log("📄 Export PDF response:", response.status, response.statusText);
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      console.error("❌ PDF export error body:", text);
+      throw new Error(
+        `Failed to export PDF: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    return response.blob();
   }
 
   /**
    * Get comparison data between two periods
    */
   async getComparisonData(period1: string, period2: string): Promise<any> {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/reports/comparison?period1=${period1}&period2=${period2}`,
-        {
-          method: 'GET',
-          headers: this.getHeaders(),
-          credentials: 'include',
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch comparison data: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error fetching comparison data:', error);
-      throw error;
-    }
+    const endpoint = `/api/reports/comparison?period1=${encodeURIComponent(
+      period1,
+    )}&period2=${encodeURIComponent(period2)}`;
+    return apiRequest<any>(endpoint, { method: "GET" });
   }
 
   /**
    * Get forecast data
    */
   async getForecastData(months: number = 6): Promise<any> {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/reports/forecast?months=${months}`,
-        {
-          method: 'GET',
-          headers: this.getHeaders(),
-          credentials: 'include',
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch forecast data: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error fetching forecast data:', error);
-      throw error;
-    }
+    const endpoint = `/api/reports/forecast?months=${months}`;
+    return apiRequest<any>(endpoint, { method: "GET" });
   }
 }
 
