@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useRouter } from "next/navigation";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   AreaChart,
   Area,
@@ -141,14 +141,18 @@ const FinancialReports: React.FC = () => {
   const [isAuth, setIsAuth] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  const [selectedReport, setSelectedReport] =
-    useState<ReportTab>("monthly");
-  const [dateRange, setDateRange] =
-    useState<DateRange>("last-30-days");
+  const [selectedReport, setSelectedReport] = useState<ReportTab>("monthly");
+  const [dateRange, setDateRange] = useState<DateRange>("last-30-days");
 
   const [reportsData, setReportsData] = useState<ReportsData | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
+
+  // ✅ Add abort controller ref to cancel previous requests
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // ✅ Add ref to track if component is mounted
+  const isMountedRef = useRef(true);
 
   // Auth check – uses shared helper (respects localStorage + cookie)
   useEffect(() => {
@@ -162,34 +166,90 @@ const FinancialReports: React.FC = () => {
     }
   }, [router]);
 
-  // Fetch reports data
-  const fetchReportsData = async () => {
+  // ✅ FIX: Memoize fetchReportsData with useCallback
+  const fetchReportsData = useCallback(async () => {
+    // Prevent multiple simultaneous requests
+    if (dataLoading) {
+      console.log("Request already in progress, skipping...");
+      return;
+    }
+
+    // Cancel previous request if it exists
+    if (abortControllerRef.current) {
+      console.log("Aborting previous request...");
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller
+    abortControllerRef.current = new AbortController();
+
     setDataLoading(true);
     setDataError(null);
 
     try {
+      console.log(`Fetching reports for range: ${dateRange}`);
       const data = await reportsService.getFinancialReports(
         dateRange as ReportsRange,
       );
-      setReportsData(data);
+      
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setReportsData(data);
+        setDataError(null);
+        console.log("Reports data loaded successfully");
+      }
     } catch (error) {
-      console.error("Error fetching reports:", error);
-      setDataError(
-        error instanceof Error
-          ? error.message
-          : "Failed to load reports data",
-      );
-    } finally {
-      setDataLoading(false);
-    }
-  };
+      // Ignore abort errors
+      if (error instanceof Error && error.name === "AbortError") {
+        console.log("Request was aborted");
+        return;
+      }
 
-  // Load data when authenticated and date range / tab changes
+      console.error("Error fetching reports:", error);
+      
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setDataError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load reports data",
+        );
+      }
+    } finally {
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setDataLoading(false);
+      }
+    }
+  }, [dateRange, dataLoading]); // ✅ Only depends on dateRange and dataLoading
+
+  // ✅ FIX: Load data when authenticated, date range, or tab changes
   useEffect(() => {
     if (isAuth && selectedReport === "monthly") {
+      console.log("Triggering data fetch...");
       void fetchReportsData();
     }
-  }, [isAuth, dateRange, selectedReport]);
+
+    // Cleanup: abort request on unmount or when effect re-runs
+    return () => {
+      if (abortControllerRef.current) {
+        console.log("Cleanup: aborting request");
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [isAuth, selectedReport, fetchReportsData]); // ✅ Now safe to include fetchReportsData
+
+  // ✅ Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   // Handle PDF export
   const handleExportPDF = async () => {
