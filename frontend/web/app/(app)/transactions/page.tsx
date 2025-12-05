@@ -1,4 +1,5 @@
-﻿"use client";
+﻿// frontend/web/app/(app)/transactions/page.tsx
+"use client";
 
 import { useRouter } from "next/navigation";
 import * as React from "react";
@@ -17,7 +18,10 @@ import {
   Wallet,
 } from "lucide-react";
 
-import { transactionsAPI, type Transaction as ApiTransaction } from "@/lib/api";
+import {
+  transactionsAPI,
+  type Transaction as ApiTransaction,
+} from "@/lib/api";
 import { SearchAndFilters } from "@/components/SearchAndFilters";
 import { EmptyState } from "@/components/EmptyState";
 
@@ -47,19 +51,15 @@ interface Category {
   badgeText: string;
 }
 
-/**
- * UI Transaction type
- * - We override ApiTransaction.category and ApiTransaction.type
- * - In the UI we always use lowercase "income" / "expense"
- */
-interface Transaction
-  extends Omit<ApiTransaction, "category" | "type"> {
+// Frontend representation of a transaction row
+interface Transaction extends Omit<ApiTransaction, "category" | "type"> {
   category: Exclude<CategoryId, "all">;
   type: TxType;
   status: TxStatus;
   paymentMethod: string;
   tags: string[];
   aiSuggested: boolean;
+  merchant?: string;
 }
 
 interface NewTxForm {
@@ -76,7 +76,7 @@ interface NewTxForm {
 interface TxFilters {
   search?: string;
   type?: "all" | TxType;
-  category?: string; // label from SearchAndFilters (e.g. "Food & Dining")
+  category?: string;
   sort?: "date-desc" | "date-asc" | "amount-desc" | "amount-asc";
 }
 
@@ -134,12 +134,9 @@ const mapCategoryToUI = (category: string): Exclude<CategoryId, "all"> => {
   return map[category] || "other";
 };
 
-/**
- * Map UI category + type -> backend category label
- */
 const mapCategoryToBackend = (
   category: Exclude<CategoryId, "all">,
-  type: TxType
+  type: TxType,
 ): string => {
   if (type === "income") return "Income";
 
@@ -156,17 +153,13 @@ const mapCategoryToBackend = (
   return map[category] || "Other";
 };
 
-/**
- * Map UI type -> backend enum value
- */
-const toBackendType = (type: TxType | undefined) =>
+const toBackendType = (type: TxType) =>
   type === "income" ? "INCOME" : "EXPENSE";
 
-/**
- * Map backend enum -> UI type
- */
-const fromBackendType = (type: ApiTransaction["type"]): TxType =>
-  type === "INCOME" ? "income" : "expense";
+const fromBackendType = (
+  type: "INCOME" | "EXPENSE" | "income" | "expense",
+): TxType =>
+  type === "INCOME" || type === "income" ? "income" : "expense";
 
 /* =========================
    Data
@@ -246,83 +239,18 @@ export default function TransactionManager() {
   const router = useRouter();
   const isMounted = useIsMounted();
 
-  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   const [transactions, setTransactions] = React.useState<Transaction[]>([]);
-  const [filteredTransactions, setFilteredTransactions] = React.useState<
-    Transaction[]
-  >([]);
+  const [filteredTransactions, setFilteredTransactions] =
+    React.useState<Transaction[]>([]);
   const [selectedTransactions, setSelectedTransactions] = React.useState<
     string[]
   >([]);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editForm, setEditForm] = React.useState<Partial<Transaction>>({});
 
-  // ---------- Auth Check ----------
-  React.useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token =
-        localStorage.getItem("authToken") ||
-        localStorage.getItem("ft_token");
-
-      if (!token) {
-        router.replace("/register?mode=signin");
-      } else {
-        setIsAuthenticated(true);
-        void loadTransactions();
-      }
-    }
-  }, [router]);
-
-  // ---------- Load Transactions from API ----------
-  const loadTransactions = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const data = await transactionsAPI.getAll();
-
-      if (!Array.isArray(data)) {
-        throw new Error("Invalid response format: expected array of transactions");
-      }
-
-      const transformed: Transaction[] = data.map((t) => ({
-        ...t,
-        id: t.id!,
-        type: fromBackendType(t.type),      // 👈 normalize enum to "income"/"expense"
-        category: mapCategoryToUI(t.category),
-        status: "completed" as TxStatus,
-        paymentMethod: "Credit Card •••• 4242",
-        tags: [],
-        aiSuggested: false,
-      }));
-
-      setTransactions(transformed);
-      setFilteredTransactions(transformed);
-    } catch (err: any) {
-      console.error("❌ Failed to load transactions:", err);
-
-      if (err.message?.includes("401") || err.message?.includes("Unauthorized")) {
-        setError("Authentication failed. Please sign in again.");
-        setTimeout(() => {
-          localStorage.removeItem("authToken");
-          localStorage.removeItem("ft_token");
-          router.replace("/register?mode=signin");
-        }, 2000);
-      } else {
-        setError(err.message || "Failed to load transactions");
-      }
-
-      setTransactions([]);
-      setFilteredTransactions([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // ---------- Add-Transaction Modal ----------
   const [showAdd, setShowAdd] = React.useState<boolean>(false);
   const [form, setForm] = React.useState<NewTxForm>({
     date: new Date().toISOString().slice(0, 10),
@@ -338,9 +266,82 @@ export default function TransactionManager() {
     Partial<Record<keyof NewTxForm, string>>
   >({});
 
+  // Auth Check + initial load
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const token =
+      localStorage.getItem("authToken") ||
+      localStorage.getItem("ft_token");
+
+    if (!token) {
+      router.replace("/register?mode=signin");
+      return;
+    }
+
+    void loadTransactions();
+  }, [router]);
+
+  /**
+   * Convert backend transaction → UI transaction
+   */
+  const normalizeTransaction = (t: ApiTransaction): Transaction => ({
+    id: t.id!,
+    userId: t.userId,
+    amount: t.amount,
+    description: t.description,
+    merchant: (t as any).merchant || t.description || "Unknown",
+    category: mapCategoryToUI(t.category),
+    date: t.date,
+    type: fromBackendType(t.type),
+    recurring: t.recurring,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+    status: "completed",
+    paymentMethod: "Credit Card •••• 4242",
+    tags: [],
+    aiSuggested: false,
+  });
+
+  const loadTransactions = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const data = await transactionsAPI.getAll();
+
+      if (!Array.isArray(data)) {
+        throw new Error("Invalid response format");
+      }
+
+      const transformed: Transaction[] = data.map(normalizeTransaction);
+
+      setTransactions(transformed);
+      setFilteredTransactions(transformed);
+    } catch (err: any) {
+      console.error("❌ Failed to load transactions:", err);
+
+      if (err?.message?.includes("401") || err?.message?.includes("Unauthorized")) {
+        setError("Authentication failed. Please sign in again.");
+        setTimeout(() => {
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("ft_token");
+          router.replace("/register?mode=signin");
+        }, 2000);
+      } else {
+        setError(err?.message || "Failed to load transactions");
+      }
+
+      setTransactions([]);
+      setFilteredTransactions([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const getCategoryInfo = React.useCallback(
     (id: CategoryId): Category => CATEGORIES.find((c) => c.id === id)!,
-    []
+    [],
   );
 
   const totals = React.useMemo(() => {
@@ -355,13 +356,13 @@ export default function TransactionManager() {
 
   const onToggleSelect = (id: string) => {
     setSelectedTransactions((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   };
 
   const onToggleSelectAll = (checked: boolean) => {
     setSelectedTransactions(
-      checked ? filteredTransactions.map((t) => t.id!) : []
+      checked ? filteredTransactions.map((t) => t.id!) : [],
     );
   };
 
@@ -372,13 +373,13 @@ export default function TransactionManager() {
 
     try {
       await Promise.all(
-        selectedTransactions.map((id) => transactionsAPI.delete(id))
+        selectedTransactions.map((id) => transactionsAPI.delete(id)),
       );
       setTransactions((prev) =>
-        prev.filter((t) => !selectedTransactions.includes(t.id!))
+        prev.filter((t) => !selectedTransactions.includes(t.id!)),
       );
       setFilteredTransactions((prev) =>
-        prev.filter((t) => !selectedTransactions.includes(t.id!))
+        prev.filter((t) => !selectedTransactions.includes(t.id!)),
       );
       setSelectedTransactions([]);
     } catch (err) {
@@ -396,32 +397,34 @@ export default function TransactionManager() {
     if (!editingId) return;
 
     try {
+      const uiType = (editForm.type ?? "expense") as TxType;
       const backendCategory = mapCategoryToBackend(
         editForm.category as Exclude<CategoryId, "all">,
-        editForm.type as TxType
+        uiType,
       );
+      const backendType = uiType; // "income" | "expense"
 
       const updated = await transactionsAPI.update(editingId, {
-        date: editForm.date,
-        description: editForm.description,
-        merchant: editForm.merchant,
+        date: editForm.date!,
+        description: editForm.description!,
         category: backendCategory,
-        amount: editForm.amount,
-        type: toBackendType(editForm.type as TxType), // 👈 send enum to backend
+        amount: editForm.amount!,
+        type: backendType,
+        // merchant intentionally NOT sent
       });
+
+      const normalized = normalizeTransaction(updated);
 
       const updateFn = (list: Transaction[]) =>
         list.map((t) =>
           t.id === editingId
             ? {
-                ...t,
-                ...updated,
-                type: fromBackendType(updated.type), // 👈 normalize back to UI
-                category: mapCategoryToUI(updated.category),
-                status: editForm.status as TxStatus,
+                ...normalized,
+                status: editForm.status || t.status,
                 paymentMethod: editForm.paymentMethod || t.paymentMethod,
+                merchant: editForm.merchant || normalized.merchant,
               }
-            : t
+            : t,
         );
 
       setTransactions(updateFn);
@@ -461,8 +464,13 @@ export default function TransactionManager() {
     return e;
   };
 
+  /**
+   * Create new transaction
+   * This payload is aligned with the backend & Dashboard
+   */
   const submitNewTx = async (e: React.FormEvent) => {
     e.preventDefault();
+
     const eMap = validate(form);
     setFormErrors(eMap);
     if (Object.keys(eMap).length) return;
@@ -470,42 +478,49 @@ export default function TransactionManager() {
     const parsed = Number(form.amount);
     const normalizedAmount = Math.abs(parsed);
     const backendCategory = mapCategoryToBackend(form.category, form.type);
-    const backendType = toBackendType(form.type); // 👈 enum
+    const backendType = toBackendType(form.type); // "INCOME" | "EXPENSE"
 
     try {
-      const created = await transactionsAPI.create({
+      const payload = {
         date: form.date,
-        merchant: form.merchant.trim(),
-        description: form.description.trim(),
+        description: form.description.trim(), // same as Dashboard
         amount: normalizedAmount,
         category: backendCategory,
-        type: backendType, // 👈 send INCOME / EXPENSE
-      });
+        type: backendType,
+      };
 
+      console.log("📤 Creating transaction:", payload);
+
+      const created = await transactionsAPI.create(payload);
+
+      console.log("✅ Created:", created);
+
+      const base = normalizeTransaction(created);
       const newTx: Transaction = {
-        ...created,
-        id: created.id!,
-        type: fromBackendType(created.type), // 👈 normalize to UI
-        category: mapCategoryToUI(created.category),
+        ...base,
+        merchant: form.merchant.trim(), // frontend-only field
         status: form.status,
         paymentMethod: form.paymentMethod.trim(),
-        tags: [],
-        aiSuggested: false,
       };
 
       setTransactions((prev) => [newTx, ...prev]);
       setFilteredTransactions((prev) => [newTx, ...prev]);
       setShowAdd(false);
-      setForm((f) => ({
-        ...f,
+
+      setForm({
+        date: new Date().toISOString().slice(0, 10),
         merchant: "",
         description: "",
         amount: "",
-      }));
+        category: "food",
+        type: "expense",
+        status: "completed",
+        paymentMethod: "Credit Card •••• 4242",
+      });
       setFormErrors({});
-    } catch (err) {
-      alert("Failed to create transaction");
-      console.error(err);
+    } catch (err: any) {
+      console.error("❌ Failed to create transaction:", err);
+      alert(`Failed to create transaction: ${err?.message || "Unknown error"}`);
     }
   };
 
@@ -525,10 +540,9 @@ export default function TransactionManager() {
     }
   };
 
-  // ---------- Filters via SearchAndFilters ----------
   const categoriesForFilters = React.useMemo(
     () => CATEGORIES.filter((c) => c.id !== "all").map((c) => c.name),
-    []
+    [],
   );
 
   const handleFilterChange = React.useCallback(
@@ -539,8 +553,8 @@ export default function TransactionManager() {
         const q = filters.search.toLowerCase();
         filtered = filtered.filter(
           (t) =>
-            t.merchant.toLowerCase().includes(q) ||
-            t.description.toLowerCase().includes(q)
+            (t.merchant || "").toLowerCase().includes(q) ||
+            t.description.toLowerCase().includes(q),
         );
       }
 
@@ -570,16 +584,20 @@ export default function TransactionManager() {
       });
 
       setFilteredTransactions(filtered);
-      setSelectedTransactions([]); // reset selection on new filters
+      setSelectedTransactions([]);
     },
-    [transactions]
+    [transactions],
   );
+
+  /* =========================
+     Render states
+     ========================= */
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-gray-600">Loading transactions...</p>
         </div>
       </div>
@@ -607,27 +625,12 @@ export default function TransactionManager() {
     );
   }
 
-  // 🔹 Global empty state when there are no transactions at all
-  if (transactions.length === 0) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center px-4">
-        <div className="max-w-md w-full">
-          <EmptyState
-            icon={Wallet}
-            title="No Transactions Yet"
-            description="Start tracking your finances by adding your first transaction. It only takes a few seconds!"
-            actionLabel="Add Transaction"
-            onAction={() => setShowAdd(true)}
-            gradient="from-blue-500 to-purple-500"
-          />
-        </div>
-      </div>
-    );
-  }
+  /* =========================
+     Main UI
+     ========================= */
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -658,7 +661,7 @@ export default function TransactionManager() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Summary Cards */}
+        {/* Summary cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-2">
@@ -713,14 +716,13 @@ export default function TransactionManager() {
           </div>
         </div>
 
-        {/* Filters (via SearchAndFilters) */}
+        {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
           <SearchAndFilters
             onFilterChange={handleFilterChange}
             categories={categoriesForFilters}
           />
 
-          {/* Bulk actions */}
           {selectedTransactions.length > 0 && (
             <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-3">
               <span className="text-sm font-medium text-gray-700">
@@ -751,7 +753,7 @@ export default function TransactionManager() {
                         selectedTransactions.length ===
                           filteredTransactions.length
                       }
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      onChange={(e) =>
                         onToggleSelectAll(e.target.checked)
                       }
                       className="w-4 h-4 text-blue-600 rounded"
@@ -829,7 +831,7 @@ export default function TransactionManager() {
                           <div className="space-y-2">
                             <input
                               type="text"
-                              value={editForm.merchant}
+                              value={editForm.merchant || ""}
                               onChange={(e) =>
                                 setEditForm((prev) => ({
                                   ...prev,
@@ -861,11 +863,13 @@ export default function TransactionManager() {
                                   : "from-blue-500 to-blue-600"
                               } rounded-lg flex items-center justify-center text-white font-bold text-lg flex-shrink-0`}
                             >
-                              {t.merchant.charAt(0)}
+                              {(t.merchant || "?")
+                                .charAt(0)
+                                .toUpperCase()}
                             </div>
                             <div>
                               <div className="font-medium text-gray-900">
-                                {t.merchant}
+                                {t.merchant || "Unknown"}
                               </div>
                               <div className="text-sm text-gray-500">
                                 {t.description}
@@ -901,7 +905,7 @@ export default function TransactionManager() {
                                 <option key={cat.id} value={cat.id}>
                                   {cat.icon} {cat.name}
                                 </option>
-                              )
+                              ),
                             )}
                           </select>
                         ) : (

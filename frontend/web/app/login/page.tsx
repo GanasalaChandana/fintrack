@@ -51,6 +51,18 @@ declare global {
   }
 }
 
+// ✅ Debounce utility to prevent multiple rapid calls
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null;
+  return (...args: Parameters<T>) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+
 export default function AuthPage() {
   const router = useRouter();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
@@ -68,6 +80,8 @@ export default function AuthPage() {
   const isSubmitting = useRef(false);
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const [googleLoaded, setGoogleLoaded] = useState(false);
+  const googleInitialized = useRef(false); // ✅ Prevent duplicate initialization
+  const lastGoogleCallTime = useRef(0); // ✅ Track last call time
 
   // Load Google OAuth Script
   useEffect(() => {
@@ -96,9 +110,9 @@ export default function AuthPage() {
     loadGoogleScript();
   }, []);
 
-  // Initialize Google Sign-In
+  // Initialize Google Sign-In (only once)
   useEffect(() => {
-    if (!googleLoaded || !window.google) return;
+    if (!googleLoaded || !window.google || googleInitialized.current) return;
 
     const GOOGLE_CLIENT_ID = '833541687094-vheiq46pf2507ogunobbidu4ke23286d.apps.googleusercontent.com';
 
@@ -123,6 +137,8 @@ export default function AuthPage() {
           }
         );
       }
+      
+      googleInitialized.current = true; // ✅ Mark as initialized
       console.log('✅ Google Sign-In initialized');
     } catch (err) {
       console.error('❌ Google Sign-In initialization error:', err);
@@ -130,8 +146,20 @@ export default function AuthPage() {
     }
   }, [googleLoaded, mode]);
 
+  // ✅ Throttled Google Sign-In handler (prevents rapid duplicate calls)
   const handleGoogleSignIn = async (response: GoogleCredentialResponse) => {
-    if (loading || isSubmitting.current) return;
+    // ✅ Prevent duplicate calls within 2 seconds
+    const now = Date.now();
+    if (now - lastGoogleCallTime.current < 2000) {
+      console.log('⚠️ Google Sign-In call throttled (too soon)');
+      return;
+    }
+    lastGoogleCallTime.current = now;
+
+    if (loading || isSubmitting.current) {
+      console.log('⚠️ Already processing authentication');
+      return;
+    }
     
     console.log('🔵 Google Sign-In callback triggered');
     
@@ -144,6 +172,10 @@ export default function AuthPage() {
       
       console.log('📤 Sending credential to:', `${API_URL}/api/auth/google`);
 
+      // ✅ Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
       const res = await fetch(`${API_URL}/api/auth/google`, {
         method: 'POST',
         headers: {
@@ -152,19 +184,26 @@ export default function AuthPage() {
         },
         credentials: 'include',
         mode: 'cors',
+        signal: controller.signal,
         body: JSON.stringify({
           credential: response.credential,
           clientId: '833541687094-vheiq46pf2507ogunobbidu4ke23286d.apps.googleusercontent.com'
         }),
       });
 
+      clearTimeout(timeoutId);
       console.log('📥 Response status:', res.status);
+
+      // ✅ Handle 429 rate limit specifically
+      if (res.status === 429) {
+        throw new Error('Too many sign-in attempts. Please wait 2-3 minutes and try again.');
+      }
 
       if (!res.ok) {
         let errorMessage = 'Google sign-in failed';
         
         if (res.status === 403) {
-          errorMessage = 'Access denied. Please check backend CORS settings.';
+          errorMessage = 'Access denied. Please try again or use email sign-in.';
         } else if (res.status === 401) {
           errorMessage = 'Invalid Google credentials.';
         } else if (res.status === 500) {
@@ -186,19 +225,16 @@ export default function AuthPage() {
       console.log('✅ Google sign-in successful', data);
 
       if (data.token) {
-        // ✅ FIXED: Use localStorage to match AuthGate
         window.localStorage.setItem('authToken', data.token);
         
         if (data.user) {
           window.localStorage.setItem('user', JSON.stringify(data.user));
         }
 
-        console.log('🔑 Token stored:', window.localStorage.getItem('authToken'));
-        console.log('👤 User stored:', window.localStorage.getItem('user'));
+        console.log('🔑 Token stored successfully');
 
         setSuccess(true);
         
-        // Redirect after 1 second
         setTimeout(() => {
           window.location.href = '/dashboard';
         }, 1000);
@@ -208,8 +244,16 @@ export default function AuthPage() {
 
     } catch (err) {
       console.error('❌ Google Sign-In error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Google sign-in failed. Please try again.';
-      setError(errorMessage);
+      
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          setError('Request timeout. Please check your connection and try again.');
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError('Google sign-in failed. Please try again.');
+      }
     } finally {
       setLoading(false);
       isSubmitting.current = false;
@@ -257,8 +301,12 @@ export default function AuthPage() {
     return true;
   };
 
+  // ✅ Debounced submit handler
   const handleSubmit = async () => {
-    if (loading || isSubmitting.current) return;
+    if (loading || isSubmitting.current) {
+      console.log('⚠️ Already processing request');
+      return;
+    }
 
     setError('');
 
@@ -286,6 +334,10 @@ export default function AuthPage() {
 
       console.log('📤 Request to:', `${API_URL}${endpoint}`);
 
+      // ✅ Add timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: {
@@ -294,9 +346,11 @@ export default function AuthPage() {
         },
         credentials: 'include',
         mode: 'cors',
+        signal: controller.signal,
         body: JSON.stringify(requestBody),
       });
 
+      clearTimeout(timeoutId);
       console.log('📥 Response status:', response.status);
 
       if (response.status === 429) {
@@ -321,15 +375,13 @@ export default function AuthPage() {
       console.log('✅ Authentication successful', data);
 
       if (data.token) {
-        // ✅ FIXED: Use localStorage to match AuthGate
         window.localStorage.setItem('authToken', data.token);
         
         if (data.user) {
           window.localStorage.setItem('user', JSON.stringify(data.user));
         }
 
-        console.log('🔑 Token stored:', window.localStorage.getItem('authToken'));
-        console.log('👤 User stored:', window.localStorage.getItem('user'));
+        console.log('🔑 Token stored successfully');
 
         setSuccess(true);
         
@@ -343,16 +395,20 @@ export default function AuthPage() {
     } catch (err) {
       console.error('❌ Error:', err);
       
-      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
-      
-      if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('too many')) {
-        setError('⏳ Too many attempts. Please wait 2-3 minutes before trying again.');
-      } else if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('invalid')) {
-        setError('Invalid email or password. Please check your credentials.');
-      } else if (errorMessage.includes('409') || errorMessage.toLowerCase().includes('already exists')) {
-        setError('An account with this email already exists. Try signing in instead.');
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          setError('Request timeout. Please check your connection and try again.');
+        } else if (err.message.includes('429') || err.message.toLowerCase().includes('too many')) {
+          setError('⏳ Too many attempts. Please wait 2-3 minutes before trying again.');
+        } else if (err.message.includes('401') || err.message.toLowerCase().includes('invalid')) {
+          setError('Invalid email or password. Please check your credentials.');
+        } else if (err.message.includes('409') || err.message.toLowerCase().includes('already exists')) {
+          setError('An account with this email already exists. Try signing in instead.');
+        } else {
+          setError(err.message);
+        }
       } else {
-        setError(errorMessage);
+        setError('An unexpected error occurred');
       }
     } finally {
       setLoading(false);
