@@ -15,7 +15,6 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -44,23 +43,22 @@ public class SecurityConfig {
                                                 // Allow all OPTIONS requests for CORS preflight
                                                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                                                // Public auth endpoints - no authentication required
+                                                // 🔓 Public auth + oauth endpoints (no token required)
                                                 .requestMatchers(
-                                                                "/api/auth/**",
-                                                                "/api/auth/register",
-                                                                "/api/auth/login",
-                                                                "/api/auth/google",
-                                                                "/api/auth/health",
+                                                                "/api/auth/**", // register, login, google, etc.
+                                                                "/oauth2/**", // Spring Security OAuth2 endpoints
+                                                                "/login/oauth2/**",
                                                                 "/actuator/**",
                                                                 "/error")
                                                 .permitAll()
 
-                                                // Everything else requires authentication
+                                                // 🔒 Everything else requires authentication
                                                 .anyRequest().authenticated())
 
-                                // ✅ Disable default login forms
+                                // ✅ Disable default login mechanisms
                                 .httpBasic(AbstractHttpConfigurer::disable)
-                                .formLogin(AbstractHttpConfigurer::disable);
+                                .formLogin(AbstractHttpConfigurer::disable)
+                                .logout(AbstractHttpConfigurer::disable);
 
                 return http.build();
         }
@@ -69,53 +67,33 @@ public class SecurityConfig {
         public CorsConfigurationSource corsConfigurationSource() {
                 CorsConfiguration configuration = new CorsConfiguration();
 
-                // ✅ Allowed origins - your frontend URLs
-                configuration.setAllowedOrigins(Arrays.asList(
-                                // Local development
+                // ✅ Exact origins
+                configuration.setAllowedOrigins(List.of(
                                 "http://localhost:3000",
                                 "http://127.0.0.1:3000",
-                                "http://localhost:5173", // Vite
+                                "http://localhost:5173",
                                 "http://127.0.0.1:5173",
-                                "http://localhost:8080", // API Gateway
+                                "http://localhost:8080", // API gateway
                                 "http://127.0.0.1:8080",
+                                "https://fintrack-liart.vercel.app"));
 
-                                // Production frontend
-                                "https://fintrack-liart.vercel.app",
-
-                                // ✅ Add wildcard for Vercel preview deployments (optional)
+                // ✅ Wildcard for Vercel preview deployments
+                configuration.setAllowedOriginPatterns(List.of(
                                 "https://fintrack-liart-*.vercel.app"));
 
-                // ✅ Allowed HTTP methods
-                configuration.setAllowedMethods(Arrays.asList(
-                                "GET",
-                                "POST",
-                                "PUT",
-                                "DELETE",
-                                "OPTIONS",
-                                "PATCH",
-                                "HEAD"));
+                configuration.setAllowedMethods(List.of(
+                                "GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"));
 
-                // ✅ Allow all headers (including Authorization, Content-Type, etc.)
-                configuration.setAllowedHeaders(Arrays.asList("*"));
+                configuration.setAllowedHeaders(List.of("*"));
 
-                // ✅ Expose headers to the frontend
-                configuration.setExposedHeaders(Arrays.asList(
-                                "Authorization",
-                                "Content-Type",
-                                "Accept",
-                                "X-Requested-With",
-                                "Access-Control-Allow-Origin"));
+                configuration.setExposedHeaders(List.of(
+                                "Authorization", "Content-Type", "Accept"));
 
-                // ✅ Allow credentials (cookies, authorization headers)
                 configuration.setAllowCredentials(true);
-
-                // ✅ Cache preflight requests for 1 hour (3600 seconds)
                 configuration.setMaxAge(3600L);
 
-                // ✅ Apply CORS configuration to all endpoints
                 UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
                 source.registerCorsConfiguration("/**", configuration);
-
                 return source;
         }
 }
