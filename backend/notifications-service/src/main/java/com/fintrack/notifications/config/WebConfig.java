@@ -13,12 +13,12 @@ import java.util.Arrays;
 
 /**
  * CORS Configuration for Notification Service
- * Allows frontend (localhost:3000) to make requests to this service
- * (localhost:8086)
+ * Allows frontend (localhost:3000 and Vercel deployment) to make requests to
+ * this service
  * 
  * This configuration:
  * 1. Enables CORS for all /api/** endpoints
- * 2. Allows requests from the Next.js frontend at localhost:3000
+ * 2. Allows requests from Next.js frontend (local and production)
  * 3. Permits all standard HTTP methods and headers
  * 4. Enables credentials (cookies, authorization headers)
  */
@@ -28,7 +28,9 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:3000")
+                .allowedOrigins(
+                        "http://localhost:3000",
+                        "https://fintrack-liart.vercel.app")
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .exposedHeaders("Authorization")
@@ -45,8 +47,10 @@ public class WebConfig implements WebMvcConfigurer {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Allow frontend origin
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000"));
+        // Allow frontend origins (local development and production)
+        configuration.setAllowedOrigins(Arrays.asList(
+                "http://localhost:3000",
+                "https://fintrack-liart.vercel.app"));
 
         // Allow all HTTP methods
         configuration.setAllowedMethods(Arrays.asList(
