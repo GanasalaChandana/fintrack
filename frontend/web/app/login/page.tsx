@@ -15,8 +15,36 @@ import {
   Loader2,
   DollarSign,
   Shield,
-  Zap
+  Zap,
+  Server
 } from 'lucide-react';
+
+// Helper function to wake up the backend
+const wakeUpBackend = async (apiUrl: string): Promise<boolean> => {
+  try {
+    console.log('🔔 Pinging backend to wake it up...');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 seconds
+    
+    const response = await fetch(`${apiUrl}/actuator/health`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (response.ok) {
+      console.log('✅ Backend is awake and responding');
+      return true;
+    }
+    
+    console.log('⚠️ Backend responded but not healthy');
+    return false;
+  } catch (error) {
+    console.log('⚠️ Backend wake-up ping failed:', error);
+    return false;
+  }
+};
 
 function AuthPageContent() {
   const router = useRouter();
@@ -35,11 +63,13 @@ function AuthPageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [wakingUp, setWakingUp] = useState(false);
   const isSubmitting = useRef(false);
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const [googleLoaded, setGoogleLoaded] = useState(false);
   const googleInitialized = useRef(false);
   const lastGoogleCallTime = useRef(0);
+  const backendAwake = useRef(false);
 
   // Load Google OAuth Script
   useEffect(() => {
@@ -105,6 +135,28 @@ function AuthPageContent() {
     }
   }, [googleLoaded, mode]);
 
+  const ensureBackendAwake = async (apiUrl: string): Promise<boolean> => {
+    if (backendAwake.current) {
+      return true;
+    }
+
+    setWakingUp(true);
+    setError('Waking up server... This may take 30-60 seconds on first request.');
+    
+    const isAwake = await wakeUpBackend(apiUrl);
+    
+    setWakingUp(false);
+    backendAwake.current = isAwake;
+    
+    if (!isAwake) {
+      setError('Server is taking longer than expected. Please wait a moment and try again.');
+    } else {
+      setError('');
+    }
+    
+    return isAwake;
+  };
+
   const handleGoogleSignIn = async (response: GoogleCredentialResponse, retryCount = 0): Promise<void> => {
     const now = Date.now();
     if (now - lastGoogleCallTime.current < 2000) {
@@ -127,10 +179,20 @@ function AuthPageContent() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
       
+      // Ensure backend is awake
+      const isAwake = await ensureBackendAwake(API_URL);
+      if (!isAwake && retryCount === 0) {
+        // Wait a bit and retry once
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        setLoading(false);
+        isSubmitting.current = false;
+        return handleGoogleSignIn(response, retryCount + 1);
+      }
+      
       console.log('📤 Sending credential to:', `${API_URL}/api/auth/google`);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // Increased to 60 seconds
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes
 
       const res = await fetch(`${API_URL}/api/auth/google`, {
         method: 'POST',
@@ -139,6 +201,7 @@ function AuthPageContent() {
           'Accept': 'application/json',
         },
         credentials: 'include',
+        mode: 'cors',
         signal: controller.signal,
         body: JSON.stringify({
           credential: response.credential,
@@ -148,9 +211,8 @@ function AuthPageContent() {
       clearTimeout(timeoutId);
       console.log('📥 Response status:', res.status);
 
-      // Handle 429 with exponential backoff retry
       if (res.status === 429 && retryCount < 3) {
-        const waitTime = Math.pow(2, retryCount) * 2000; // 2s, 4s, 8s
+        const waitTime = Math.pow(2, retryCount) * 2000;
         console.log(`⏳ Rate limited, retrying in ${waitTime/1000}s...`);
         setError(`Server is busy. Retrying in ${waitTime/1000} seconds...`);
         
@@ -212,7 +274,7 @@ function AuthPageContent() {
       
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
-          setError('Request is taking longer than expected. The server might be waking up (this happens on free hosting). Please wait 30 seconds and try again.');
+          setError('Request timeout. The server might be starting up. Please wait 30 seconds and try again.');
         } else {
           setError(err.message);
         }
@@ -283,9 +345,19 @@ function AuthPageContent() {
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+      
+      // Ensure backend is awake
+      const isAwake = await ensureBackendAwake(API_URL);
+      if (!isAwake && retryCount === 0) {
+        // Wait a bit and retry once
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        setLoading(false);
+        isSubmitting.current = false;
+        return handleSubmit(retryCount + 1);
+      }
+      
       const endpoint = mode === 'signin' ? '/api/auth/login' : '/api/auth/register';
       
-      // Structure request body to match backend expectations
       const requestBody = mode === 'signin' 
         ? {
             email: formData.email.toLowerCase().trim(),
@@ -302,7 +374,7 @@ function AuthPageContent() {
       console.log('📤 Request to:', `${API_URL}${endpoint}`);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // Increased to 60 seconds
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes
 
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
@@ -311,6 +383,7 @@ function AuthPageContent() {
           'Accept': 'application/json',
         },
         credentials: 'include',
+        mode: 'cors',
         signal: controller.signal,
         body: JSON.stringify(requestBody),
       });
@@ -318,9 +391,8 @@ function AuthPageContent() {
       clearTimeout(timeoutId);
       console.log('📥 Response status:', response.status);
 
-      // Handle 429 with exponential backoff retry
       if (response.status === 429 && retryCount < 3) {
-        const waitTime = Math.pow(2, retryCount) * 2000; // 2s, 4s, 8s
+        const waitTime = Math.pow(2, retryCount) * 2000;
         console.log(`⏳ Rate limited, retrying in ${waitTime/1000}s...`);
         setError(`Server is busy. Retrying in ${waitTime/1000} seconds...`);
         
@@ -381,7 +453,7 @@ function AuthPageContent() {
       
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
-          setError('Request is taking longer than expected. The server might be waking up (this happens on free hosting). Please wait 30 seconds and try again.');
+          setError('Request timeout. The server might be starting up. Please wait 30 seconds and try again.');
         } else {
           setError(err.message);
         }
@@ -403,7 +475,6 @@ function AuthPageContent() {
       password: '',
       confirmPassword: ''
     });
-    // Re-render Google button for new mode
     googleInitialized.current = false;
   };
 
@@ -504,17 +575,27 @@ function AuthPageContent() {
             </div>
           </div>
 
-          {error && error.includes('taking longer') && (
-            <div className="mb-6 bg-yellow-500/10 border border-yellow-500/50 rounded-xl p-4 flex items-start gap-3">
-              <Loader2 className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5 animate-spin" />
+          {wakingUp && (
+            <div className="mb-6 bg-blue-500/10 border border-blue-500/50 rounded-xl p-4 flex items-start gap-3">
+              <Server className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5 animate-pulse" />
               <div>
-                <p className="text-yellow-300 text-sm font-medium mb-1">Server Waking Up</p>
-                <p className="text-yellow-200/80 text-xs">Free tier services sleep after inactivity. This usually takes 30-60 seconds on first request. Please be patient!</p>
+                <p className="text-blue-300 text-sm font-medium mb-1">Starting Server</p>
+                <p className="text-blue-200/80 text-xs">Free tier servers sleep after inactivity. First request takes 30-60 seconds. Please be patient!</p>
               </div>
             </div>
           )}
 
-          {error && !error.includes('taking longer') && (
+          {error && error.includes('Waking') && (
+            <div className="mb-6 bg-yellow-500/10 border border-yellow-500/50 rounded-xl p-4 flex items-start gap-3">
+              <Loader2 className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5 animate-spin" />
+              <div>
+                <p className="text-yellow-300 text-sm font-medium mb-1">Server Waking Up</p>
+                <p className="text-yellow-200/80 text-xs">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {error && !error.includes('Waking') && (
             <div className="mb-6 bg-red-500/10 border border-red-500/50 rounded-xl p-4 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
               <p className="text-red-300 text-sm font-medium">{error}</p>
@@ -536,7 +617,7 @@ function AuthPageContent() {
                     onChange={handleInputChange}
                     className="w-full pl-11 pr-4 py-3 bg-slate-900/50 border border-purple-500/20 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition text-white placeholder-gray-500"
                     placeholder="John Doe"
-                    disabled={loading}
+                    disabled={loading || wakingUp}
                   />
                 </div>
               </div>
@@ -555,7 +636,7 @@ function AuthPageContent() {
                   onChange={handleInputChange}
                   className="w-full pl-11 pr-4 py-3 bg-slate-900/50 border border-purple-500/20 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition text-white placeholder-gray-500"
                   placeholder="you@example.com"
-                  disabled={loading}
+                  disabled={loading || wakingUp}
                   autoComplete="email"
                 />
               </div>
@@ -574,14 +655,14 @@ function AuthPageContent() {
                   onChange={handleInputChange}
                   className="w-full pl-11 pr-12 py-3 bg-slate-900/50 border border-purple-500/20 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition text-white placeholder-gray-500"
                   placeholder="••••••••"
-                  disabled={loading}
+                  disabled={loading || wakingUp}
                   autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition"
-                  disabled={loading}
+                  disabled={loading || wakingUp}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -605,14 +686,14 @@ function AuthPageContent() {
                     onChange={handleInputChange}
                     className="w-full pl-11 pr-12 py-3 bg-slate-900/50 border border-purple-500/20 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition text-white placeholder-gray-500"
                     placeholder="••••••••"
-                    disabled={loading}
+                    disabled={loading || wakingUp}
                     autoComplete="new-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition"
-                    disabled={loading}
+                    disabled={loading || wakingUp}
                   >
                     {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -640,13 +721,13 @@ function AuthPageContent() {
 
             <button
               onClick={() => handleSubmit()}
-              disabled={loading}
+              disabled={loading || wakingUp}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3.5 rounded-xl font-semibold hover:shadow-2xl hover:shadow-purple-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
             >
-              {loading ? (
+              {(loading || wakingUp) ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  {mode === 'signin' ? 'Signing in...' : 'Creating account...'}
+                  {wakingUp ? 'Starting server...' : mode === 'signin' ? 'Signing in...' : 'Creating account...'}
                 </>
               ) : (
                 <>

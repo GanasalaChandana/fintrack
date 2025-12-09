@@ -30,6 +30,8 @@ public class GlobalCorsConfiguration {
     private static final List<String> ALLOWED_ORIGIN_PATTERNS = Arrays.asList(
             // Production
             "https://fintrack-liart.vercel.app",
+            "https://fintrack-liart-*.vercel.app", // Add this line for preview deployments
+            "https://*.vercel.app", // Add this line for all Vercel apps
 
             // Local Development
             "http://localhost:3000",
