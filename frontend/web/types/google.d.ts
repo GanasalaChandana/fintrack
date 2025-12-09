@@ -1,7 +1,6 @@
-// types/google.d.ts
 export interface GoogleCredentialResponse {
   credential: string;
-  select_by: string;
+  select_by?: string;
 }
 
 declare global {
@@ -27,7 +26,7 @@ declare global {
               width?: number | string;
             }
           ): void;
-          prompt(): void;
+          prompt?(): void;
         };
       };
     };

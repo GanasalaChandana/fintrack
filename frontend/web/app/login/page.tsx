@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import type { GoogleCredentialResponse } from '@/types/google';
 import { 
   Eye, 
   EyeOff, 
@@ -16,26 +17,6 @@ import {
   Shield,
   Zap
 } from 'lucide-react';
-
-// Type definition for Google response
-interface GoogleCredentialResponse {
-  credential: string;
-  select_by?: string;
-}
-
-// Extend Window interface for Google
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: any) => void;
-          renderButton: (element: HTMLElement, config: any) => void;
-        };
-      };
-    };
-  }
-}
 
 function AuthPageContent() {
   const router = useRouter();
