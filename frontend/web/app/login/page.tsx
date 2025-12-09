@@ -16,7 +16,26 @@ import {
   Shield,
   Zap
 } from 'lucide-react';
-import type { GoogleCredentialResponse } from '@/types/google';
+
+// Type definition for Google response
+interface GoogleCredentialResponse {
+  credential: string;
+  select_by?: string;
+}
+
+// Extend Window interface for Google
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: any) => void;
+          renderButton: (element: HTMLElement, config: any) => void;
+        };
+      };
+    };
+  }
+}
 
 function AuthPageContent() {
   const router = useRouter();
@@ -105,7 +124,7 @@ function AuthPageContent() {
     }
   }, [googleLoaded, mode]);
 
-  const handleGoogleSignIn = async (response: GoogleCredentialResponse) => {
+  const handleGoogleSignIn = async (response: GoogleCredentialResponse, retryCount = 0): Promise<void> => {
     const now = Date.now();
     if (now - lastGoogleCallTime.current < 2000) {
       console.log('⚠️ Google Sign-In call throttled (too soon)');
@@ -130,7 +149,7 @@ function AuthPageContent() {
       console.log('📤 Sending credential to:', `${API_URL}/api/auth/google`);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // Increased to 60 seconds
 
       const res = await fetch(`${API_URL}/api/auth/google`, {
         method: 'POST',
@@ -148,8 +167,21 @@ function AuthPageContent() {
       clearTimeout(timeoutId);
       console.log('📥 Response status:', res.status);
 
+      // Handle 429 with exponential backoff retry
+      if (res.status === 429 && retryCount < 3) {
+        const waitTime = Math.pow(2, retryCount) * 2000; // 2s, 4s, 8s
+        console.log(`⏳ Rate limited, retrying in ${waitTime/1000}s...`);
+        setError(`Server is busy. Retrying in ${waitTime/1000} seconds...`);
+        
+        setLoading(false);
+        isSubmitting.current = false;
+        
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return handleGoogleSignIn(response, retryCount + 1);
+      }
+
       if (res.status === 429) {
-        throw new Error('Too many sign-in attempts. Please wait 2-3 minutes and try again.');
+        throw new Error('Server is busy. Please wait a few minutes and try again.');
       }
 
       if (!res.ok) {
@@ -199,7 +231,7 @@ function AuthPageContent() {
       
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
-          setError('Request timeout. Please check your connection and try again.');
+          setError('Request is taking longer than expected. The server might be waking up (this happens on free hosting). Please wait 30 seconds and try again.');
         } else {
           setError(err.message);
         }
@@ -253,7 +285,7 @@ function AuthPageContent() {
     return true;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (retryCount = 0) => {
     if (loading || isSubmitting.current) {
       console.log('⚠️ Already processing request');
       return;
@@ -279,19 +311,17 @@ function AuthPageContent() {
             password: formData.password,
           }
         : {
-            // For signup - split name into firstName and lastName
             firstName: formData.name.trim().split(' ')[0],
             lastName: formData.name.trim().split(' ').slice(1).join(' ') || formData.name.trim().split(' ')[0],
             email: formData.email.toLowerCase().trim(),
             password: formData.password,
-            username: formData.email.split('@')[0], // Generate username from email
+            username: formData.email.split('@')[0],
           };
 
       console.log('📤 Request to:', `${API_URL}${endpoint}`);
-      console.log('📦 Request body:', requestBody);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // Increased to 60 seconds
 
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
@@ -306,6 +336,19 @@ function AuthPageContent() {
 
       clearTimeout(timeoutId);
       console.log('📥 Response status:', response.status);
+
+      // Handle 429 with exponential backoff retry
+      if (response.status === 429 && retryCount < 3) {
+        const waitTime = Math.pow(2, retryCount) * 2000; // 2s, 4s, 8s
+        console.log(`⏳ Rate limited, retrying in ${waitTime/1000}s...`);
+        setError(`Server is busy. Retrying in ${waitTime/1000} seconds...`);
+        
+        setLoading(false);
+        isSubmitting.current = false;
+        
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return handleSubmit(retryCount + 1);
+      }
 
       if (response.status === 429) {
         throw new Error('Too many attempts. Please wait 2-3 minutes and try again.');
@@ -357,7 +400,7 @@ function AuthPageContent() {
       
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
-          setError('Request timeout. Please check your connection and try again.');
+          setError('Request is taking longer than expected. The server might be waking up (this happens on free hosting). Please wait 30 seconds and try again.');
         } else {
           setError(err.message);
         }
@@ -480,7 +523,17 @@ function AuthPageContent() {
             </div>
           </div>
 
-          {error && (
+          {error && error.includes('taking longer') && (
+            <div className="mb-6 bg-yellow-500/10 border border-yellow-500/50 rounded-xl p-4 flex items-start gap-3">
+              <Loader2 className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5 animate-spin" />
+              <div>
+                <p className="text-yellow-300 text-sm font-medium mb-1">Server Waking Up</p>
+                <p className="text-yellow-200/80 text-xs">Free tier services sleep after inactivity. This usually takes 30-60 seconds on first request. Please be patient!</p>
+              </div>
+            </div>
+          )}
+
+          {error && !error.includes('taking longer') && (
             <div className="mb-6 bg-red-500/10 border border-red-500/50 rounded-xl p-4 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
               <p className="text-red-300 text-sm font-medium">{error}</p>
@@ -605,7 +658,7 @@ function AuthPageContent() {
             )}
 
             <button
-              onClick={handleSubmit}
+              onClick={() => handleSubmit()}
               disabled={loading}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3.5 rounded-xl font-semibold hover:shadow-2xl hover:shadow-purple-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
             >
