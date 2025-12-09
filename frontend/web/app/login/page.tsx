@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Eye, 
   EyeOff, 
@@ -32,6 +32,7 @@ declare global {
             callback: (response: GoogleCredentialResponse) => void;
             auto_select?: boolean;
             cancel_on_tap_outside?: boolean;
+            itp_support?: boolean;
           }): void;
           renderButton(
             parent: HTMLElement | null,
@@ -51,20 +52,12 @@ declare global {
   }
 }
 
-function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
-  return (...args: Parameters<T>) => {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-}
-
 export default function AuthPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const searchParams = useSearchParams();
+  const initialMode = searchParams?.get('mode') === 'signup' ? 'signup' : 'signin';
+  
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -118,14 +111,15 @@ export default function AuthPage() {
         client_id: GOOGLE_CLIENT_ID,
         callback: handleGoogleSignIn,
         auto_select: false,
-        cancel_on_tap_outside: true,
+        cancel_on_tap_outside: false, // Changed to false to prevent accidental cancellation
+        itp_support: true, // Added for better browser compatibility
       });
 
       if (googleButtonRef.current) {
         window.google.accounts.id.renderButton(
           googleButtonRef.current,
           {
-            theme: 'filled_black',
+            theme: 'outline', // Changed from 'filled_black' to 'outline' for better compatibility
             size: 'large',
             text: mode === 'signin' ? 'signin_with' : 'signup_with',
             shape: 'rectangular',
@@ -168,7 +162,7 @@ export default function AuthPage() {
       console.log('📤 Sending credential to:', `${API_URL}/api/auth/google`);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased timeout
 
       const res = await fetch(`${API_URL}/api/auth/google`, {
         method: 'POST',
@@ -177,11 +171,9 @@ export default function AuthPage() {
           'Accept': 'application/json',
         },
         credentials: 'include',
-        mode: 'cors',
         signal: controller.signal,
         body: JSON.stringify({
           credential: response.credential,
-          clientId: '833541687094-vheiq46pf2507ogunobbidu4ke23286d.apps.googleusercontent.com'
         }),
       });
 
@@ -195,20 +187,13 @@ export default function AuthPage() {
       if (!res.ok) {
         let errorMessage = 'Google sign-in failed';
         
-        if (res.status === 403) {
-          errorMessage = 'Access denied. Please try again or use email sign-in.';
-        } else if (res.status === 401) {
-          errorMessage = 'Invalid Google credentials.';
-        } else if (res.status === 500) {
-          errorMessage = 'Server error. Please try again later.';
-        }
-        
         try {
           const errorData = await res.json();
           console.error('❌ Error data:', errorData);
           errorMessage = errorData.message || errorData.error || errorMessage;
         } catch (parseErr) {
           console.error('❌ Could not parse error response');
+          errorMessage = `Server error (${res.status}). Please try again.`;
         }
         
         throw new Error(errorMessage);
@@ -218,20 +203,16 @@ export default function AuthPage() {
       console.log('✅ Google sign-in successful', data);
 
       if (data.token) {
-        window.localStorage.setItem('authToken', data.token);
-        window.localStorage.setItem('ft_token', data.token);
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('ft_token', data.token);
         
-        // ✅ Store userId from response
-        if (data.userId) {
-          window.localStorage.setItem('userId', data.userId);
-          console.log('✅ User ID stored:', data.userId);
-        } else if (data.user?.id) {
-          window.localStorage.setItem('userId', data.user.id);
+        if (data.user?.id) {
+          localStorage.setItem('userId', data.user.id.toString());
           console.log('✅ User ID stored:', data.user.id);
         }
         
         if (data.user) {
-          window.localStorage.setItem('user', JSON.stringify(data.user));
+          localStorage.setItem('user', JSON.stringify(data.user));
         }
 
         console.log('🔑 Token stored successfully');
@@ -239,7 +220,7 @@ export default function AuthPage() {
         setSuccess(true);
         
         setTimeout(() => {
-          window.location.href = '/dashboard';
+          router.push('/dashboard');
         }, 1000);
       } else {
         throw new Error('No authentication token received');
@@ -323,21 +304,26 @@ export default function AuthPage() {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
       const endpoint = mode === 'signin' ? '/api/auth/login' : '/api/auth/register';
       
+      // FIXED: Properly structure the request body to match backend expectations
       const requestBody = mode === 'signin' 
         ? {
             email: formData.email.toLowerCase().trim(),
             password: formData.password,
           }
         : {
-            name: formData.name.trim(),
+            // For signup - split name into firstName and lastName
+            firstName: formData.name.trim().split(' ')[0],
+            lastName: formData.name.trim().split(' ').slice(1).join(' ') || formData.name.trim().split(' ')[0],
             email: formData.email.toLowerCase().trim(),
             password: formData.password,
+            username: formData.email.split('@')[0], // Generate username from email
           };
 
       console.log('📤 Request to:', `${API_URL}${endpoint}`);
+      console.log('📦 Request body:', requestBody);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
 
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
@@ -346,7 +332,6 @@ export default function AuthPage() {
           'Accept': 'application/json',
         },
         credentials: 'include',
-        mode: 'cors',
         signal: controller.signal,
         body: JSON.stringify(requestBody),
       });
@@ -376,20 +361,16 @@ export default function AuthPage() {
       console.log('✅ Authentication successful', data);
 
       if (data.token) {
-        window.localStorage.setItem('authToken', data.token);
-        window.localStorage.setItem('ft_token', data.token);
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('ft_token', data.token);
         
-        // ✅ Store userId from response
-        if (data.userId) {
-          window.localStorage.setItem('userId', data.userId);
-          console.log('✅ User ID stored:', data.userId);
-        } else if (data.user?.id) {
-          window.localStorage.setItem('userId', data.user.id);
+        if (data.user?.id) {
+          localStorage.setItem('userId', data.user.id.toString());
           console.log('✅ User ID stored:', data.user.id);
         }
         
         if (data.user) {
-          window.localStorage.setItem('user', JSON.stringify(data.user));
+          localStorage.setItem('user', JSON.stringify(data.user));
         }
 
         console.log('🔑 Token stored successfully');
@@ -397,7 +378,7 @@ export default function AuthPage() {
         setSuccess(true);
         
         setTimeout(() => {
-          window.location.href = '/dashboard';
+          router.push('/dashboard');
         }, 1000);
       } else {
         throw new Error('No authentication token received');
@@ -409,12 +390,6 @@ export default function AuthPage() {
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
           setError('Request timeout. Please check your connection and try again.');
-        } else if (err.message.includes('429') || err.message.toLowerCase().includes('too many')) {
-          setError('⏳ Too many attempts. Please wait 2-3 minutes before trying again.');
-        } else if (err.message.includes('401') || err.message.toLowerCase().includes('invalid')) {
-          setError('Invalid email or password. Please check your credentials.');
-        } else if (err.message.includes('409') || err.message.toLowerCase().includes('already exists')) {
-          setError('An account with this email already exists. Try signing in instead.');
         } else {
           setError(err.message);
         }
@@ -436,6 +411,8 @@ export default function AuthPage() {
       password: '',
       confirmPassword: ''
     });
+    // Re-render Google button for new mode
+    googleInitialized.current = false;
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -577,6 +554,7 @@ export default function AuthPage() {
                   className="w-full pl-11 pr-4 py-3 bg-slate-900/50 border border-purple-500/20 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition text-white placeholder-gray-500"
                   placeholder="you@example.com"
                   disabled={loading}
+                  autoComplete="email"
                 />
               </div>
             </div>
@@ -595,6 +573,7 @@ export default function AuthPage() {
                   className="w-full pl-11 pr-12 py-3 bg-slate-900/50 border border-purple-500/20 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition text-white placeholder-gray-500"
                   placeholder="••••••••"
                   disabled={loading}
+                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                 />
                 <button
                   type="button"
@@ -625,6 +604,7 @@ export default function AuthPage() {
                     className="w-full pl-11 pr-12 py-3 bg-slate-900/50 border border-purple-500/20 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition text-white placeholder-gray-500"
                     placeholder="••••••••"
                     disabled={loading}
+                    autoComplete="new-password"
                   />
                   <button
                     type="button"
