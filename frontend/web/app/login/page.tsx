@@ -16,41 +16,7 @@ import {
   Shield,
   Zap
 } from 'lucide-react';
-
-interface GoogleCredentialResponse {
-  credential: string;
-  select_by: string;
-}
-
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize(config: {
-            client_id: string;
-            callback: (response: GoogleCredentialResponse) => void;
-            auto_select?: boolean;
-            cancel_on_tap_outside?: boolean;
-            itp_support?: boolean;
-          }): void;
-          renderButton(
-            parent: HTMLElement | null,
-            options: {
-              theme?: 'outline' | 'filled_blue' | 'filled_black';
-              size?: 'large' | 'medium' | 'small';
-              text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
-              shape?: 'rectangular' | 'pill';
-              logo_alignment?: 'left' | 'center';
-              width?: number | string;
-            }
-          ): void;
-          prompt(): void;
-        };
-      };
-    };
-  }
-}
+import type { GoogleCredentialResponse } from  '@/types/google';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -75,6 +41,7 @@ export default function AuthPage() {
   const googleInitialized = useRef(false);
   const lastGoogleCallTime = useRef(0);
 
+  // Load Google OAuth Script
   useEffect(() => {
     const loadGoogleScript = () => {
       if (document.getElementById('google-oauth-script')) {
@@ -101,6 +68,7 @@ export default function AuthPage() {
     loadGoogleScript();
   }, []);
 
+  // Initialize Google Sign-In
   useEffect(() => {
     if (!googleLoaded || !window.google || googleInitialized.current) return;
 
@@ -111,15 +79,15 @@ export default function AuthPage() {
         client_id: GOOGLE_CLIENT_ID,
         callback: handleGoogleSignIn,
         auto_select: false,
-        cancel_on_tap_outside: false, // Changed to false to prevent accidental cancellation
-        itp_support: true, // Added for better browser compatibility
+        cancel_on_tap_outside: false,
+        itp_support: true,
       });
 
       if (googleButtonRef.current) {
         window.google.accounts.id.renderButton(
           googleButtonRef.current,
           {
-            theme: 'outline', // Changed from 'filled_black' to 'outline' for better compatibility
+            theme: 'outline',
             size: 'large',
             text: mode === 'signin' ? 'signin_with' : 'signup_with',
             shape: 'rectangular',
@@ -162,7 +130,7 @@ export default function AuthPage() {
       console.log('📤 Sending credential to:', `${API_URL}/api/auth/google`);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
 
       const res = await fetch(`${API_URL}/api/auth/google`, {
         method: 'POST',
@@ -304,7 +272,7 @@ export default function AuthPage() {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
       const endpoint = mode === 'signin' ? '/api/auth/login' : '/api/auth/register';
       
-      // FIXED: Properly structure the request body to match backend expectations
+      // Structure request body to match backend expectations
       const requestBody = mode === 'signin' 
         ? {
             email: formData.email.toLowerCase().trim(),
