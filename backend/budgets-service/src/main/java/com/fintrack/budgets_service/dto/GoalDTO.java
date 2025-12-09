@@ -18,9 +18,9 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class GoalDTO {
 
-    private Long id;
+    private String id; // ✅ Changed from Long to String
 
-    private Long userId;
+    private String userId; // ✅ Changed from Long to String
 
     @NotBlank(message = "Goal name is required")
     private String name;
@@ -44,4 +44,10 @@ public class GoalDTO {
 
     @JsonProperty("monthlyContribution")
     private BigDecimal monthlyContribution;
+
+    // ✅ Add progress field for frontend
+    private Double progress;
+
+    // ✅ Add achieved field
+    private Boolean achieved;
 }

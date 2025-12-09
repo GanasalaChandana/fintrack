@@ -1,73 +1,108 @@
-package com.fintrack.alerts.service;
+package com.backend.alerts.service;
 
-import com.fintrack.alerts.dto.CreateAlertRuleRequest;
-import com.fintrack.alerts.entity.AlertHistory;
-import com.fintrack.alerts.entity.AlertRule;
-import com.fintrack.alerts.repository.AlertHistoryRepository;
-import com.fintrack.alerts.repository.AlertRuleRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import com.backend.alerts.model.Alert;
+import com.backend.alerts.repository.AlertRepository;
 
 import java.util.List;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class AlertService {
-    
-    private final AlertHistoryRepository alertHistoryRepository;
-    private final AlertRuleRepository alertRuleRepository;
-    
-    public Page<AlertHistory> getUserAlerts(UUID userId, Pageable pageable) {
-        return alertHistoryRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
+
+    @Autowired
+    private AlertRepository alertRepository;
+
+    public List<Alert> getAllAlerts() {
+        return alertRepository.findAll();
     }
-    
-    public long getUnreadCount(UUID userId) {
-        return alertHistoryRepository.countByUserIdAndIsReadFalse(userId);
+
+    public Alert getAlertById(Long id) {
+        return alertRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Alert not found with id: " + id));
     }
-    
-    @Transactional
-    public void markAsRead(UUID alertId, UUID userId) {
-        alertHistoryRepository.findById(alertId)
-            .filter(alert -> alert.getUserId().equals(userId))
-            .ifPresent(alert -> {
-                alert.setIsRead(true);
-                alertHistoryRepository.save(alert);
-                log.info("Marked alert {} as read for user {}", alertId, userId);
-            });
+
+    public List<Alert> getAlertsByUserId(Long userId) {
+        return alertRepository.findByUserId(userId);
     }
-    
-    public List<AlertRule> getUserRules(UUID userId) {
-        return alertRuleRepository.findByUserIdAndIsActiveTrue(userId);
+
+    public Alert createAlert(Alert alert) {
+        return alertRepository.save(alert);
     }
-    
-    @Transactional
-    public AlertRule createRule(UUID userId, CreateAlertRuleRequest request) {
-        AlertRule rule = new AlertRule();
-        rule.setUserId(userId);
-        rule.setRuleType(request.getRuleType());
-        rule.setThresholdAmount(request.getThresholdAmount());
-        rule.setCategory(request.getCategory());
-        rule.setIsActive(true);
-        
-        AlertRule saved = alertRuleRepository.save(rule);
-        log.info("Created alert rule {} for user {}", saved.getId(), userId);
-        return saved;
+
+    public Alert updateAlert(Long id, Alert alert) {
+        Alert existingAlert = getAlertById(id);
+        existingAlert.setMessage(alert.getMessage());
+        existingAlert.setType(alert.getType());
+        existingAlert.setStatus(alert.getStatus());
+        existingAlert.setPriority(alert.getPriority());
+        return alertRepository.save(existingAlert);
     }
-    
-    @Transactional
-    public void deleteRule(UUID ruleId, UUID userId) {
-        alertRuleRepository.findById(ruleId)
-            .filter(rule -> rule.getUserId().equals(userId))
-            .ifPresent(rule -> {
-                rule.setIsActive(false);
-                alertRuleRepository.save(rule);
-                log.info("Deactivated alert rule {} for user {}", ruleId, userId);
-            });
+
+    public void deleteAlert(Long id) {
+        alertRepository.deleteById(id);
+    }
+
+    public Alert updateAlertStatus(Long id, String status) {
+        Alert alert = getAlertById(id);
+        alert.setStatus(status);
+        return alertRepository.save(alert);
+    }
+
+    // Kafka-related helper methods - Fixed to use Long instead of String
+
+    public void createBudgetExceededAlert(UUID userId, String category, double spent, double budget) {
+        Alert alert = new Alert();
+        alert.setUserId(userId.getMostSignificantBits()); // Convert UUID to Long
+        alert.setType("BUDGET_EXCEEDED");
+        alert.setMessage(String.format("Budget exceeded for %s: $%.2f spent (Budget: $%.2f)",
+                category, spent, budget));
+        alert.setStatus("UNREAD");
+        alert.setPriority("HIGH");
+        alertRepository.save(alert);
+    }
+
+    public void createBudgetWarningAlert(UUID userId, String category, double spent, double budget, double percentage) {
+        Alert alert = new Alert();
+        alert.setUserId(userId.getMostSignificantBits()); // Convert UUID to Long
+        alert.setType("BUDGET_WARNING");
+        alert.setMessage(String.format("Budget warning for %s: $%.2f spent (%.0f%% of $%.2f budget)",
+                category, spent, percentage, budget));
+        alert.setStatus("UNREAD");
+        alert.setPriority("MEDIUM");
+        alertRepository.save(alert);
+    }
+
+    public void createGoalMilestoneAlert(UUID userId, UUID goalId, String goalName, double progress) {
+        Alert alert = new Alert();
+        alert.setUserId(userId.getMostSignificantBits()); // Convert UUID to Long
+        alert.setType("GOAL_MILESTONE");
+        alert.setMessage(String.format("Goal milestone reached for '%s': %.0f%% complete",
+                goalName, progress));
+        alert.setStatus("UNREAD");
+        alert.setPriority("MEDIUM");
+        alertRepository.save(alert);
+    }
+
+    public void createGoalAchievedAlert(UUID userId, UUID goalId, String goalName) {
+        Alert alert = new Alert();
+        alert.setUserId(userId.getMostSignificantBits()); // Convert UUID to Long
+        alert.setType("GOAL_ACHIEVED");
+        alert.setMessage(String.format("Congratulations! Goal '%s' has been achieved!", goalName));
+        alert.setStatus("UNREAD");
+        alert.setPriority("HIGH");
+        alertRepository.save(alert);
+    }
+
+    public void createUnusualSpendingAlert(UUID userId, String category, double amount, double average) {
+        Alert alert = new Alert();
+        alert.setUserId(userId.getMostSignificantBits()); // Convert UUID to Long
+        alert.setType("UNUSUAL_SPENDING");
+        alert.setMessage(String.format("Unusual spending detected in %s: $%.2f (Average: $%.2f)",
+                category, amount, average));
+        alert.setStatus("UNREAD");
+        alert.setPriority("MEDIUM");
+        alertRepository.save(alert);
     }
 }

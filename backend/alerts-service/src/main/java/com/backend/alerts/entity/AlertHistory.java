@@ -1,62 +1,71 @@
-package com.fintrack.alerts.entity;
+package com.backend.alerts.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
+import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.UUID;
 
 @Entity
-@Table(name = "alert_history", schema = "alerts")
+@Table(name = "alert_history")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class AlertHistory {
-    
+
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID id;
-    
-    @Column(name = "user_id", nullable = false)
+
+    @Column(nullable = false)
     private UUID userId;
-    
-    @Column(name = "rule_id")
-    private UUID ruleId;
-    
+
+    private UUID ruleId; // Add this field
+
     @Enumerated(EnumType.STRING)
-    @Column(name = "alert_type", nullable = false)
+    @Column(nullable = false)
     private AlertType alertType;
-    
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Severity severity;
-    
-    @Column(nullable = false, columnDefinition = "TEXT")
+
+    @Column(nullable = false, length = 1000)
     private String message;
-    
-    @JdbcTypeCode(SqlTypes.JSON)
-    private Map<String, Object> metadata;
-    
-    @Column(name = "is_read", nullable = false)
+
+    @Column(columnDefinition = "TEXT")
+    private String metadata;
+
+    @Builder.Default // Add this annotation
+    @Column(nullable = false)
     private Boolean isRead = false;
-    
-    @CreationTimestamp
-    @Column(name = "created_at")
+
+    @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
-    
-    public enum AlertType {
-        HIGH_AMOUNT,
-        DAILY_LIMIT,
-        UNUSUAL_ACTIVITY,
-        DUPLICATE,
-        BUDGET
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
     }
-    
+
+    public enum AlertType {
+        BUDGET_EXCEEDED,
+        BUDGET_WARNING,
+        HIGH_AMOUNT,
+        UNUSUAL_SPENDING,
+        GOAL_MILESTONE,
+        GOAL_ACHIEVED,
+        RECURRING_PAYMENT,
+        SYSTEM
+    }
+
     public enum Severity {
         INFO,
         WARNING,
+        HIGH,
         CRITICAL
     }
 }

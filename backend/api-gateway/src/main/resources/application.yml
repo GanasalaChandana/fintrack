@@ -106,6 +106,10 @@ spring:
             - Path=/api/budgets/**
           filters:
             - AuthenticationFilter
+            - name: RewritePath
+              args:
+                regexp: /api/budgets/(?<segment>.*)
+                replacement: /budgets/${segment}
 
         # ================= GOALS (REQUIRES AUTH) =================
         - id: goals-service
@@ -114,6 +118,10 @@ spring:
             - Path=/api/goals/**
           filters:
             - AuthenticationFilter
+            - name: RewritePath
+              args:
+                regexp: /api/goals/(?<segment>.*)
+                replacement: /goals/${segment}
 
         # ================= ALERTS (REQUIRES AUTH) =================
         - id: alerts-service
@@ -139,19 +147,17 @@ spring:
                 regexp: /api/reports/(?<segment>.*)
                 replacement: /api/reports/${segment}
 
-# Application-specific configuration
+# ✅ UPDATED: Enable dev mode to bypass authentication
 app:
-  environment: ${APP_ENVIRONMENT:local}
+  environment: ${APP_ENVIRONMENT:development}  # Changed from 'local' to 'development'
   dev:
-    bypass-auth: ${DEV_BYPASS_AUTH:false}
+    bypass-auth: ${DEV_BYPASS_AUTH:true}  # Changed from 'false' to 'true'
     default-user-id: ${DEV_USER_ID:dev-user-123}
 
-# JWT (must match users-service)
 jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
   expiration: ${JWT_EXPIRATION:86400000}
 
-# Management/Actuator
 management:
   endpoints:
     web:
@@ -165,7 +171,6 @@ management:
     gateway:
       enabled: true
 
-# Logging - Enhanced for debugging OAuth
 logging:
   level:
     root: INFO

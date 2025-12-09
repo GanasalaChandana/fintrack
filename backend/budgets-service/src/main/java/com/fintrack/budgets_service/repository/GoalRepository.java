@@ -5,22 +5,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
-public interface GoalRepository extends JpaRepository<Goal, Long> {
+public interface GoalRepository extends JpaRepository<Goal, String> {
 
-    /**
-     * Find all goals for a specific user
-     */
-    List<Goal> findByUserId(Long userId);
+    List<Goal> findByUserId(String userId);
 
-    /**
-     * Find active (not achieved) goals for a user
-     */
-    List<Goal> findByUserIdAndAchievedFalse(Long userId);
+    Optional<Goal> findByIdAndUserId(String id, String userId);
 
-    /**
-     * Find achieved goals for a user
-     */
-    List<Goal> findByUserIdAndAchievedTrue(Long userId);
+    List<Goal> findByUserIdAndCategory(String userId, String category);
 }

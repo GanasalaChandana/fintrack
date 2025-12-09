@@ -4,11 +4,11 @@ import { apiRequest } from '@/lib/api';
 export interface Budget {
   id?: string;
   category: string;
-  amount: number;
-  period: 'monthly' | 'yearly';
-  rollover: boolean;
-  alertThreshold: number;
+  budget: number;      // Changed from "amount"
   spent?: number;
+  month: string;       // Changed from "period", format: "2025-12"
+  icon?: string;
+  color?: string;
 }
 
 export interface BudgetStats {
@@ -146,14 +146,14 @@ export const budgetService = {
       const budgets = await this.getAll();
 
       const stats: BudgetStats = {
-        totalBudget: budgets.reduce((sum, b) => sum + (b.amount || 0), 0),
+        totalBudget: budgets.reduce((sum, b) => sum + (b.budget || 0), 0),
         totalSpent: budgets.reduce((sum, b) => sum + (b.spent || 0), 0),
         remaining: 0,
         categoryBreakdown: budgets.map((b) => ({
           category: b.category,
-          budget: b.amount || 0,
+          budget: b.budget || 0,
           spent: b.spent || 0,
-          percentage: b.amount > 0 ? ((b.spent || 0) / b.amount) * 100 : 0,
+          percentage: b.budget > 0 ? ((b.spent || 0) / b.budget) * 100 : 0,
         })),
       };
 

@@ -13,17 +13,25 @@ const getToken = (): string | null => {
   return localStorage.getItem("ft_token") || localStorage.getItem("authToken");
 };
 
+// Helper to get user ID from localStorage
+const getUserId = (): string | null => {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("userId");
+};
+
 const apiRequest = async <T,>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> => {
   const token = getToken();
+  const userId = getUserId();
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...(token && { Authorization: `Bearer ${token}` }),
+      ...(userId && { "X-User-Id": userId }), // ✅ Add X-User-Id header
       ...options.headers,
     },
     credentials: "include",
@@ -33,6 +41,7 @@ const apiRequest = async <T,>(
     if (response.status === 401 && typeof window !== "undefined") {
       localStorage.removeItem("ft_token");
       localStorage.removeItem("authToken");
+      localStorage.removeItem("userId");
       window.location.href = "/register?mode=signin";
     }
     throw new Error(`HTTP error! status: ${response.status}`);
@@ -59,7 +68,9 @@ export default function BudgetsPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const token = getToken();
-      if (!token) {
+      const userId = getUserId();
+      
+      if (!token || !userId) {
         router.replace("/register?mode=signin");
       } else {
         setIsAuthenticated(true);
@@ -84,7 +95,7 @@ export default function BudgetsPage() {
       // If your backend sends id as number/string, keep it consistent
       const normalized = data.map((b: any) => ({
         ...b,
-        id: String(b.id),     // <-- change to Number(b.id) if Budget.id is number
+        id: String(b.id),
       })) as Budget[];
 
       setBudgets(normalized);
@@ -94,13 +105,20 @@ export default function BudgetsPage() {
     }
   };
 
-  // IMPORTANT: these must return void (not Promise<void>)
-  const handleAddBudget = (budget: Omit<Budget, "id" | "spent">): void => {
+  const handleAddBudget = (budgetData: Omit<Budget, "id" | "spent">): void => {
     (async () => {
       try {
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        
         await apiRequest("/api/budgets", {
           method: "POST",
-          body: JSON.stringify({ ...budget, spent: 0 }),
+          body: JSON.stringify({
+            ...budgetData,
+            spent: 0,
+            month: currentMonth,
+            icon: budgetData.icon || "💰",
+            color: budgetData.color || "#3b82f6"
+          }),
         });
         await fetchBudgets();
       } catch (error) {

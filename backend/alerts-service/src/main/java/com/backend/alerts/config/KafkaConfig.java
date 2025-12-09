@@ -1,6 +1,6 @@
-package com.fintrack.alerts.config;
+package com.backend.alerts.config;
 
-import com.fintrack.alerts.dto.TransactionEvent;
+import com.backend.alerts.dto.TransactionEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,13 +16,13 @@ import java.util.Map;
 
 @Configuration
 public class KafkaConfig {
-    
+
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
-    
+
     @Value("${spring.kafka.consumer.group-id}")
     private String groupId;
-    
+
     @Bean
     public ConsumerFactory<String, TransactionEvent> consumerFactory() {
         Map<String, Object> config = new HashMap<>();
@@ -32,16 +32,15 @@ public class KafkaConfig {
         config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
         config.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
         config.put(JsonDeserializer.VALUE_DEFAULT_TYPE, TransactionEvent.class);
-        
+
         return new DefaultKafkaConsumerFactory<>(config);
     }
-    
+
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, TransactionEvent> kafkaListenerContainerFactory() {
-        ConcurrentKafkaListenerContainerFactory<String, TransactionEvent> factory =
-            new ConcurrentKafkaListenerContainerFactory<>();
+        ConcurrentKafkaListenerContainerFactory<String, TransactionEvent> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
-        factory.setConcurrency(3);  // 3 consumer threads
+        factory.setConcurrency(3); // 3 consumer threads
         return factory;
     }
 }

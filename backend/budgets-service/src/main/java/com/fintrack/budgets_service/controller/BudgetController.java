@@ -66,16 +66,16 @@ public class BudgetController {
     public ResponseEntity<Map<String, Object>> getBudgetByCategory(
             @RequestParam String userId,
             @RequestParam String category) {
-        
+
         Optional<Budget> budget = budgetsService.getBudgetByCategory(userId, category);
-        
+
         if (budget.isPresent()) {
             Map<String, Object> result = new HashMap<>();
             result.put("amount", budget.get().getBudget());
             result.put("category", budget.get().getCategory());
             return ResponseEntity.ok(result);
         }
-        
+
         // Return default budget if not found
         Map<String, Object> defaultBudget = new HashMap<>();
         defaultBudget.put("amount", 1000);

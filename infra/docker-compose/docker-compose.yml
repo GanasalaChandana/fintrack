@@ -199,7 +199,7 @@
     build: { context: ../../backend/api-gateway, dockerfile: Dockerfile }
     container_name: fintrack-api-gateway
     environment:
-      APP_ENVIRONMENT: dev
+      APP_ENVIRONMENT: development
       DEV_BYPASS_AUTH: "true"
       DEV_USER_ID: dev-user-123
       SPRING_PROFILES_ACTIVE: docker

@@ -1,7 +1,6 @@
 package com.fintrack.budgets_service.controller;
 
 import com.fintrack.budgets_service.dto.GoalDTO;
-import com.fintrack.budgets_service.entity.Goal;
 import com.fintrack.budgets_service.service.GoalService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -14,147 +13,106 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/goals")
+@RequestMapping("/goals")
 @RequiredArgsConstructor
 public class GoalController {
 
     private final GoalService goalService;
 
-    // Get all goals for the authenticated user
     @GetMapping
-    public ResponseEntity<List<Goal>> getAllGoals(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+    public ResponseEntity<List<GoalDTO>> getAllGoals(
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        if (userIdStr == null || userIdStr.isEmpty()) {
+        if (userId == null || userId.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        // Try to parse as Long, if fails use hash code or default to 1
-        Long userId;
-        try {
-            userId = Long.parseLong(userIdStr);
-        } catch (NumberFormatException e) {
-            // In dev mode with "dev-user-123", use 1 as default
-            userId = 1L;
-        }
-
-        List<Goal> goals = goalService.getAllGoalsByUserId(userId);
+        List<GoalDTO> goals = goalService.getAllGoalsByUserId(userId);
         return ResponseEntity.ok(goals);
     }
 
-    // Get a specific goal by ID
     @GetMapping("/{id}")
-    public ResponseEntity<Goal> getGoalById(
-            @PathVariable Long id,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+    public ResponseEntity<GoalDTO> getGoalById(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        if (userIdStr == null || userIdStr.isEmpty()) {
+        if (userId == null || userId.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        Long userId;
-        try {
-            userId = Long.parseLong(userIdStr);
-        } catch (NumberFormatException e) {
-            userId = 1L;
-        }
-
-        Goal goal = goalService.getGoalById(id, userId);
+        GoalDTO goal = goalService.getGoalById(id, userId);
         return ResponseEntity.ok(goal);
     }
 
-    // Create a new goal
     @PostMapping
-    public ResponseEntity<Goal> createGoal(
+    public ResponseEntity<GoalDTO> createGoal(
             @Valid @RequestBody GoalDTO goalDTO,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        if (userIdStr == null || userIdStr.isEmpty()) {
+        if (userId == null || userId.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        Long userId;
-        try {
-            userId = Long.parseLong(userIdStr);
-        } catch (NumberFormatException e) {
-            userId = 1L;
-        }
-
-        goalDTO.setUserId(userId);
-        Goal createdGoal = goalService.createGoal(goalDTO);
+        goalDTO.setUserId(userId); // ✅ Now works with String
+        GoalDTO createdGoal = goalService.createGoal(goalDTO);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdGoal);
     }
 
-    // Update an existing goal
     @PutMapping("/{id}")
-    public ResponseEntity<Goal> updateGoal(
-            @PathVariable Long id,
+    public ResponseEntity<GoalDTO> updateGoal(
+            @PathVariable String id,
             @Valid @RequestBody GoalDTO goalDTO,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        if (userIdStr == null || userIdStr.isEmpty()) {
+        if (userId == null || userId.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        Long userId;
-        try {
-            userId = Long.parseLong(userIdStr);
-        } catch (NumberFormatException e) {
-            userId = 1L;
-        }
-
-        Goal updatedGoal = goalService.updateGoal(id, goalDTO, userId);
+        GoalDTO updatedGoal = goalService.updateGoal(id, goalDTO, userId);
         return ResponseEntity.ok(updatedGoal);
     }
 
-    // Update goal progress (PATCH endpoint for frontend)
-    @PatchMapping("/{id}/progress")
-    public ResponseEntity<Goal> updateProgress(
-            @PathVariable Long id,
+    @PatchMapping("/{id}/contribute")
+    public ResponseEntity<GoalDTO> contributeToGoal(
+            @PathVariable String id,
             @RequestBody Map<String, BigDecimal> payload,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        if (userIdStr == null || userIdStr.isEmpty()) {
+        if (userId == null || userId.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        Long userId;
-        try {
-            userId = Long.parseLong(userIdStr);
-        } catch (NumberFormatException e) {
-            userId = 1L;
-        }
-
-        BigDecimal current = payload.get("current");
-        if (current == null) {
+        BigDecimal amount = payload.get("amount");
+        if (amount == null) {
             return ResponseEntity.badRequest().build();
         }
 
-        Goal updatedGoal = goalService.updateGoalProgress(id, current, userId);
+        GoalDTO updatedGoal = goalService.contributeToGoal(id, amount, userId);
         return ResponseEntity.ok(updatedGoal);
     }
 
-
-
-
-    // Delete a goal
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, String>> deleteGoal(
-            @PathVariable Long id,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
 
-        if (userIdStr == null || userIdStr.isEmpty()) {
+        if (userId == null || userId.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        Long userId;
-        try {
-            userId = Long.parseLong(userIdStr);
-        } catch (NumberFormatException e) {
-            userId = 1L;
         }
 
         goalService.deleteGoal(id, userId);
         return ResponseEntity.ok(Map.of("message", "Goal deleted successfully"));
+    }
+
+    @GetMapping("/summary")
+    public ResponseEntity<Map<String, Object>> getGoalsSummary(
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+
+        if (userId == null || userId.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Map<String, Object> summary = goalService.getGoalsSummary(userId);
+        return ResponseEntity.ok(summary);
     }
 }

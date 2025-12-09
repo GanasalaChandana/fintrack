@@ -3,38 +3,42 @@ package com.fintrack.budgets_service.service;
 import com.fintrack.budgets_service.dto.GoalDTO;
 import com.fintrack.budgets_service.entity.Goal;
 import com.fintrack.budgets_service.exception.ResourceNotFoundException;
-import com.fintrack.budgets_service.exception.UnauthorizedException;
 import com.fintrack.budgets_service.repository.GoalRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class GoalService {
 
     private final GoalRepository goalRepository;
 
-    public List<Goal> getAllGoalsByUserId(Long userId) {
-        return goalRepository.findByUserId(userId);
+    public List<GoalDTO> getAllGoalsByUserId(String userId) {
+        log.info("Fetching all goals for user: {}", userId);
+        List<Goal> goals = goalRepository.findByUserId(userId);
+        return goals.stream().map(this::convertToDTO).collect(Collectors.toList());
     }
 
-    public Goal getGoalById(Long id, Long userId) {
-        Goal goal = goalRepository.findById(id)
+    public GoalDTO getGoalById(String id, String userId) {
+        log.info("Fetching goal {} for user {}", id, userId);
+        Goal goal = goalRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Goal not found"));
-
-        if (!goal.getUserId().equals(userId)) {
-            throw new UnauthorizedException("You don't have permission to access this goal");
-        }
-
-        return goal;
+        return convertToDTO(goal);
     }
 
     @Transactional
-    public Goal createGoal(GoalDTO goalDTO) {
+    public GoalDTO createGoal(GoalDTO goalDTO) {
+        log.info("Creating goal: {}", goalDTO.getName());
+
         Goal goal = Goal.builder()
                 .userId(goalDTO.getUserId())
                 .name(goalDTO.getName())
@@ -42,18 +46,21 @@ public class GoalService {
                 .currentAmount(goalDTO.getCurrentAmount() != null ? goalDTO.getCurrentAmount() : BigDecimal.ZERO)
                 .deadline(goalDTO.getDeadline())
                 .category(goalDTO.getCategory())
-                .icon(goalDTO.getIcon())
-                .color(goalDTO.getColor())
+                .icon(goalDTO.getIcon() != null ? goalDTO.getIcon() : "🎯")
+                .color(goalDTO.getColor() != null ? goalDTO.getColor() : "#10b981")
                 .monthlyContribution(
                         goalDTO.getMonthlyContribution() != null ? goalDTO.getMonthlyContribution() : BigDecimal.ZERO)
                 .build();
 
-        return goalRepository.save(goal);
+        Goal savedGoal = goalRepository.save(goal);
+        return convertToDTO(savedGoal);
     }
 
     @Transactional
-    public Goal updateGoal(Long id, GoalDTO goalDTO, Long userId) {
-        Goal goal = getGoalById(id, userId);
+    public GoalDTO updateGoal(String id, GoalDTO goalDTO, String userId) {
+        log.info("Updating goal {}", id);
+        Goal goal = goalRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Goal not found"));
 
         if (goalDTO.getName() != null) {
             goal.setName(goalDTO.getName());
@@ -80,19 +87,65 @@ public class GoalService {
             goal.setMonthlyContribution(goalDTO.getMonthlyContribution());
         }
 
-        return goalRepository.save(goal);
+        Goal updatedGoal = goalRepository.save(goal);
+        return convertToDTO(updatedGoal);
     }
 
     @Transactional
-    public Goal updateGoalProgress(Long id, BigDecimal currentAmount, Long userId) {
-        Goal goal = getGoalById(id, userId);
-        goal.setCurrentAmount(currentAmount);
-        return goalRepository.save(goal);
+    public GoalDTO contributeToGoal(String id, BigDecimal amount, String userId) {
+        log.info("Contributing {} to goal {}", amount, id);
+        Goal goal = goalRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Goal not found"));
+
+        goal.setCurrentAmount(goal.getCurrentAmount().add(amount));
+
+        // Check if goal is achieved
+        if (goal.isGoalAchieved()) {
+            goal.setAchieved(true);
+        }
+
+        Goal updatedGoal = goalRepository.save(goal);
+        return convertToDTO(updatedGoal);
     }
 
     @Transactional
-    public void deleteGoal(Long id, Long userId) {
-        Goal goal = getGoalById(id, userId);
+    public void deleteGoal(String id, String userId) {
+        log.info("Deleting goal {}", id);
+        Goal goal = goalRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Goal not found"));
         goalRepository.delete(goal);
+    }
+
+    public Map<String, Object> getGoalsSummary(String userId) {
+        List<Goal> goals = goalRepository.findByUserId(userId);
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("totalGoals", goals.size());
+        summary.put("achievedGoals", goals.stream().filter(Goal::getAchieved).count());
+        summary.put("totalTarget", goals.stream()
+                .map(Goal::getTargetAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        summary.put("totalSaved", goals.stream()
+                .map(Goal::getCurrentAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+
+        return summary;
+    }
+
+    private GoalDTO convertToDTO(Goal goal) {
+        return GoalDTO.builder()
+                .id(goal.getId())
+                .userId(goal.getUserId())
+                .name(goal.getName())
+                .targetAmount(goal.getTargetAmount())
+                .currentAmount(goal.getCurrentAmount())
+                .deadline(goal.getDeadline())
+                .category(goal.getCategory())
+                .icon(goal.getIcon())
+                .color(goal.getColor())
+                .monthlyContribution(goal.getMonthlyContribution())
+                .progress(goal.getProgress())
+                .achieved(goal.getAchieved())
+                .build();
     }
 }

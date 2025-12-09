@@ -1,6 +1,6 @@
-package com.fintrack.alerts.repository;
+package com.backend.alerts.repository;
 
-import com.fintrack.alerts.entity.NotificationLog;
+import com.backend.alerts.entity.NotificationLog;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

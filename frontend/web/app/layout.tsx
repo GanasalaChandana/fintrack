@@ -4,6 +4,8 @@ import "./globals.css";
 import Navigation from "@/components/Navigation";
 import { MobileBottomNav } from "@/components/navigation/MobileBottomNav";
 import { DarkModeProvider, DarkModeToggle } from "@/components/providers/DarkModeProvider";
+import { BudgetAlerts } from '@/components/BudgetAlerts';
+
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -115,6 +117,7 @@ export default function RootLayout({
 
           {/* Top Navigation */}
           <Navigation />
+          <BudgetAlerts />
 
           {/* Page Content */}
           {children}

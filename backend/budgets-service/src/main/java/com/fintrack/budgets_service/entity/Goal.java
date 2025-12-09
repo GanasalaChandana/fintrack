@@ -6,13 +6,15 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "goals")
+@Table(name = "goals", schema = "budgets")
 @Data
 @Builder
 @NoArgsConstructor
@@ -20,11 +22,11 @@ import java.time.LocalDateTime;
 public class Goal {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String id;
 
     @Column(name = "user_id", nullable = false)
-    private Long userId;
+    private String userId; // ✅ Changed from Long to String to match Budget entity
 
     @Column(nullable = false)
     private String name;
@@ -42,9 +44,13 @@ public class Goal {
 
     private String category;
 
-    private String icon;
+    @Column(nullable = false)
+    @Builder.Default
+    private String icon = "🎯";
 
-    private String color;
+    @Column(nullable = false)
+    @Builder.Default
+    private String color = "#10b981";
 
     @Column(name = "monthly_contribution", precision = 15, scale = 2)
     @Builder.Default
@@ -54,31 +60,13 @@ public class Goal {
     @Builder.Default
     private Boolean achieved = false;
 
+    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-        if (currentAmount == null) {
-            currentAmount = BigDecimal.ZERO;
-        }
-        if (monthlyContribution == null) {
-            monthlyContribution = BigDecimal.ZERO;
-        }
-        if (achieved == null) {
-            achieved = false;
-        }
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
 
     // Calculated field for frontend
     @Transient

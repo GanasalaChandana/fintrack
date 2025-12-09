@@ -1,7 +1,7 @@
-package com.fintrack.alerts.kafka;
+package com.backend.alerts.kafka;
 
-import com.fintrack.alerts.dto.TransactionEvent;
-import com.fintrack.alerts.service.AlertProcessingService;
+import com.backend.alerts.dto.TransactionEvent;
+import com.backend.alerts.service.AlertProcessingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -14,22 +14,17 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 @Slf4j
 public class TransactionEventConsumer {
-    
+
     private final AlertProcessingService alertProcessingService;
-    
-    @KafkaListener(
-        topics = "transactions.created",
-        groupId = "alerts-service-group",
-        containerFactory = "kafkaListenerContainerFactory"
-    )
+
+    @KafkaListener(topics = "transactions.created", groupId = "alerts-service-group", containerFactory = "kafkaListenerContainerFactory")
     public void consumeTransactionEvent(
-        @Payload TransactionEvent event,
-        @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
-        @Header(KafkaHeaders.OFFSET) long offset
-    ) {
+            @Payload TransactionEvent event,
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
+            @Header(KafkaHeaders.OFFSET) long offset) {
         log.info("Consumed transaction event: id={}, partition={}, offset={}",
-            event.getId(), partition, offset);
-        
+                event.getId(), partition, offset);
+
         try {
             alertProcessingService.processTransaction(event);
         } catch (Exception e) {

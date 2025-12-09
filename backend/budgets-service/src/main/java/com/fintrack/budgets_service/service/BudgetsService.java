@@ -58,6 +58,23 @@ public class BudgetsService {
         if (budget.getMonth() == null || budget.getMonth().isEmpty()) {
             budget.setMonth(YearMonth.now().format(DateTimeFormatter.ofPattern("yyyy-MM")));
         }
+        if (budget.getIsActive() == null) {
+            budget.setIsActive(true);
+        }
+
+        // Auto-calculate start and end dates from period (month)
+        if (budget.getMonth() != null && budget.getStartDate() == null) {
+            String[] parts = budget.getMonth().split("-");
+            int year = Integer.parseInt(parts[0]);
+            int month = Integer.parseInt(parts[1]);
+
+            // First day of the month at 00:00:00
+            budget.setStartDate(LocalDateTime.of(year, month, 1, 0, 0, 0));
+
+            // Last day of the month at 23:59:59
+            YearMonth yearMonth = YearMonth.of(year, month);
+            budget.setEndDate(LocalDateTime.of(year, month, yearMonth.lengthOfMonth(), 23, 59, 59));
+        }
 
         return budgetRepository.save(budget);
     }
@@ -83,6 +100,15 @@ public class BudgetsService {
         }
         if (budgetUpdate.getMonth() != null) {
             budget.setMonth(budgetUpdate.getMonth());
+
+            // Recalculate start and end dates if month is updated
+            String[] parts = budgetUpdate.getMonth().split("-");
+            int year = Integer.parseInt(parts[0]);
+            int month = Integer.parseInt(parts[1]);
+
+            budget.setStartDate(LocalDateTime.of(year, month, 1, 0, 0, 0));
+            YearMonth yearMonth = YearMonth.of(year, month);
+            budget.setEndDate(LocalDateTime.of(year, month, yearMonth.lengthOfMonth(), 23, 59, 59));
         }
 
         return budgetRepository.save(budget);

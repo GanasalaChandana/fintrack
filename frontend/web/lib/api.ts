@@ -1,4 +1,4 @@
-// lib/api.ts - FIXED with better token management & transaction handling
+// lib/api.ts - FIXED with Alerts API and better error handling
 
 // =====================
 // Types
@@ -68,11 +68,33 @@ export interface BudgetSummary {
   budgets: Budget[];
 }
 
+export interface Alert {
+  id?: string;
+  type: "budget_exceeded" | "goal_milestone" | "unusual_spending" | "bill_reminder" | "low_balance" | "achievement";
+  title: string;
+  message: string;
+  severity: "info" | "warning" | "error" | "success";
+  read: boolean;
+  actionUrl?: string;
+  metadata?: {
+    budgetId?: string;
+    goalId?: string;
+    transactionId?: string;
+    amount?: number;
+    category?: string;
+    [key: string]: any;
+  };
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // =====================
 // Base URL helpers
 // =====================
 
 function getBaseUrl(): string {
+  // IMPORTANT: Change this to your API Gateway URL
   const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
   return url.replace(/\/$/, "");
 }
@@ -84,7 +106,7 @@ function buildApiUrl(endpoint: string): string {
 }
 
 // =====================
-// Auth token helpers - IMPROVED
+// Auth token helpers
 // =====================
 
 const PRIMARY_TOKEN_KEY = "authToken";
@@ -93,18 +115,10 @@ const LEGACY_TOKEN_KEY = "ft_token";
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
   
-  // Try multiple sources
   const token = 
     localStorage.getItem(PRIMARY_TOKEN_KEY) || 
     localStorage.getItem(LEGACY_TOKEN_KEY) ||
     getCookieToken();
-  
-  console.log("🔑 getToken called:", {
-    hasLocalStorage: !!localStorage.getItem(PRIMARY_TOKEN_KEY),
-    hasLegacy: !!localStorage.getItem(LEGACY_TOKEN_KEY),
-    hasCookie: !!getCookieToken(),
-    finalToken: token ? `${token.substring(0, 30)}...` : "NONE"
-  });
   
   return token || null;
 }
@@ -121,38 +135,20 @@ function getCookieToken(): string | null {
 export function setToken(token: string): void {
   if (typeof window === "undefined") return;
   
-  console.log("💾 Setting token:", {
-    length: token?.length,
-    preview: token ? `${token.substring(0, 30)}...` : "NONE"
-  });
-  
-  // Store in both localStorage locations
   localStorage.setItem(PRIMARY_TOKEN_KEY, token);
   localStorage.setItem(LEGACY_TOKEN_KEY, token);
   
-  // Also set cookie for SSR/middleware
   document.cookie = `${PRIMARY_TOKEN_KEY}=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-  
-  console.log("✅ Token saved to localStorage and cookie");
-  
-  // Verify it was saved
-  const verified = getToken();
-  console.log("🔍 Token verification:", !!verified);
 }
 
 export function removeToken(): void {
   if (typeof window === "undefined") return;
   
-  console.log("🗑️ Removing token from all locations");
-  
   localStorage.removeItem(PRIMARY_TOKEN_KEY);
   localStorage.removeItem(LEGACY_TOKEN_KEY);
   localStorage.removeItem("user");
   
-  // Clear cookie
   document.cookie = `${PRIMARY_TOKEN_KEY}=; path=/; max-age=0`;
-  
-  console.log("✅ Token removed");
 }
 
 export function getUser(): User | null {
@@ -169,25 +165,15 @@ export function getUser(): User | null {
 
 export function setUser(user: User): void {
   if (typeof window === "undefined") return;
-  
   localStorage.setItem("user", JSON.stringify(user));
-  console.log("✅ User saved to localStorage:", user.email);
 }
 
 export function isAuthenticated(): boolean {
-  const token = getToken();
-  const hasToken = !!token;
-  
-  console.log("🔐 isAuthenticated check:", {
-    hasToken,
-    tokenPreview: token ? `${token.substring(0, 20)}...` : "NONE"
-  });
-  
-  return hasToken;
+  return !!getToken();
 }
 
 // =====================
-// Generic API helper - IMPROVED
+// Generic API helper
 // =====================
 
 const pendingRequests = new Map<string, Promise<any>>();
@@ -199,19 +185,10 @@ export async function apiRequest<T = any>(
   const url = buildApiUrl(endpoint);
   const token = getToken();
 
-  console.log("📡 API Request:", {
-    method: options.method || "GET",
-    endpoint,
-    url,
-    hasToken: !!token,
-    tokenPreview: token ? `${token.substring(0, 30)}...` : "NONE"
-  });
-
   // Prevent duplicate requests
   const requestKey = `${options.method || "GET"}-${endpoint}-${JSON.stringify(options.body || "")}`;
 
   if (pendingRequests.has(requestKey)) {
-    console.log("⏳ Duplicate request detected, returning cached promise");
     return pendingRequests.get(requestKey)!;
   }
 
@@ -221,15 +198,10 @@ export async function apiRequest<T = any>(
     ...(!isFormData && { "Content-Type": "application/json" }),
   };
 
-  // CRITICAL: Always add Authorization header if token exists
   if (token) {
     headers.Authorization = `Bearer ${token}`;
-    console.log("✅ Added Authorization header:", headers.Authorization.substring(0, 50) + "...");
-  } else {
-    console.warn("⚠️ No token available for request to:", endpoint);
   }
 
-  // Merge with existing headers
   if (options.headers) {
     const existingHeaders = new Headers(options.headers);
     existingHeaders.forEach((value, key) => {
@@ -243,42 +215,21 @@ export async function apiRequest<T = any>(
     credentials: "include",
   };
 
-  console.log("📤 Final request config:", {
-    url,
-    method: config.method || "GET",
-    hasContentType: !!headers["Content-Type"],
-    hasAuthorization: !!headers["Authorization"],
-    headers: Object.keys(headers)
-  });
-
   const requestPromise = (async () => {
     try {
       const response = await fetch(url, config);
-
-      console.log("📥 Response received:", {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-        contentType: response.headers.get("content-type")
-      });
 
       const contentType = response.headers.get("content-type") || "";
       let data: any = undefined;
 
       if (contentType.includes("application/json")) {
         const text = await response.text();
-        console.log("📄 Response text:", text.substring(0, 200));
         
         if (text) {
           try {
             data = JSON.parse(text);
-            console.log("✅ Parsed JSON data:", {
-              type: typeof data,
-              isArray: Array.isArray(data),
-              keys: data && typeof data === 'object' ? Object.keys(data) : []
-            });
           } catch (err) {
-            console.error("❌ Failed to parse JSON:", err, "Raw text:", text);
+            console.error("Failed to parse JSON:", err);
             if (!response.ok) {
               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -292,17 +243,9 @@ export async function apiRequest<T = any>(
 
       // Handle HTTP errors
       if (!response.ok) {
-        console.error("❌ HTTP Error:", {
-          status: response.status,
-          statusText: response.statusText,
-          data
-        });
-
         if (response.status === 401) {
-          console.error("❌ 401 Unauthorized - clearing token and redirecting");
           removeToken();
           
-          // Redirect to login if in browser
           if (typeof window !== 'undefined') {
             setTimeout(() => {
               window.location.href = '/register?mode=signin';
@@ -324,19 +267,13 @@ export async function apiRequest<T = any>(
         data === undefined ||
         response.headers.get("content-length") === "0"
       ) {
-        console.log("✅ Empty response (204/no-content)");
         return {} as T;
       }
 
-      console.log("✅ Request successful:", endpoint);
       return data as T;
       
     } catch (error) {
-      console.error("❌ API Error:", {
-        endpoint,
-        error: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined
-      });
+      console.error(`API Error [${endpoint}]:`, error);
       throw error;
     } finally {
       pendingRequests.delete(requestKey);
@@ -426,18 +363,15 @@ export const authAPI = {
 };
 
 // =====================
-// Transactions API - FIXED
+// Transactions API
 // =====================
 
 export const transactionsAPI = {
-  // Get all transactions with improved error handling
   getAll: async (
     filters?: Record<string, string | number>
   ): Promise<Transaction[]> => {
-    // Verify token before making request
     const token = getToken();
     if (!token) {
-      console.error("❌ No token available for transactions request");
       throw new Error("Authentication required");
     }
 
@@ -454,22 +388,9 @@ export const transactionsAPI = {
       ? `/api/transactions?${params}`
       : "/api/transactions";
 
-    console.log("📊 Fetching transactions:", {
-      endpoint,
-      hasToken: !!token,
-      tokenPreview: token.substring(0, 30) + "..."
-    });
-
     try {
       const data = await apiRequest<Transaction[] | any>(endpoint, {
         method: "GET",
-      });
-
-      console.log("📦 Raw transaction response:", {
-        type: typeof data,
-        isArray: Array.isArray(data),
-        keys: data && typeof data === 'object' ? Object.keys(data) : [],
-        dataPreview: data
       });
 
       // Handle different response formats
@@ -477,41 +398,26 @@ export const transactionsAPI = {
       
       if (Array.isArray(data)) {
         transactions = data;
-        console.log("✅ Got array directly, count:", transactions.length);
       } else if (data && typeof data === 'object') {
-        // Try common wrapper properties
         if (Array.isArray(data.transactions)) {
           transactions = data.transactions;
-          console.log("✅ Got transactions from .transactions, count:", transactions.length);
         } else if (Array.isArray(data.data)) {
           transactions = data.data;
-          console.log("✅ Got transactions from .data, count:", transactions.length);
         } else if (Array.isArray(data.content)) {
           transactions = data.content;
-          console.log("✅ Got transactions from .content, count:", transactions.length);
         } else {
-          console.error("❌ Unexpected response format:", {
-            type: typeof data,
-            keys: Object.keys(data),
-            data
-          });
+          console.error("Unexpected response format:", data);
           return [];
         }
       } else {
-        console.error("❌ Expected array or object but got:", typeof data);
         return [];
       }
 
       return transactions;
       
     } catch (error: any) {
-      console.error("❌ Error fetching transactions:", {
-        message: error.message,
-        stack: error.stack
-      });
+      console.error("Error fetching transactions:", error);
       
-      // If it's an auth error, it will be handled by apiRequest
-      // For other errors, return empty array to prevent UI breaking
       if (error.message?.includes("Authentication required")) {
         throw error;
       }
@@ -627,6 +533,90 @@ export const budgetsAPI = {
       method: "GET",
     });
   },
+};
+
+// =====================
+// Alerts API - NEW
+// =====================
+
+export const alertsAPI = {
+  getAll: async (): Promise<Alert[]> => {
+    try {
+      const data = await apiRequest<Alert[] | any>("/api/alerts", {
+        method: "GET",
+      });
+
+      // Handle different response formats
+      if (Array.isArray(data)) {
+        return data;
+      } else if (data && typeof data === 'object') {
+        if (Array.isArray(data.alerts)) {
+          return data.alerts;
+        } else if (Array.isArray(data.data)) {
+          return data.data;
+        } else if (Array.isArray(data.content)) {
+          return data.content;
+        }
+      }
+      
+      console.warn("Unexpected alerts response format, returning empty array");
+      return [];
+    } catch (error: any) {
+      // Silently fail if backend is not ready yet
+      if (error.message?.includes("ERR_CONNECTION_REFUSED") || 
+          error.message?.includes("Failed to fetch") ||
+          error.message?.includes("NetworkError")) {
+        console.warn("⚠️ Alerts service not available, using empty array");
+        return [];
+      }
+      console.error("Error fetching alerts:", error);
+      return [];
+    }
+  },
+
+  getUnread: async (): Promise<Alert[]> => {
+    try {
+      const data = await apiRequest<Alert[] | any>("/api/alerts/unread", {
+        method: "GET",
+      });
+
+      if (Array.isArray(data)) {
+        return data;
+      } else if (data && typeof data === 'object' && Array.isArray(data.alerts)) {
+        return data.alerts;
+      }
+      
+      return [];
+    } catch (error) {
+      console.error("Error fetching unread alerts:", error);
+      return [];
+    }
+  },
+
+  getById: (id: string): Promise<Alert> =>
+    apiRequest<Alert>(`/api/alerts/${id}`, { method: "GET" }),
+
+  create: (alert: Omit<Alert, "id">): Promise<Alert> =>
+    apiRequest<Alert>("/api/alerts", {
+      method: "POST",
+      body: JSON.stringify(alert),
+    }),
+
+  markAsRead: (id: string): Promise<Alert> =>
+    apiRequest<Alert>(`/api/alerts/${id}/read`, {
+      method: "PATCH",
+    }),
+
+  markAllAsRead: (): Promise<{ message: string; count: number }> =>
+    apiRequest("/api/alerts/mark-all-read", {
+      method: "PATCH",
+    }),
+
+  delete: (id: string): Promise<{ message: string }> =>
+    apiRequest(`/api/alerts/${id}`, { method: "DELETE" }),
+
+  deleteAll: (): Promise<{ message: string; count: number }> =>
+    apiRequest("/api/alerts", { method: "DELETE" }),
 };
 
 // =====================

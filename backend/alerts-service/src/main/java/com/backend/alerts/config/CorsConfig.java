@@ -1,4 +1,4 @@
-package com.fintrack.alerts_service.config.CorsConfig;
+package com.backend.alerts_service.config.CorsConfig;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

@@ -2,13 +2,13 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Plus, X, Edit2, Trash2 } from "lucide-react";
+import { Plus, X, Edit2, Trash2, AlertTriangle } from "lucide-react"; // ✅ Add AlertTriangle
 import { EmptyState } from "@/components/EmptyState";
 
 export interface Budget {
-  id: string;          // BudgetsPage normalizes id to String(...)
+  id: string;
   category: string;
-  budget: number;      // limit
+  budget: number;
   spent: number;
   icon: string;
   color: string;
@@ -25,7 +25,7 @@ type Mode = "add" | "edit";
 
 interface FormState {
   category: string;
-  budget: string; // keep as string for input; convert to number on submit
+  budget: string;
   icon: string;
   color: string;
 }
@@ -120,8 +120,6 @@ export function BudgetManager({
       minimumFractionDigits: 2,
     }).format(value);
 
-  // ---------- Empty state ----------
-
   if (!budgets || budgets.length === 0) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
@@ -148,19 +146,16 @@ export function BudgetManager({
     );
   }
 
-  // ---------- Main UI ----------
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="max-w-6xl mx-auto px-4 py-8">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
               Goals &amp; Budgets
             </h1>
             <p className="text-gray-600">
-              Track your spending limits and see how you’re doing this month.
+              Track your spending limits and see how you're doing this month.
             </p>
           </div>
           <button
@@ -172,7 +167,6 @@ export function BudgetManager({
           </button>
         </div>
 
-        {/* Summary cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <SummaryCard
             label="Total Budget"
@@ -189,23 +183,42 @@ export function BudgetManager({
           />
         </div>
 
-        {/* Budget cards */}
+        {/* ✅ UPDATED: Budget cards with alert indicators */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {budgets.map((b) => {
             const percent =
               b.budget === 0 ? 0 : Math.min((b.spent / b.budget) * 100, 130);
             const over = b.spent > b.budget;
+            const nearLimit = percent >= 80; // ✅ Add threshold check
 
             return (
               <div
                 key={b.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col gap-4"
+                className={`bg-white rounded-xl shadow-sm border p-5 flex flex-col gap-4 relative ${
+                  nearLimit ? 'border-yellow-400 ring-2 ring-yellow-100' : 'border-gray-200'
+                }`} // ✅ Add conditional styling
               >
+                {/* ✅ Add alert badge */}
+                {nearLimit && (
+                  <div className="absolute -top-2 -right-2 z-10">
+                    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm ${
+                      over 
+                        ? 'bg-red-500 text-white' 
+                        : percent >= 90
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-yellow-500 text-white'
+                    }`}>
+                      <AlertTriangle className="w-3 h-3" />
+                      {over ? 'Over' : percent >= 90 ? '90%' : '80%'}
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div
                       className="w-10 h-10 rounded-full flex items-center justify-center text-xl"
-                      style={{ backgroundColor: `${b.color}1a` }} // 10% opacity
+                      style={{ backgroundColor: `${b.color}1a` }}
                     >
                       {b.icon}
                     </div>
@@ -236,7 +249,6 @@ export function BudgetManager({
                   </div>
                 </div>
 
-                {/* Progress bar */}
                 <div>
                   <div className="flex justify-between text-xs font-medium mb-1">
                     <span className="text-gray-500">
@@ -257,8 +269,14 @@ export function BudgetManager({
                   <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${
-                        over ? "bg-red-500" : "bg-indigo-500"
-                      }`}
+                        over 
+                          ? "bg-red-500" 
+                          : percent >= 90 
+                          ? "bg-orange-500" 
+                          : percent >= 80 
+                          ? "bg-yellow-500" 
+                          : "bg-indigo-500"
+                      }`} // ✅ Update color based on threshold
                       style={{ width: `${percent}%` }}
                     />
                   </div>
@@ -282,8 +300,6 @@ export function BudgetManager({
     </div>
   );
 }
-
-/* ---------- Small subcomponents ---------- */
 
 function SummaryCard({
   label,

@@ -1,51 +1,67 @@
-package com.fintrack.alerts.entity;
+package com.backend.alerts.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "alert_rules", schema = "alerts")
+@Table(name = "alert_rules")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class AlertRule {
-    
+
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID id;
-    
-    @Column(name = "user_id", nullable = false)
+
+    @Column(nullable = false)
     private UUID userId;
-    
+
     @Enumerated(EnumType.STRING)
-    @Column(name = "rule_type", nullable = false)
+    @Column(nullable = false)
     private RuleType ruleType;
-    
-    @Column(name = "threshold_amount")
+
+    @Column(nullable = false)
     private BigDecimal thresholdAmount;
-    
+
     private String category;
-    
-    @Column(name = "is_active", nullable = false)
+
+    @Builder.Default
+    @Column(nullable = false)
     private Boolean isActive = true;
-    
-    @CreationTimestamp
-    @Column(name = "created_at")
+
+    @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
-    
-    @UpdateTimestamp
-    @Column(name = "updated_at")
+
     private LocalDateTime updatedAt;
-    
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+
     public enum RuleType {
-        HIGH_AMOUNT,           // Single transaction exceeds threshold
-        DAILY_LIMIT_EXCEEDED,  // Daily spending exceeds limit
-        UNUSUAL_CATEGORY,      // Spending in unusual category
-        DUPLICATE_TRANSACTION, // Potential duplicate
-        BUDGET_WARNING         // Approaching budget limit
+        BUDGET_EXCEEDED,
+        BUDGET_WARNING,
+        HIGH_AMOUNT, // ← ADD THIS LINE
+        UNUSUAL_SPENDING,
+        GOAL_MILESTONE,
+        GOAL_ACHIEVED,
+        RECURRING_PAYMENT_DUE,
+        DAILY_LIMIT
     }
 }

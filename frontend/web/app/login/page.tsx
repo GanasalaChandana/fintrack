@@ -51,7 +51,6 @@ declare global {
   }
 }
 
-// ✅ Debounce utility to prevent multiple rapid calls
 function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
@@ -80,10 +79,9 @@ export default function AuthPage() {
   const isSubmitting = useRef(false);
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const [googleLoaded, setGoogleLoaded] = useState(false);
-  const googleInitialized = useRef(false); // ✅ Prevent duplicate initialization
-  const lastGoogleCallTime = useRef(0); // ✅ Track last call time
+  const googleInitialized = useRef(false);
+  const lastGoogleCallTime = useRef(0);
 
-  // Load Google OAuth Script
   useEffect(() => {
     const loadGoogleScript = () => {
       if (document.getElementById('google-oauth-script')) {
@@ -110,7 +108,6 @@ export default function AuthPage() {
     loadGoogleScript();
   }, []);
 
-  // Initialize Google Sign-In (only once)
   useEffect(() => {
     if (!googleLoaded || !window.google || googleInitialized.current) return;
 
@@ -138,7 +135,7 @@ export default function AuthPage() {
         );
       }
       
-      googleInitialized.current = true; // ✅ Mark as initialized
+      googleInitialized.current = true;
       console.log('✅ Google Sign-In initialized');
     } catch (err) {
       console.error('❌ Google Sign-In initialization error:', err);
@@ -146,9 +143,7 @@ export default function AuthPage() {
     }
   }, [googleLoaded, mode]);
 
-  // ✅ Throttled Google Sign-In handler (prevents rapid duplicate calls)
   const handleGoogleSignIn = async (response: GoogleCredentialResponse) => {
-    // ✅ Prevent duplicate calls within 2 seconds
     const now = Date.now();
     if (now - lastGoogleCallTime.current < 2000) {
       console.log('⚠️ Google Sign-In call throttled (too soon)');
@@ -172,9 +167,8 @@ export default function AuthPage() {
       
       console.log('📤 Sending credential to:', `${API_URL}/api/auth/google`);
 
-      // ✅ Add timeout to prevent hanging requests
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const res = await fetch(`${API_URL}/api/auth/google`, {
         method: 'POST',
@@ -194,7 +188,6 @@ export default function AuthPage() {
       clearTimeout(timeoutId);
       console.log('📥 Response status:', res.status);
 
-      // ✅ Handle 429 rate limit specifically
       if (res.status === 429) {
         throw new Error('Too many sign-in attempts. Please wait 2-3 minutes and try again.');
       }
@@ -226,6 +219,16 @@ export default function AuthPage() {
 
       if (data.token) {
         window.localStorage.setItem('authToken', data.token);
+        window.localStorage.setItem('ft_token', data.token);
+        
+        // ✅ Store userId from response
+        if (data.userId) {
+          window.localStorage.setItem('userId', data.userId);
+          console.log('✅ User ID stored:', data.userId);
+        } else if (data.user?.id) {
+          window.localStorage.setItem('userId', data.user.id);
+          console.log('✅ User ID stored:', data.user.id);
+        }
         
         if (data.user) {
           window.localStorage.setItem('user', JSON.stringify(data.user));
@@ -301,7 +304,6 @@ export default function AuthPage() {
     return true;
   };
 
-  // ✅ Debounced submit handler
   const handleSubmit = async () => {
     if (loading || isSubmitting.current) {
       console.log('⚠️ Already processing request');
@@ -334,7 +336,6 @@ export default function AuthPage() {
 
       console.log('📤 Request to:', `${API_URL}${endpoint}`);
 
-      // ✅ Add timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -376,6 +377,16 @@ export default function AuthPage() {
 
       if (data.token) {
         window.localStorage.setItem('authToken', data.token);
+        window.localStorage.setItem('ft_token', data.token);
+        
+        // ✅ Store userId from response
+        if (data.userId) {
+          window.localStorage.setItem('userId', data.userId);
+          console.log('✅ User ID stored:', data.userId);
+        } else if (data.user?.id) {
+          window.localStorage.setItem('userId', data.user.id);
+          console.log('✅ User ID stored:', data.user.id);
+        }
         
         if (data.user) {
           window.localStorage.setItem('user', JSON.stringify(data.user));
