@@ -1,4 +1,19 @@
-﻿spring:
+﻿server:
+  port: ${SERVER_PORT:8083}
+  # FIXED: Increased connection limits and disabled rate limiting
+  tomcat:
+    max-connections: 10000
+    threads:
+      max: 200
+      min-spare: 10
+    accept-count: 100
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: on_param
+    include-exception: true
+
+spring:
   application:
     name: alerts-service
   
@@ -12,8 +27,8 @@
     password: ${POSTGRES_PASSWORD:npg_eVXG4qfL1FzP}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
+      maximum-pool-size: 20
+      minimum-idle: 10
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
@@ -41,7 +56,6 @@
     clean-disabled: true
 
   kafka:
-    # ✅ FIXED: Changed default from kafka:9092 to localhost:9093 for local development
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9093}
     consumer:
       group-id: alerts-service
@@ -56,7 +70,6 @@
 
   data:
     redis:
-      # ✅ FIXED: Changed default from redis to localhost for local development
       host: ${SPRING_REDIS_HOST:localhost}
       port: ${SPRING_REDIS_PORT:6379}
       timeout: 60000
@@ -64,20 +77,17 @@
 alert:
   rules:
     high-amount-threshold: 1000.00
-    rate-limit-window-seconds: 3600
-    max-alerts-per-window: 10
-
-server:
-  port: ${SERVER_PORT:8083}
-  error:
-    include-message: always
-    include-binding-errors: always
-    include-stacktrace: on_param
-    include-exception: true
+    # FIXED: Significantly increased rate limits
+    rate-limit-window-seconds: 60
+    max-alerts-per-window: 1000
 
 app:
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:https://fintrack-liart.vercel.app,https://*.vercel.app,http://localhost:3000,http://localhost:5173}
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS,PATCH
+    allowed-headers: "*"
+    allow-credentials: true
+    max-age: 3600
 
 management:
   endpoints:
@@ -111,7 +121,5 @@ logging:
     org.springframework.boot.web: DEBUG
     org.flywaydb: INFO
     org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

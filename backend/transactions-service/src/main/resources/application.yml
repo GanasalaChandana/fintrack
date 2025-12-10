@@ -1,9 +1,12 @@
 ﻿server:
   port: ${SERVER_PORT:8082}
-
-app:
-  cors:
-    allowed-origins: ${ALLOWED_ORIGINS:https://fintrack-liart.vercel.app,https://*.vercel.app,http://localhost:3000,http://localhost:5173}
+  # FIXED: Increased connection limits and disabled rate limiting
+  tomcat:
+    max-connections: 10000
+    threads:
+      max: 200
+      min-spare: 10
+    accept-count: 100
 
 spring:
   application:
@@ -14,13 +17,16 @@ spring:
       add-mappings: false
 
   datasource:
-    # ⭐ FIXED FOR NEON LOCAL ⭐
-    # - Removed "?currentSchema=transactions"
-    # - Using Neon DB and credentials
     url: jdbc:postgresql://${POSTGRES_HOST:ep-quiet-fog-a45d40sa-pooler.us-east-1.aws.neon.tech}:${POSTGRES_PORT:5432}/${POSTGRES_DB:neondb}?sslmode=require
     username: ${POSTGRES_USER:neondb_owner}
     password: ${POSTGRES_PASSWORD:npg_eVXG4qfL1FzP}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 10
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
 
   jpa:
     hibernate:
@@ -30,7 +36,6 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        # ✔ Neon-compatible, sets schema AFTER connection
         default_schema: transactions
 
   flyway:
@@ -59,6 +64,14 @@ spring:
       host: ${SPRING_REDIS_HOST:localhost}
       port: ${SPRING_REDIS_PORT:6379}
 
+app:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:https://fintrack-liart.vercel.app,https://*.vercel.app,http://localhost:3000,http://localhost:5173}
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS,PATCH
+    allowed-headers: "*"
+    allow-credentials: true
+    max-age: 3600
+
 ml-classifier:
   url: ${ML_CLASSIFIER_URL:http://localhost:8000}
 
@@ -80,3 +93,9 @@ management:
   health:
     mail:
       enabled: false
+
+logging:
+  level:
+    root: INFO
+    com.fintrack: DEBUG
+    org.springframework.web: DEBUG
