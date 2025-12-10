@@ -1,4 +1,4 @@
-package com.fintrack.reports_service.config; // ← Change package name for each service
+package com.fintrack.notifications_service.config; // ← Change package name for each service
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

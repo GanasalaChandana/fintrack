@@ -1,4 +1,4 @@
-// lib/api.ts - FIXED with Alerts API and better error handling
+// lib/api.ts - Goals API removed
 
 // =====================
 // Types
@@ -29,21 +29,6 @@ export interface Transaction {
   createdAt?: string;
   updatedAt?: string;
   [key: string]: any;
-}
-
-export interface Goal {
-  id?: string;
-  name: string;
-  target: number;
-  current: number;
-  deadline: string;
-  icon: string;
-  color: string;
-  category: string;
-  monthlyContribution: number;
-  userId?: string;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface Budget {
@@ -94,7 +79,6 @@ export interface Alert {
 // =====================
 
 function getBaseUrl(): string {
-  // IMPORTANT: Change this to your API Gateway URL
   const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
   return url.replace(/\/$/, "");
 }
@@ -461,39 +445,6 @@ export const transactionsAPI = {
 };
 
 // =====================
-// Goals API
-// =====================
-
-export const goalsAPI = {
-  getAll: (): Promise<Goal[]> =>
-    apiRequest<Goal[]>("/api/goals", { method: "GET" }),
-
-  getById: (id: string): Promise<Goal> =>
-    apiRequest<Goal>(`/api/goals/${id}`, { method: "GET" }),
-
-  create: (goal: Omit<Goal, "id">): Promise<Goal> =>
-    apiRequest<Goal>("/api/goals", {
-      method: "POST",
-      body: JSON.stringify(goal),
-    }),
-
-  update: (id: string, goal: Partial<Goal>): Promise<Goal> =>
-    apiRequest<Goal>(`/api/goals/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(goal),
-    }),
-
-  delete: (id: string): Promise<{ message: string }> =>
-    apiRequest(`/api/goals/${id}`, { method: "DELETE" }),
-
-  updateProgress: (id: string, current: number): Promise<Goal> =>
-    apiRequest<Goal>(`/api/goals/${id}/progress`, {
-      method: "PATCH",
-      body: JSON.stringify({ current }),
-    }),
-};
-
-// =====================
 // Budgets API
 // =====================
 
@@ -536,7 +487,7 @@ export const budgetsAPI = {
 };
 
 // =====================
-// Alerts API - NEW
+// Alerts API
 // =====================
 
 export const alertsAPI = {

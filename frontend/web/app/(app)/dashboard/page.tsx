@@ -240,14 +240,14 @@ export default function DashboardPage() {
     };
   };
 
-  // Fetch all data
+  // Fetch all data - GOALS API REMOVED
   const fetchDashboardData = useCallback(async () => {
     setLoadingData(true);
     try {
-      const [transactions, budgets, goalsData] = await Promise.all([
+      const [transactions, budgets] = await Promise.all([
         apiRequest<any[]>("/api/transactions").catch(() => []),
         apiRequest<any[]>("/api/budgets").catch(() => []),
-        apiRequest<any[]>("/api/goals").catch(() => []),
+        // ❌ REMOVED: apiRequest<any[]>("/api/goals").catch(() => []),
       ]);
 
       const trendData = processSpendingTrend(transactions);
@@ -259,6 +259,8 @@ export default function DashboardPage() {
       const catData = processCategoryBreakdown(transactions);
       setCategoryData(catData);
 
+      // ✅ Set goals to empty array since we're not fetching them
+      const goalsData: any[] = [];
       setGoals(goalsData);
 
       const calculatedStats = calculateStats(

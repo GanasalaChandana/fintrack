@@ -1,8 +1,8 @@
 package com.fintrack.gateway.config;
 
-import org.springframework.core.annotation.Order;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -20,36 +20,28 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Global CORS configuration for the API Gateway.
- * FIXED: Enhanced Google OAuth support and better origin validation
+ * Simple, Secure CORS Configuration for API Gateway
+ * 
+ * This config is MINIMAL and SECURE:
+ * - Only allows YOUR frontend domains
+ * - No overly permissive wildcards
+ * - Works with Google OAuth (because requests come from YOUR frontend)
+ * 
+ * NOTE: If you get CORS errors from accounts.google.com,
+ * add it to ALLOWED_ORIGINS. But test without it first!
  */
 @Configuration
 public class GlobalCorsConfiguration {
 
-    private static final List<String> ALLOWED_ORIGIN_PATTERNS = Arrays.asList(
+    private static final List<String> ALLOWED_ORIGINS = Arrays.asList(
             // Production
             "https://fintrack-liart.vercel.app",
-            "https://fintrack-liart-*.vercel.app",
-            "https://*.vercel.app",
 
             // Local Development
             "http://localhost:3000",
             "http://localhost:3001",
             "http://localhost:5173",
-            "http://localhost:8080",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:3001",
-            "http://127.0.0.1:8080",
-
-            // Google OAuth Origins
-            "https://accounts.google.com",
-            "https://content-accounts.google.com",
-            "https://gsi.google.com",
-            "https://www.google.com",
-            "https://google.com",
-            "https://oauth.googleusercontent.com",
-            "https://apis.google.com");
+            "http://127.0.0.1:3000");
 
     private static final List<String> ALLOWED_METHODS = Arrays.asList(
             HttpMethod.GET.name(),
@@ -57,40 +49,7 @@ public class GlobalCorsConfiguration {
             HttpMethod.PUT.name(),
             HttpMethod.DELETE.name(),
             HttpMethod.PATCH.name(),
-            HttpMethod.OPTIONS.name(),
-            HttpMethod.HEAD.name());
-
-    private static final List<String> ALLOWED_HEADERS = Arrays.asList(
-            HttpHeaders.AUTHORIZATION,
-            HttpHeaders.CONTENT_TYPE,
-            HttpHeaders.ACCEPT,
-            HttpHeaders.ORIGIN,
-            HttpHeaders.REFERER,
-            HttpHeaders.USER_AGENT,
-            "X-Requested-With",
-            "Access-Control-Request-Method",
-            "Access-Control-Request-Headers",
-            "X-User-Id",
-            "X-Client-Data",
-            "X-Goog-AuthUser",
-            "X-Goog-Encode-Response-If-Executable",
-            "X-Goog-Visitor-Id",
-            "X-OAuth-State",
-            "X-Origin",
-            "credentials",
-            "withCredentials");
-
-    private static final List<String> EXPOSED_HEADERS = Arrays.asList(
-            HttpHeaders.AUTHORIZATION,
-            HttpHeaders.CONTENT_TYPE,
-            HttpHeaders.LOCATION,
-            "X-Requested-With",
-            "Accept",
-            "Origin",
-            "Access-Control-Request-Method",
-            "Access-Control-Request-Headers",
-            "X-User-Id",
-            "X-Auth-Token");
+            HttpMethod.OPTIONS.name());
 
     @Bean
     @Order(-1)
@@ -98,11 +57,14 @@ public class GlobalCorsConfiguration {
         CorsConfiguration cors = new CorsConfiguration();
 
         cors.setAllowCredentials(true);
-        cors.setAllowedOriginPatterns(ALLOWED_ORIGIN_PATTERNS);
+        cors.setAllowedOriginPatterns(ALLOWED_ORIGINS);
         cors.setAllowedHeaders(Arrays.asList("*"));
         cors.setAllowedMethods(ALLOWED_METHODS);
-        cors.setExposedHeaders(EXPOSED_HEADERS);
-        cors.setMaxAge(7200L);
+        cors.setExposedHeaders(Arrays.asList(
+                HttpHeaders.AUTHORIZATION,
+                "X-User-Id",
+                "X-Auth-Token"));
+        cors.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cors);
@@ -138,8 +100,8 @@ public class GlobalCorsConfiguration {
                     }
 
                     resHeaders.set(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
-                            String.join(", ", EXPOSED_HEADERS));
-                    resHeaders.set(HttpHeaders.ACCESS_CONTROL_MAX_AGE, "7200");
+                            "Authorization, X-User-Id, X-Auth-Token");
+                    resHeaders.set(HttpHeaders.ACCESS_CONTROL_MAX_AGE, "3600");
 
                     resHeaders.add(HttpHeaders.VARY, "Origin");
                     resHeaders.add(HttpHeaders.VARY, "Access-Control-Request-Method");
@@ -154,33 +116,23 @@ public class GlobalCorsConfiguration {
         };
     }
 
-    /**
-     * Enhanced origin validation for OAuth
-     */
     private boolean isAllowedOrigin(String origin) {
         if (origin == null || origin.isEmpty()) {
             return false;
         }
 
         // Exact match
-        if (ALLOWED_ORIGIN_PATTERNS.contains(origin)) {
+        if (ALLOWED_ORIGINS.contains(origin)) {
             return true;
         }
 
-        // Google domains - any Google subdomain
-        if (origin.startsWith("https://") &&
-                (origin.contains(".google.com") ||
-                        origin.contains(".googleusercontent.com") ||
-                        origin.contains(".googleapis.com"))) {
+        // Allow YOUR preview deployments only
+        if (origin.startsWith("https://fintrack-liart-") &&
+                origin.endsWith(".vercel.app")) {
             return true;
         }
 
-        // Vercel deployments
-        if (origin.startsWith("https://") && origin.contains(".vercel.app")) {
-            return true;
-        }
-
-        // Development - any localhost port
+        // Development - any localhost/127.0.0.1 port
         if (origin.startsWith("http://localhost:") ||
                 origin.startsWith("http://127.0.0.1:")) {
             return true;

@@ -1,4 +1,4 @@
-package com.fintrack.reports_service.config;
+package com.fintrack.notifications_service.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
