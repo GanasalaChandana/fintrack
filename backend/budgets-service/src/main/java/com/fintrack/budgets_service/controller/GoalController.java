@@ -13,13 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/goals")
-@CrossOrigin(origins = {
-        "https://fintrack-liart.vercel.app",
-        "https://*.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:8080"
-}, allowCredentials = "true")
+@RequestMapping("/goals")
 @RequiredArgsConstructor
 public class GoalController {
 
@@ -59,7 +53,7 @@ public class GoalController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        goalDTO.setUserId(userId);
+        goalDTO.setUserId(userId); // ✅ Now works with String
         GoalDTO createdGoal = goalService.createGoal(goalDTO);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdGoal);
     }
