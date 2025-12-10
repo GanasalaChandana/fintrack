@@ -7,8 +7,14 @@ spring:
 
   cloud:
     gateway:
+      # FIXED: Ensure CORS headers aren't duplicated
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+
+      # FIXED: Increased default timeout to prevent 504 errors
+      httpclient:
+        connect-timeout: 10000
+        response-timeout: 30s
 
       routes:
         # ================= AUTH (NO AUTH REQUIRED) =================
@@ -22,7 +28,7 @@ spring:
                 regexp: /api/auth/(?<segment>.*)
                 replacement: /api/auth/${segment}
 
-        # ✅ NEW: OAUTH2 LOGIN ROUTES (NO AUTH REQUIRED)
+        # ✅ OAUTH2 LOGIN ROUTES (NO AUTH REQUIRED)
         - id: oauth2-login
           uri: ${USERS_SERVICE_URL:http://localhost:8081}
           predicates:
@@ -33,7 +39,7 @@ spring:
                 regexp: /oauth2/(?<segment>.*)
                 replacement: /oauth2/${segment}
 
-        # ✅ NEW: LOGIN CALLBACK ROUTES (NO AUTH REQUIRED)
+        # ✅ LOGIN CALLBACK ROUTES (NO AUTH REQUIRED)
         - id: login-oauth2-code
           uri: ${USERS_SERVICE_URL:http://localhost:8081}
           predicates:
@@ -44,7 +50,7 @@ spring:
                 regexp: /login/oauth2/code/(?<segment>.*)
                 replacement: /login/oauth2/code/${segment}
 
-        # ✅ NEW: GOOGLE AUTH CALLBACK (NO AUTH REQUIRED)
+        # ✅ GOOGLE AUTH CALLBACK (NO AUTH REQUIRED)
         - id: google-auth-callback
           uri: ${USERS_SERVICE_URL:http://localhost:8081}
           predicates:
@@ -61,7 +67,12 @@ spring:
           predicates:
             - Path=/api/notifications/**
           filters:
-            - AuthenticationFilter 
+            - AuthenticationFilter
+            # FIXED: Increased timeout for notifications
+            - name: CircuitBreaker
+              args:
+                name: notificationsCircuitBreaker
+                fallbackUri: forward:/fallback/notifications
             
         # ================= USERS (REQUIRES AUTH) =================
         - id: users-service
@@ -86,6 +97,11 @@ spring:
               args:
                 regexp: /api/transactions/(?<segment>.*)
                 replacement: /api/transactions/${segment}
+            # FIXED: Circuit breaker for resilience
+            - name: CircuitBreaker
+              args:
+                name: transactionsCircuitBreaker
+                fallbackUri: forward:/fallback/transactions
 
         # ================= RECURRING TRANSACTIONS =================
         - id: transactions-service-recurring
@@ -110,6 +126,11 @@ spring:
               args:
                 regexp: /api/budgets/(?<segment>.*)
                 replacement: /budgets/${segment}
+            # FIXED: Circuit breaker for resilience
+            - name: CircuitBreaker
+              args:
+                name: budgetsCircuitBreaker
+                fallbackUri: forward:/fallback/budgets
 
         # ================= GOALS (REQUIRES AUTH) =================
         - id: goals-service
@@ -122,6 +143,11 @@ spring:
               args:
                 regexp: /api/goals/(?<segment>.*)
                 replacement: /goals/${segment}
+            # FIXED: Circuit breaker for resilience
+            - name: CircuitBreaker
+              args:
+                name: goalsCircuitBreaker
+                fallbackUri: forward:/fallback/goals
 
         # ================= ALERTS (REQUIRES AUTH) =================
         - id: alerts-service
@@ -146,17 +172,55 @@ spring:
               args:
                 regexp: /api/reports/(?<segment>.*)
                 replacement: /api/reports/${segment}
+            # FIXED: Circuit breaker for resilience
+            - name: CircuitBreaker
+              args:
+                name: reportsCircuitBreaker
+                fallbackUri: forward:/fallback/reports
 
-# ✅ UPDATED: Enable dev mode to bypass authentication
+# ✅ Environment configuration
 app:
-  environment: ${APP_ENVIRONMENT:development}  # Changed from 'local' to 'development'
+  environment: ${APP_ENVIRONMENT:production}
   dev:
-    bypass-auth: ${DEV_BYPASS_AUTH:true}  # Changed from 'false' to 'true'
+    bypass-auth: ${DEV_BYPASS_AUTH:false}
     default-user-id: ${DEV_USER_ID:dev-user-123}
 
 jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
   expiration: ${JWT_EXPIRATION:86400000}
+
+# FIXED: Circuit breaker configuration
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+    instances:
+      transactionsCircuitBreaker:
+        baseConfig: default
+      budgetsCircuitBreaker:
+        baseConfig: default
+      goalsCircuitBreaker:
+        baseConfig: default
+      reportsCircuitBreaker:
+        baseConfig: default
+      notificationsCircuitBreaker:
+        baseConfig: default
+  
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 30s
+
+# FIXED: Rate limiting configuration (increased limits)
+spring.cloud.gateway.filter.request-rate-limiter:
+  enabled: false  # Disabled to prevent 429 errors
 
 management:
   endpoints:

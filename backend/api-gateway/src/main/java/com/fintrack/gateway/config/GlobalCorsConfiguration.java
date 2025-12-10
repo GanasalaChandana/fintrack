@@ -26,22 +26,23 @@ import java.util.List;
 @Configuration
 public class GlobalCorsConfiguration {
 
-    // ✅ ENHANCED: Added more Google OAuth domains
     private static final List<String> ALLOWED_ORIGIN_PATTERNS = Arrays.asList(
             // Production
             "https://fintrack-liart.vercel.app",
-            "https://fintrack-liart-*.vercel.app", // Add this line for preview deployments
-            "https://*.vercel.app", // Add this line for all Vercel apps
+            "https://fintrack-liart-*.vercel.app",
+            "https://*.vercel.app",
 
             // Local Development
             "http://localhost:3000",
             "http://localhost:3001",
             "http://localhost:5173",
+            "http://localhost:8080",
             "http://127.0.0.1:3000",
             "http://127.0.0.1:5173",
             "http://127.0.0.1:3001",
+            "http://127.0.0.1:8080",
 
-            // ✅ GOOGLE OAUTH ORIGINS - COMPLETE LIST
+            // Google OAuth Origins
             "https://accounts.google.com",
             "https://content-accounts.google.com",
             "https://gsi.google.com",
@@ -59,7 +60,6 @@ public class GlobalCorsConfiguration {
             HttpMethod.OPTIONS.name(),
             HttpMethod.HEAD.name());
 
-    // ✅ ENHANCED: Added more headers for Google OAuth
     private static final List<String> ALLOWED_HEADERS = Arrays.asList(
             HttpHeaders.AUTHORIZATION,
             HttpHeaders.CONTENT_TYPE,
@@ -71,14 +71,12 @@ public class GlobalCorsConfiguration {
             "Access-Control-Request-Method",
             "Access-Control-Request-Headers",
             "X-User-Id",
-            // Google OAuth specific headers
             "X-Client-Data",
             "X-Goog-AuthUser",
             "X-Goog-Encode-Response-If-Executable",
             "X-Goog-Visitor-Id",
             "X-OAuth-State",
             "X-Origin",
-            // Common auth headers
             "credentials",
             "withCredentials");
 
@@ -99,22 +97,11 @@ public class GlobalCorsConfiguration {
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration cors = new CorsConfiguration();
 
-        // ✅ CRITICAL: Allow credentials for OAuth
         cors.setAllowCredentials(true);
-
-        // ✅ Use explicit origins (required with credentials)
         cors.setAllowedOriginPatterns(ALLOWED_ORIGIN_PATTERNS);
-
-        // Allow all headers (safest for OAuth)
         cors.setAllowedHeaders(Arrays.asList("*"));
-
-        // ✅ CRITICAL: Allow all methods
         cors.setAllowedMethods(ALLOWED_METHODS);
-
-        // Expose headers
         cors.setExposedHeaders(EXPOSED_HEADERS);
-
-        // ✅ INCREASED: Cache preflight for 2 hours (reduces preflight requests)
         cors.setMaxAge(7200L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -123,9 +110,6 @@ public class GlobalCorsConfiguration {
         return new CorsWebFilter(source);
     }
 
-    /**
-     * ✅ ENHANCED: More permissive preflight handler for OAuth flows
-     */
     @Bean
     @Order(-2)
     public WebFilter corsPreflightFilter() {
@@ -139,17 +123,12 @@ public class GlobalCorsConfiguration {
 
                 String origin = reqHeaders.getOrigin();
 
-                // ✅ ENHANCED: More permissive origin check
                 if (origin != null && isAllowedOrigin(origin)) {
-                    // Set CORS headers
                     resHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, origin);
                     resHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
-
-                    // ✅ CRITICAL: Allow all methods for preflight
                     resHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS,
                             String.join(", ", ALLOWED_METHODS));
 
-                    // ✅ CRITICAL: Allow all requested headers
                     List<String> requestedHeaders = reqHeaders.getAccessControlRequestHeaders();
                     if (requestedHeaders != null && !requestedHeaders.isEmpty()) {
                         resHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
@@ -158,14 +137,10 @@ public class GlobalCorsConfiguration {
                         resHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS, "*");
                     }
 
-                    // Expose headers
                     resHeaders.set(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
                             String.join(", ", EXPOSED_HEADERS));
-
-                    // ✅ INCREASED: Cache for 2 hours
                     resHeaders.set(HttpHeaders.ACCESS_CONTROL_MAX_AGE, "7200");
 
-                    // Vary headers for caching
                     resHeaders.add(HttpHeaders.VARY, "Origin");
                     resHeaders.add(HttpHeaders.VARY, "Access-Control-Request-Method");
                     resHeaders.add(HttpHeaders.VARY, "Access-Control-Request-Headers");
@@ -180,7 +155,7 @@ public class GlobalCorsConfiguration {
     }
 
     /**
-     * ✅ ENHANCED: More permissive origin validation for OAuth
+     * Enhanced origin validation for OAuth
      */
     private boolean isAllowedOrigin(String origin) {
         if (origin == null || origin.isEmpty()) {
@@ -192,7 +167,7 @@ public class GlobalCorsConfiguration {
             return true;
         }
 
-        // ✅ ENHANCED: Google domains - any Google subdomain
+        // Google domains - any Google subdomain
         if (origin.startsWith("https://") &&
                 (origin.contains(".google.com") ||
                         origin.contains(".googleusercontent.com") ||
@@ -200,12 +175,12 @@ public class GlobalCorsConfiguration {
             return true;
         }
 
-        // ✅ ENHANCED: Vercel deployments
+        // Vercel deployments
         if (origin.startsWith("https://") && origin.contains(".vercel.app")) {
             return true;
         }
 
-        // ✅ ENHANCED: Development - any localhost port
+        // Development - any localhost port
         if (origin.startsWith("http://localhost:") ||
                 origin.startsWith("http://127.0.0.1:")) {
             return true;
