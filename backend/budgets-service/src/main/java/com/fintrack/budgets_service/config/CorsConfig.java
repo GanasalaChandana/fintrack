@@ -1,4 +1,4 @@
-package com.fintrack.budgets_service.config; // ← Change package name for each service
+package com.fintrack.budgets_service.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,32 +11,33 @@ import java.util.Arrays;
 @Configuration
 public class CorsConfig {
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
+        @Bean
+        public CorsConfigurationSource corsConfigurationSource() {
+                CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOriginPatterns(Arrays.asList(
-                "http://localhost:3000",
-                "http://localhost:8080",
-                "https://fintrack-liart.vercel.app",
-                "https://fintrack-liart-*.vercel.app",
-                "https://fintrack-api-gateway.onrender.com"));
+                configuration.setAllowedOriginPatterns(Arrays.asList(
+                                "http://localhost:3000",
+                                "http://localhost:8080",
+                                "https://fintrack-liart.vercel.app",
+                                "https://fintrack-liart-*.vercel.app",
+                                "https://fintrack-api-gateway.onrender.com"));
 
-        configuration.setAllowedMethods(Arrays.asList(
-                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+                configuration.setAllowedMethods(Arrays.asList(
+                                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
-        configuration.setAllowedHeaders(Arrays.asList("*"));
+                configuration.setAllowedHeaders(Arrays.asList("*"));
 
-        configuration.setExposedHeaders(Arrays.asList(
-                "Authorization",
-                "X-User-Id"));
+                configuration.setExposedHeaders(Arrays.asList(
+                                "Authorization",
+                                "X-User-Id",
+                                "X-Auth-Token"));
 
-        configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L);
+                configuration.setAllowCredentials(true);
+                configuration.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration); // ← /** is critical!
+                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                source.registerCorsConfiguration("/**", configuration);
 
-        return source;
-    }
+                return source;
+        }
 }

@@ -20,15 +20,9 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // CRITICAL: Enable CORS using our CorsConfig bean
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
-
-                // Disable CSRF for REST APIs
                 .csrf(csrf -> csrf.disable())
-
-                // Allow all requests (gateway handles auth)
-                .authorizeHttpRequests(auth -> auth
-                        .anyRequest().permitAll());
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
 
         return http.build();
     }
