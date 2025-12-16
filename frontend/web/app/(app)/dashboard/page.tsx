@@ -27,45 +27,13 @@ import {
 } from "@/components/CSVImportModal";
 import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 
-/* ===================== API Helper ===================== */
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-
-const getToken = (): string | null => {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("ft_token") || localStorage.getItem("authToken");
-};
-
-const apiRequest = async <T,>(
-  endpoint: string,
-  options: RequestInit = {},
-): Promise<T> => {
-  const token = getToken();
-
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
-    },
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      localStorage.removeItem("ft_token");
-      localStorage.removeItem("authToken");
-      window.location.href = "/register?mode=signin";
-    }
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-
-  if (response.status === 204 || response.headers.get("content-length") === "0") {
-    return {} as T;
-  }
-
-  return response.json();
-};
+// ✅ IMPORT CENTRALIZED API FUNCTIONS
+import { 
+  getToken, 
+  isAuthenticated as checkAuth,
+  transactionsAPI,
+  budgetsAPI,
+} from "@/lib/api";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-US", {
@@ -102,13 +70,19 @@ export default function DashboardPage() {
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
 
-  // Auth check
+  // ✅ IMPROVED AUTH CHECK using centralized function
   useEffect(() => {
+    console.log('🔍 Dashboard mounted - checking authentication...');
+    
     if (typeof window !== "undefined") {
-      const token = getToken();
-      if (!token) {
-        router.replace("/register?mode=signin");
+      const authenticated = checkAuth();
+      console.log('🔐 Authentication status:', authenticated ? 'AUTHENTICATED' : 'NOT AUTHENTICATED');
+      
+      if (!authenticated) {
+        console.log('❌ No valid token, redirecting to login...');
+        router.replace("/register?mode=signin&reason=session_required");
       } else {
+        console.log('✅ User is authenticated, loading dashboard...');
         setIsAuthenticated(true);
         setIsLoading(false);
       }
@@ -240,15 +214,26 @@ export default function DashboardPage() {
     };
   };
 
-  // Fetch all data - GOALS API REMOVED
+  // ✅ FETCH DATA using centralized API functions
   const fetchDashboardData = useCallback(async () => {
+    console.log('📊 Fetching dashboard data...');
     setLoadingData(true);
+    
     try {
+      // Use centralized API functions
       const [transactions, budgets] = await Promise.all([
-        apiRequest<any[]>("/api/transactions").catch(() => []),
-        apiRequest<any[]>("/api/budgets").catch(() => []),
-        // ❌ REMOVED: apiRequest<any[]>("/api/goals").catch(() => []),
+        transactionsAPI.getAll().catch((err) => {
+          console.error('❌ Failed to fetch transactions:', err);
+          return [];
+        }),
+        budgetsAPI.getAll().catch((err) => {
+          console.error('❌ Failed to fetch budgets:', err);
+          return [];
+        }),
       ]);
+
+      console.log('✅ Fetched transactions:', transactions.length);
+      console.log('✅ Fetched budgets:', budgets.length);
 
       const trendData = processSpendingTrend(transactions);
       setSpendingTrendData(trendData);
@@ -259,7 +244,7 @@ export default function DashboardPage() {
       const catData = processCategoryBreakdown(transactions);
       setCategoryData(catData);
 
-      // ✅ Set goals to empty array since we're not fetching them
+      // Set goals to empty array since we're not fetching them
       const goalsData: any[] = [];
       setGoals(goalsData);
 
@@ -269,8 +254,10 @@ export default function DashboardPage() {
         goalsData,
       );
       setStats(calculatedStats);
+      
+      console.log('✅ Dashboard data loaded successfully');
     } catch (error) {
-      console.error("Failed to fetch dashboard data:", error);
+      console.error("❌ Failed to fetch dashboard data:", error);
     } finally {
       setLoadingData(false);
     }
@@ -282,8 +269,10 @@ export default function DashboardPage() {
     }
   }, [isAuthenticated, fetchDashboardData]);
 
-  // ================= CSV IMPORT HANDLER =================
+  // ✅ CSV IMPORT using centralized API
   const handleImportTransactions = async (rows: CSVRow[]): Promise<void> => {
+    console.log('📥 Importing', rows.length, 'transactions from CSV...');
+    
     const normalizeString = (value: unknown) =>
       (value ?? "").toString().trim();
 
@@ -312,47 +301,50 @@ export default function DashboardPage() {
         return Promise.resolve();
       }
 
-      return apiRequest("/api/transactions", {
-        method: "POST",
-        body: JSON.stringify({
-          date,
-          merchant,
-          description,
-          amount,
-          category,
-          type,
-        }),
+      // Use centralized API function
+      return transactionsAPI.create({
+        date,
+        merchant,
+        description,
+        amount,
+        category,
+        type,
+      }).catch(err => {
+        console.error('❌ Failed to create transaction:', err);
+        return null;
       });
     });
 
     await Promise.all(requests);
+    console.log('✅ CSV import complete, refreshing data...');
     await fetchDashboardData();
   };
 
-  // ================= TRANSACTION MODAL HANDLER =================
+  // ✅ TRANSACTION MODAL using centralized API
   const handleSaveTransaction = async (transaction: any) => {
-    const method = editingTransaction ? "PUT" : "POST";
-    const endpoint = editingTransaction
-      ? `/api/transactions/${editingTransaction.id}`
-      : "/api/transactions";
+    console.log('💾 Saving transaction:', transaction);
+    
+    try {
+      if (editingTransaction) {
+        // Update existing transaction
+        await transactionsAPI.update(editingTransaction.id, transaction);
+        console.log('✅ Transaction updated');
+      } else {
+        // Create new transaction
+        await transactionsAPI.create(transaction);
+        console.log('✅ Transaction created');
+      }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`,
-      },
-      body: JSON.stringify(transaction),
-    });
-
-    if (response.ok) {
       await fetchDashboardData();
       setShowTransactionModal(false);
       setEditingTransaction(null);
+    } catch (error) {
+      console.error('❌ Failed to save transaction:', error);
+      alert('Failed to save transaction. Please try again.');
     }
   };
 
-  // ================= KEYBOARD SHORTCUTS =================
+  // KEYBOARD SHORTCUTS
   const shortcuts = [
     {
       keys: ["n"],

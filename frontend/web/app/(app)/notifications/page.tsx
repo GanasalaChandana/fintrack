@@ -1,26 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Mail, Check, X, Filter, Inbox } from 'lucide-react';
+import { Mail, Check, X, Filter, Inbox, AlertCircle } from 'lucide-react';
+import { notificationsAPI, getUser, type Notification } from '@/lib/api';
 
-const NOTIFICATIONS_API = process.env.NEXT_PUBLIC_NOTIFICATIONS_API_URL || 'http://localhost:8086';
-
-interface Notification {
-  id: string;
-  userId: string;
-  title: string;
-  message: string;
-  type: string;
-  read: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export default function MessagesPage() {
+export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadNotifications();
@@ -29,27 +18,21 @@ export default function MessagesPage() {
   const loadNotifications = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('authToken');
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      setError(null);
       
-      if (!token || !user.id) {
-        console.error('No token or user ID found');
+      const user = getUser();
+      
+      if (!user || !user.id) {
+        setError('User not found. Please sign in again.');
         setLoading(false);
         return;
       }
 
-      const response = await fetch(`${NOTIFICATIONS_API}/api/notifications/user/${user.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNotifications(data);
-      }
-    } catch (error) {
+      const data = await notificationsAPI.getAllForUser(user.id);
+      setNotifications(data);
+    } catch (error: any) {
       console.error('Failed to load notifications:', error);
+      setError(error.message || 'Failed to load notifications');
     } finally {
       setLoading(false);
     }
@@ -57,14 +40,10 @@ export default function MessagesPage() {
 
   const handleMarkAsRead = async (id: string) => {
     try {
-      const token = localStorage.getItem('authToken');
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      await fetch(`${NOTIFICATIONS_API}/api/notifications/${id}/read?userId=${user.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const user = getUser();
+      if (!user || !user.id) return;
+
+      await notificationsAPI.markAsRead(id, user.id);
       setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
     } catch (error) {
       console.error('Failed to mark as read:', error);
@@ -73,14 +52,10 @@ export default function MessagesPage() {
 
   const handleDismiss = async (id: string) => {
     try {
-      const token = localStorage.getItem('authToken');
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      await fetch(`${NOTIFICATIONS_API}/api/notifications/${id}?userId=${user.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const user = getUser();
+      if (!user || !user.id) return;
+
+      await notificationsAPI.delete(id, user.id);
       setNotifications(notifications.filter(n => n.id !== id));
     } catch (error) {
       console.error('Failed to dismiss notification:', error);
@@ -89,14 +64,10 @@ export default function MessagesPage() {
 
   const handleMarkAllRead = async () => {
     try {
-      const token = localStorage.getItem('authToken');
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      await fetch(`${NOTIFICATIONS_API}/api/notifications/user/${user.id}/read-all`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const user = getUser();
+      if (!user || !user.id) return;
+
+      await notificationsAPI.markAllAsRead(user.id);
       setNotifications(notifications.map(n => ({ ...n, read: true })));
     } catch (error) {
       console.error('Failed to mark all as read:', error);
@@ -150,10 +121,10 @@ export default function MessagesPage() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
                 <Mail className="w-8 h-8 text-blue-600" />
-                Messages & Updates
+                Notifications
               </h1>
               <p className="text-gray-600 mt-1">
-                {unreadCount > 0 ? `${unreadCount} unread message${unreadCount > 1 ? 's' : ''}` : 'All caught up!'}
+                {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : 'All caught up!'}
               </p>
             </div>
             {unreadCount > 0 && (
@@ -226,30 +197,49 @@ export default function MessagesPage() {
           <div className="flex items-start gap-3">
             <Inbox className="w-5 h-5 text-blue-600 mt-0.5" />
             <div>
-              <h3 className="font-medium text-blue-900">About Messages</h3>
+              <h3 className="font-medium text-blue-900">About Notifications</h3>
               <p className="text-sm text-blue-700 mt-1">
-                This inbox contains system updates, announcements, and general communications. 
+                This page displays system notifications, updates, and announcements. 
                 For financial warnings and budget alerts, check the Financial Alerts page.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Messages List */}
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-medium text-red-900">Error</h3>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
+                <button
+                  onClick={loadNotifications}
+                  className="mt-2 text-sm text-red-600 hover:text-red-700 font-medium"
+                >
+                  Try Again
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Notifications List */}
         <div className="space-y-3">
           {loading ? (
             <div className="bg-white rounded-lg shadow-sm p-8 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="text-gray-600 mt-4">Loading messages...</p>
+              <p className="text-gray-600 mt-4">Loading notifications...</p>
             </div>
           ) : filteredNotifications.length === 0 ? (
             <div className="bg-white rounded-lg shadow-sm p-8 text-center">
               <Mail className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600">No messages found</p>
+              <p className="text-gray-600">No notifications found</p>
               <p className="text-sm text-gray-500 mt-1">
                 {filter !== 'all' || typeFilter !== 'all' 
                   ? 'Try adjusting your filters'
-                  : 'New messages will appear here'}
+                  : 'New notifications will appear here'}
               </p>
             </div>
           ) : (

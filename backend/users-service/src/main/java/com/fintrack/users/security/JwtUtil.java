@@ -4,7 +4,9 @@ import com.fintrack.users.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -15,6 +17,7 @@ import java.util.Map;
 import java.util.function.Function;
 
 @Component
+@Slf4j
 public class JwtUtil {
 
     @Value("${jwt.secret}")
@@ -34,8 +37,9 @@ public class JwtUtil {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId().toString());
         claims.put("email", user.getEmail());
-        claims.put("role", user.getRole().toString());
+        claims.put("role", user.getRole() != null ? user.getRole().toString() : "USER");
 
+        log.debug("🔐 Generating token for user: {} (ID: {})", user.getEmail(), user.getId());
         return createToken(claims, user.getEmail());
     }
 
@@ -49,13 +53,16 @@ public class JwtUtil {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expiration);
 
-        return Jwts.builder()
+        String token = Jwts.builder()
                 .claims(claims)
                 .subject(subject)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey())
                 .compact();
+
+        log.debug("✅ Token created for: {} (expires: {})", subject, expiryDate);
+        return token;
     }
 
     public String extractUsername(String token) {
@@ -72,19 +79,71 @@ public class JwtUtil {
     }
 
     private Claims extractAllClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
+        try {
+            return Jwts.parser()
+                    .verifyWith(getSigningKey())
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (Exception e) {
+            log.error("❌ Failed to parse JWT token: {}", e.getMessage());
+            throw e;
+        }
     }
 
     private Boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
+        try {
+            return extractExpiration(token).before(new Date());
+        } catch (Exception e) {
+            log.error("❌ Token expiration check failed: {}", e.getMessage());
+            return true; // Treat as expired if we can't check
+        }
     }
 
+    // Existing method - validate with username string
     public Boolean validateToken(String token, String username) {
-        final String extractedUsername = extractUsername(token);
-        return (extractedUsername.equals(username) && !isTokenExpired(token));
+        try {
+            final String extractedUsername = extractUsername(token);
+            boolean isValid = (extractedUsername.equals(username) && !isTokenExpired(token));
+
+            if (isValid) {
+                log.debug("✅ Token validated successfully for: {}", username);
+            } else {
+                log.warn("❌ Token validation failed for: {} (extracted: {})", username, extractedUsername);
+            }
+
+            return isValid;
+        } catch (Exception e) {
+            log.error("❌ Token validation error: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    // NEW METHOD - validate with UserDetails (for Spring Security)
+    public Boolean validateToken(String token, UserDetails userDetails) {
+        return validateToken(token, userDetails.getUsername());
+    }
+
+    // NEW METHOD - simple token validity check (no user comparison)
+    public Boolean isTokenValid(String token) {
+        try {
+            return !isTokenExpired(token);
+        } catch (Exception e) {
+            log.error("❌ Token validity check failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    // Helper method to extract user ID from token
+    public String extractUserId(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("userId", String.class);
+    }
+
+    // Helper method to extract email from token
+    public String extractEmail(String token) {
+        Claims claims = extractAllClaims(token);
+        Object email = claims.get("email");
+        return email != null ? email.toString() : extractUsername(token);
     }
 }

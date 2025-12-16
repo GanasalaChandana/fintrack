@@ -1,32 +1,85 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';
-import { AlertTriangle, CheckCircle, XCircle, X } from 'lucide-react';
+import { AlertTriangle, XCircle } from 'lucide-react';
 import { alertService, type BudgetAlert } from '@/lib/api/services/alert.service';
+import { getToken } from '@/lib/api';
+
+// 🛡️ Helper to check if we're on a public/auth route
+function isPublicRoute(path: string | null): boolean {
+  if (!path) return true;
+  
+  const publicPaths = ['/', '/login', '/register', '/signin', '/signup'];
+  
+  // Check exact match
+  if (publicPaths.includes(path)) return true;
+  
+  // Check if starts with public path
+  return publicPaths.some(p => path.startsWith(`${p}/`) || path.startsWith(`${p}?`));
+}
 
 export function BudgetAlerts() {
   const [alerts, setAlerts] = useState<BudgetAlert[]>([]);
+  const pathname = usePathname();
 
   useEffect(() => {
+    // 🛡️ CRITICAL: Exit early if on public/auth page
+    if (isPublicRoute(pathname)) {
+      console.log('🚫 BudgetAlerts: On public/auth page, not fetching alerts:', pathname);
+      return;
+    }
+
+    // 🛡️ CRITICAL: Check if user is authenticated
+    const token = getToken();
+    if (!token) {
+      console.log('🚫 BudgetAlerts: No token found, not fetching alerts');
+      return;
+    }
+
+    console.log('✅ BudgetAlerts: Authenticated on private page, fetching alerts');
     fetchAlerts();
     
     // Poll for new alerts every 30 seconds
-    const interval = setInterval(fetchAlerts, 30000);
+    const interval = setInterval(() => {
+      // Re-check conditions before each poll
+      if (!isPublicRoute(window.location.pathname) && getToken()) {
+        fetchAlerts();
+      }
+    }, 30000);
+    
     return () => clearInterval(interval);
-  }, []);
+  }, [pathname]); // Re-run when pathname changes
 
   const fetchAlerts = async () => {
-    const newAlerts = await alertService.getAlerts();
-    
-    // Show toast for new alerts
-    newAlerts.forEach(alert => {
-      if (!alerts.find(a => a.id === alert.id)) {
-        showAlertToast(alert);
+    try {
+      // 🛡️ Triple-check before making request
+      if (isPublicRoute(window.location.pathname)) {
+        console.log('🚫 fetchAlerts: Blocked - on public route');
+        return;
       }
-    });
-    
-    setAlerts(newAlerts);
+
+      const token = getToken();
+      if (!token) {
+        console.log('🚫 fetchAlerts: Blocked - no token');
+        return;
+      }
+
+      const newAlerts = await alertService.getAlerts();
+      
+      // Show toast for new alerts only
+      newAlerts.forEach(alert => {
+        if (!alerts.find(a => a.id === alert.id)) {
+          showAlertToast(alert);
+        }
+      });
+      
+      setAlerts(newAlerts);
+    } catch (error) {
+      // Silently fail - error already logged in service
+      console.log('⚠️ BudgetAlerts: Fetch failed (expected if not authenticated)');
+    }
   };
 
   const showAlertToast = (alert: BudgetAlert) => {
@@ -100,9 +153,26 @@ export function BudgetAlerts() {
   };
 
   const handleAcknowledge = async (alertId: string) => {
-    await alertService.acknowledgeAlert(alertId);
-    setAlerts(alerts.filter(a => a.id !== alertId));
+    try {
+      await alertService.acknowledgeAlert(alertId);
+      setAlerts(alerts.filter(a => a.id !== alertId));
+      console.log('✅ Alert acknowledged and removed');
+    } catch (error) {
+      console.error('❌ Error acknowledging alert:', error);
+      toast.error('Failed to acknowledge alert');
+    }
   };
+
+  // 🛡️ Don't render anything on public/auth pages
+  if (isPublicRoute(pathname)) {
+    return null;
+  }
+
+  // 🛡️ Don't render if not authenticated
+  const token = getToken();
+  if (!token) {
+    return null;
+  }
 
   return <Toaster position="top-right" />;
 }

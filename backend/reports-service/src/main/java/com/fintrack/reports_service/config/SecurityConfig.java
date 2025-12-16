@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfigurationSource;
 
@@ -20,11 +21,21 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // CRITICAL: Enable CORS using our CorsConfig bean
+                // Enable CORS using our CorsConfig bean
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
 
                 // Disable CSRF for REST APIs
                 .csrf(csrf -> csrf.disable())
+
+                // ✅ CRITICAL: Disable HTTP Basic Auth (prevents browser popup)
+                .httpBasic(httpBasic -> httpBasic.disable())
+
+                // ✅ CRITICAL: Disable form login
+                .formLogin(formLogin -> formLogin.disable())
+
+                // Stateless session (for REST APIs)
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 // Allow all requests (gateway handles auth)
                 .authorizeHttpRequests(auth -> auth

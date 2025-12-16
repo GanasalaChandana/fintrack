@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { GoogleCredentialResponse } from '@/types/google';
+import { setToken, setUser } from '@/lib/api';
 import { 
   Eye, 
   EyeOff, 
@@ -24,7 +25,7 @@ const wakeUpBackend = async (apiUrl: string): Promise<boolean> => {
   try {
     console.log('🔔 Pinging backend to wake it up...');
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 seconds
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
     
     const response = await fetch(`${apiUrl}/actuator/health`, {
       method: 'GET',
@@ -179,10 +180,8 @@ function AuthPageContent() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
       
-      // Ensure backend is awake
       const isAwake = await ensureBackendAwake(API_URL);
       if (!isAwake && retryCount === 0) {
-        // Wait a bit and retry once
         await new Promise(resolve => setTimeout(resolve, 3000));
         setLoading(false);
         isSubmitting.current = false;
@@ -192,7 +191,7 @@ function AuthPageContent() {
       console.log('📤 Sending credential to:', `${API_URL}/api/auth/google`);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
 
       const res = await fetch(`${API_URL}/api/auth/google`, {
         method: 'POST',
@@ -246,8 +245,8 @@ function AuthPageContent() {
       console.log('✅ Google sign-in successful', data);
 
       if (data.token) {
-        localStorage.setItem('authToken', data.token);
-        localStorage.setItem('ft_token', data.token);
+        // Use centralized setToken function
+        setToken(data.token);
         
         if (data.user?.id) {
           localStorage.setItem('userId', data.user.id.toString());
@@ -255,14 +254,18 @@ function AuthPageContent() {
         }
         
         if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
+          setUser(data.user);
         }
 
         console.log('🔑 Token stored successfully');
+        console.log('🔍 Verifying token storage...');
+        console.log('  - authToken:', localStorage.getItem('authToken') ? 'EXISTS' : 'MISSING');
+        console.log('  - ft_token:', localStorage.getItem('ft_token') ? 'EXISTS' : 'MISSING');
 
         setSuccess(true);
         
         setTimeout(() => {
+          console.log('🚀 Navigating to dashboard');
           router.push('/dashboard');
         }, 1000);
       } else {
@@ -346,10 +349,8 @@ function AuthPageContent() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
       
-      // Ensure backend is awake
       const isAwake = await ensureBackendAwake(API_URL);
       if (!isAwake && retryCount === 0) {
-        // Wait a bit and retry once
         await new Promise(resolve => setTimeout(resolve, 3000));
         setLoading(false);
         isSubmitting.current = false;
@@ -374,7 +375,7 @@ function AuthPageContent() {
       console.log('📤 Request to:', `${API_URL}${endpoint}`);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
 
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
@@ -425,8 +426,8 @@ function AuthPageContent() {
       console.log('✅ Authentication successful', data);
 
       if (data.token) {
-        localStorage.setItem('authToken', data.token);
-        localStorage.setItem('ft_token', data.token);
+        // Use centralized setToken function
+        setToken(data.token);
         
         if (data.user?.id) {
           localStorage.setItem('userId', data.user.id.toString());
@@ -434,14 +435,18 @@ function AuthPageContent() {
         }
         
         if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
+          setUser(data.user);
         }
 
         console.log('🔑 Token stored successfully');
+        console.log('🔍 Verifying token storage...');
+        console.log('  - authToken:', localStorage.getItem('authToken') ? 'EXISTS' : 'MISSING');
+        console.log('  - ft_token:', localStorage.getItem('ft_token') ? 'EXISTS' : 'MISSING');
 
         setSuccess(true);
         
         setTimeout(() => {
+          console.log('🚀 Navigating to dashboard');
           router.push('/dashboard');
         }, 1000);
       } else {

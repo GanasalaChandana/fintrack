@@ -3,17 +3,45 @@ package com.fintrack.users.service;
 import com.fintrack.users.entity.User;
 import com.fintrack.users.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 @Service
-public class UserService {
+public class UserService implements UserDetailsService {
 
     @Autowired
     private UserRepository userRepository;
+
+    /**
+     * Implementation of UserDetailsService for Spring Security
+     * This method is called during authentication to load user details
+     */
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        // Find user by email (username in our case is email)
+        User user = userRepository.findByEmail(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + username));
+
+        // Convert our User entity to Spring Security's UserDetails
+        return new org.springframework.security.core.userdetails.User(
+                user.getEmail(),
+                user.getPassword(),
+                new ArrayList<>() // Add authorities/roles here if you have them
+        // Example with roles:
+        // user.getRoles().stream()
+        // .map(role -> new SimpleGrantedAuthority(role.getName()))
+        // .collect(Collectors.toList())
+        );
+    }
+
+    // Existing methods below
 
     public List<User> findAll() {
         return userRepository.findAll();
@@ -53,7 +81,8 @@ public class UserService {
         try {
             userRepository.deleteById(UUID.fromString(id));
         } catch (IllegalArgumentException e) {
-            // Handle invalid UUID
+            // Handle invalid UUID - could log this
+            throw new IllegalArgumentException("Invalid UUID format: " + id);
         }
     }
 }

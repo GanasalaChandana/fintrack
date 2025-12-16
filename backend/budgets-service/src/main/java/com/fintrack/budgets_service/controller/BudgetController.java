@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.YearMonth;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -131,7 +132,22 @@ public class BudgetController {
         }
 
         try {
+            // Set userId from header
             budget.setUserId(userId);
+
+            // Ensure month is set - default to current month if not provided
+            if (budget.getMonth() == null || budget.getMonth().trim().isEmpty()) {
+                String currentMonth = YearMonth.now().toString(); // Format: YYYY-MM
+                budget.setMonth(currentMonth);
+                log.info("Month not provided, defaulting to: {}", currentMonth);
+            }
+
+            // Ensure period is set - default to "monthly" if not provided
+            if (budget.getPeriod() == null || budget.getPeriod().trim().isEmpty()) {
+                budget.setPeriod("monthly");
+                log.info("Period not provided, defaulting to: monthly");
+            }
+
             Budget createdBudget = budgetsService.createBudget(budget);
             log.info("Budget created successfully: {}", createdBudget.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(createdBudget);
@@ -155,6 +171,22 @@ public class BudgetController {
         }
 
         try {
+            // Ensure userId is set from header
+            budget.setUserId(userId);
+
+            // Ensure month is set if not provided
+            if (budget.getMonth() == null || budget.getMonth().trim().isEmpty()) {
+                String currentMonth = YearMonth.now().toString();
+                budget.setMonth(currentMonth);
+                log.info("Month not provided in update, defaulting to: {}", currentMonth);
+            }
+
+            // Ensure period is set if not provided
+            if (budget.getPeriod() == null || budget.getPeriod().trim().isEmpty()) {
+                budget.setPeriod("monthly");
+                log.info("Period not provided in update, defaulting to: monthly");
+            }
+
             Budget updatedBudget = budgetsService.updateBudget(String.valueOf(id), budget, userId);
             log.info("Budget {} updated successfully", id);
             return ResponseEntity.ok(updatedBudget);

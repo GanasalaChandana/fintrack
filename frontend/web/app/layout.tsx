@@ -1,11 +1,8 @@
 ﻿import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Navigation from "@/components/Navigation";
-import { MobileBottomNav } from "@/components/navigation/MobileBottomNav";
-import { DarkModeProvider, DarkModeToggle } from "@/components/providers/DarkModeProvider";
-import { BudgetAlerts } from '@/components/BudgetAlerts';
-
+import { DarkModeProvider } from "@/components/providers/DarkModeProvider";
+import { ClientLayout } from "@/components/ClientLayout";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -110,20 +107,7 @@ export default function RootLayout({
 
       <body className={inter.className}>
         <DarkModeProvider>
-          {/* Dark Mode Toggle Button */}
-          <div className="fixed right-4 top-4 z-50">
-            <DarkModeToggle />
-          </div>
-
-          {/* Top Navigation */}
-          <Navigation />
-          <BudgetAlerts />
-
-          {/* Page Content */}
-          {children}
-
-          {/* Bottom Mobile Navigation */}
-          <MobileBottomNav />
+          <ClientLayout>{children}</ClientLayout>
         </DarkModeProvider>
       </body>
     </html>

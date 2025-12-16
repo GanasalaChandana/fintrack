@@ -75,6 +75,17 @@ public class User {
         return passwordHash;
     }
 
+    // Alias for Spring Security compatibility
+    @JsonIgnore
+    public String getPassword() {
+        return passwordHash;
+    }
+
+    // Setter for Spring Security compatibility
+    public void setPassword(String password) {
+        this.passwordHash = password;
+    }
+
     // Convenience method to check if user is OAuth user
     @Transient
     public boolean isOAuthUser() {

@@ -1,4 +1,4 @@
-// lib/api.ts - Goals API removed
+// lib/api.ts - Complete updated version with improved token handling
 
 // =====================
 // Types
@@ -74,13 +74,26 @@ export interface Alert {
   updatedAt?: string;
 }
 
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: string;
+  read: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // =====================
 // Base URL helpers
 // =====================
 
 function getBaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-  return url.replace(/\/$/, "");
+  const cleanUrl = url.replace(/\/$/, "");
+  console.log('🌐 Using API base URL:', cleanUrl);
+  return cleanUrl;
 }
 
 function buildApiUrl(endpoint: string): string {
@@ -102,7 +115,14 @@ export function getToken(): string | null {
   const token = 
     localStorage.getItem(PRIMARY_TOKEN_KEY) || 
     localStorage.getItem(LEGACY_TOKEN_KEY) ||
+    sessionStorage.getItem(PRIMARY_TOKEN_KEY) ||
     getCookieToken();
+  
+  if (!token) {
+    console.warn('⚠️ No token found in any storage location');
+  } else {
+    console.log('✅ Token found:', token.substring(0, 20) + '...');
+  }
   
   return token || null;
 }
@@ -119,20 +139,33 @@ function getCookieToken(): string | null {
 export function setToken(token: string): void {
   if (typeof window === "undefined") return;
   
+  console.log('🔐 Setting token in all storage locations');
+  console.log('📝 Token preview:', token.substring(0, 30) + '...');
+  
   localStorage.setItem(PRIMARY_TOKEN_KEY, token);
   localStorage.setItem(LEGACY_TOKEN_KEY, token);
+  sessionStorage.setItem(PRIMARY_TOKEN_KEY, token);
   
-  document.cookie = `${PRIMARY_TOKEN_KEY}=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+  document.cookie = `${PRIMARY_TOKEN_KEY}=${token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+  
+  console.log('✅ Token stored successfully');
 }
 
 export function removeToken(): void {
   if (typeof window === "undefined") return;
   
+  console.log('🗑️ Removing all tokens and user data');
+  
   localStorage.removeItem(PRIMARY_TOKEN_KEY);
   localStorage.removeItem(LEGACY_TOKEN_KEY);
   localStorage.removeItem("user");
+  localStorage.removeItem("userId");
+  
+  sessionStorage.removeItem(PRIMARY_TOKEN_KEY);
   
   document.cookie = `${PRIMARY_TOKEN_KEY}=; path=/; max-age=0`;
+  
+  console.log('✅ All tokens removed');
 }
 
 export function getUser(): User | null {
@@ -142,7 +175,7 @@ export function getUser(): User | null {
   try {
     return userStr ? JSON.parse(userStr) : null;
   } catch (error) {
-    console.error("Error parsing user from localStorage:", error);
+    console.error("❌ Error parsing user from localStorage:", error);
     return null;
   }
 }
@@ -150,10 +183,19 @@ export function getUser(): User | null {
 export function setUser(user: User): void {
   if (typeof window === "undefined") return;
   localStorage.setItem("user", JSON.stringify(user));
+  
+  // Also store userId separately for easy access
+  if (user.id) {
+    localStorage.setItem("userId", user.id.toString());
+  }
+  
+  console.log('✅ User saved to localStorage:', user.email);
 }
 
 export function isAuthenticated(): boolean {
-  return !!getToken();
+  const hasToken = !!getToken();
+  console.log('🔐 Authentication check:', hasToken ? 'AUTHENTICATED' : 'NOT AUTHENTICATED');
+  return hasToken;
 }
 
 // =====================
@@ -169,10 +211,22 @@ export async function apiRequest<T = any>(
   const url = buildApiUrl(endpoint);
   const token = getToken();
 
+  console.log(`
+┌─────────────────────────────────────────
+│ 🌐 API REQUEST
+├─────────────────────────────────────────
+│ Method:   ${options.method || 'GET'}
+│ Endpoint: ${endpoint}
+│ URL:      ${url}
+│ Token:    ${token ? '✅ Present' : '❌ Missing'}
+└─────────────────────────────────────────
+  `);
+
   // Prevent duplicate requests
   const requestKey = `${options.method || "GET"}-${endpoint}-${JSON.stringify(options.body || "")}`;
 
   if (pendingRequests.has(requestKey)) {
+    console.log('♻️ Returning cached request for:', endpoint);
     return pendingRequests.get(requestKey)!;
   }
 
@@ -184,6 +238,9 @@ export async function apiRequest<T = any>(
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
+    console.log(`🔐 Authorization header set: Bearer ${token.substring(0, 20)}...`);
+  } else {
+    console.warn('⚠️ No token available for:', endpoint);
   }
 
   if (options.headers) {
@@ -203,36 +260,67 @@ export async function apiRequest<T = any>(
     try {
       const response = await fetch(url, config);
 
+      console.log(`
+┌─────────────────────────────────────────
+│ 📥 API RESPONSE
+├─────────────────────────────────────────
+│ Endpoint: ${endpoint}
+│ Status:   ${response.status} ${response.statusText}
+│ OK:       ${response.ok ? '✅' : '❌'}
+└─────────────────────────────────────────
+      `);
+
       const contentType = response.headers.get("content-type") || "";
       let data: any = undefined;
 
-      if (contentType.includes("application/json")) {
-        const text = await response.text();
-        
-        if (text) {
-          try {
-            data = JSON.parse(text);
-          } catch (err) {
-            console.error("Failed to parse JSON:", err);
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            throw new Error("Invalid JSON from server");
+      // Handle empty responses
+      if (response.status === 204 || response.headers.get("content-length") === "0") {
+        console.log('✅ Empty response (204 or content-length 0)');
+        return {} as T;
+      }
+
+      // Try to read the response body
+      const text = await response.text();
+      
+      if (text) {
+        console.log(`📄 Response body preview:`, text.substring(0, 200) + (text.length > 200 ? '...' : ''));
+      }
+
+      // Parse JSON if available
+      if (text && contentType.includes("application/json")) {
+        try {
+          data = JSON.parse(text);
+          console.log('✅ JSON parsed successfully');
+        } catch (err) {
+          console.error("❌ Failed to parse JSON:", err);
+          console.error("Raw response text:", text);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${text || response.statusText}`);
           }
+          throw new Error("Invalid JSON from server");
         }
-      } else {
-        const text = await response.text();
-        data = text || undefined;
+      } else if (text) {
+        data = text;
       }
 
       // Handle HTTP errors
       if (!response.ok) {
         if (response.status === 401) {
+          console.error(`
+┌─────────────────────────────────────────
+│ ❌ 401 UNAUTHORIZED
+├─────────────────────────────────────────
+│ Token expired or invalid
+│ Clearing tokens and redirecting...
+└─────────────────────────────────────────
+          `);
+          
           removeToken();
           
           if (typeof window !== 'undefined') {
             setTimeout(() => {
-              window.location.href = '/register?mode=signin';
+              window.location.href = '/register?mode=signin&reason=session_expired';
             }, 100);
           }
         }
@@ -242,22 +330,22 @@ export async function apiRequest<T = any>(
           (typeof data === "string" && data) ||
           `HTTP error! status: ${response.status}`;
 
+        console.error('❌ API Error:', errorMessage);
         throw new Error(errorMessage);
       }
 
-      // Handle empty responses
-      if (
-        response.status === 204 ||
-        data === undefined ||
-        response.headers.get("content-length") === "0"
-      ) {
-        return {} as T;
-      }
-
+      console.log('✅ API request successful');
       return data as T;
       
-    } catch (error) {
-      console.error(`API Error [${endpoint}]:`, error);
+    } catch (error: any) {
+      console.error(`
+┌─────────────────────────────────────────
+│ ❌ API ERROR
+├─────────────────────────────────────────
+│ Endpoint: ${endpoint}
+│ Error:    ${error.message}
+└─────────────────────────────────────────
+      `);
       throw error;
     } finally {
       pendingRequests.delete(requestKey);
@@ -278,13 +366,20 @@ export const authAPI = {
     email: string;
     password: string;
   }): Promise<AuthResponse> => {
+    console.log('📝 Registering user:', userData.email);
+    
     const response = await apiRequest<AuthResponse>("/api/auth/register", {
       method: "POST",
       body: JSON.stringify(userData),
     });
 
-    if (response.token) setToken(response.token);
-    if (response.user) setUser(response.user);
+    if (response.token) {
+      setToken(response.token);
+    }
+    
+    if (response.user) {
+      setUser(response.user);
+    }
 
     return response;
   },
@@ -293,36 +388,53 @@ export const authAPI = {
     email: string;
     password: string;
   }): Promise<AuthResponse> => {
+    console.log('📝 Logging in user:', credentials.email);
+    
     const response = await apiRequest<AuthResponse>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify(credentials),
     });
 
-    if (response.token) setToken(response.token);
-    if (response.user) setUser(response.user);
+    if (response.token) {
+      setToken(response.token);
+      console.log('✅ Token saved after login');
+    }
+    
+    if (response.user) {
+      setUser(response.user);
+    }
 
     return response;
   },
 
   logout: async (): Promise<void> => {
+    console.log('🚪 Logging out user');
+    
     try {
       await apiRequest("/api/auth/logout", { method: "POST" });
     } catch (error) {
-      console.error("Logout API error:", error);
+      console.error("❌ Logout API error:", error);
     } finally {
       removeToken();
     }
   },
 
-  getCurrentUser: (): Promise<User> =>
-    apiRequest<User>("/api/auth/me", { method: "GET" }),
+  getCurrentUser: (): Promise<User> => {
+    console.log('👤 Fetching current user');
+    return apiRequest<User>("/api/auth/me", { method: "GET" });
+  },
 
   refreshToken: async (): Promise<AuthResponse> => {
+    console.log('🔄 Refreshing token');
+    
     const response = await apiRequest<AuthResponse>("/api/auth/refresh", {
       method: "POST",
     });
 
-    if (response.token) setToken(response.token);
+    if (response.token) {
+      setToken(response.token);
+    }
+    
     return response;
   },
 
@@ -332,18 +444,22 @@ export const authAPI = {
       body: JSON.stringify(userData),
     });
 
-    if (response) setUser(response);
+    if (response) {
+      setUser(response);
+    }
+    
     return response;
   },
 
   changePassword: async (data: {
     currentPassword: string;
     newPassword: string;
-  }): Promise<{ message: string }> =>
-    apiRequest("/api/auth/change-password", {
+  }): Promise<{ message: string }> => {
+    return apiRequest("/api/auth/change-password", {
       method: "POST",
       body: JSON.stringify(data),
-    }),
+    });
+  },
 };
 
 // =====================
@@ -351,20 +467,13 @@ export const authAPI = {
 // =====================
 
 export const transactionsAPI = {
-  getAll: async (
-    filters?: Record<string, string | number>
-  ): Promise<Transaction[]> => {
-    const token = getToken();
-    if (!token) {
-      throw new Error("Authentication required");
-    }
-
+  getAll: async (filters?: Record<string, string | number>): Promise<Transaction[]> => {
     const params = new URLSearchParams(
       filters
-        ? Object.entries(filters).reduce((acc, [key, value]) => {
+        ? Object.entries(filters).reduce<Record<string, string>>((acc, [key, value]) => {
             acc[key] = String(value);
             return acc;
-          }, {} as Record<string, string>)
+          }, {})
         : {}
     );
 
@@ -377,7 +486,6 @@ export const transactionsAPI = {
         method: "GET",
       });
 
-      // Handle different response formats
       let transactions: Transaction[];
       
       if (Array.isArray(data)) {
@@ -397,15 +505,11 @@ export const transactionsAPI = {
         return [];
       }
 
+      console.log(`✅ Fetched ${transactions.length} transactions`);
       return transactions;
       
     } catch (error: any) {
-      console.error("Error fetching transactions:", error);
-      
-      if (error.message?.includes("Authentication required")) {
-        throw error;
-      }
-      
+      console.error("❌ Error fetching transactions:", error);
       return [];
     }
   },
@@ -449,9 +553,33 @@ export const transactionsAPI = {
 // =====================
 
 export const budgetsAPI = {
-  getAll: (month?: string): Promise<Budget[]> => {
+  getAll: async (month?: string): Promise<Budget[]> => {
     const params = month ? `?month=${month}` : "";
-    return apiRequest<Budget[]>(`/api/budgets${params}`, { method: "GET" });
+    
+    try {
+      const data = await apiRequest<Budget[] | any>(`/api/budgets${params}`, { 
+        method: "GET" 
+      });
+
+      if (Array.isArray(data)) {
+        console.log(`✅ Fetched ${data.length} budgets`);
+        return data;
+      } else if (data && typeof data === 'object') {
+        if (Array.isArray(data.budgets)) {
+          return data.budgets;
+        } else if (Array.isArray(data.data)) {
+          return data.data;
+        } else if (Array.isArray(data.content)) {
+          return data.content;
+        }
+      }
+      
+      console.warn("⚠️ Unexpected budgets response format, returning empty array");
+      return [];
+    } catch (error: any) {
+      console.error("❌ Error fetching budgets:", error);
+      return [];
+    }
   },
 
   getById: (id: string): Promise<Budget> =>
@@ -497,7 +625,6 @@ export const alertsAPI = {
         method: "GET",
       });
 
-      // Handle different response formats
       if (Array.isArray(data)) {
         return data;
       } else if (data && typeof data === 'object') {
@@ -510,17 +637,9 @@ export const alertsAPI = {
         }
       }
       
-      console.warn("Unexpected alerts response format, returning empty array");
       return [];
     } catch (error: any) {
-      // Silently fail if backend is not ready yet
-      if (error.message?.includes("ERR_CONNECTION_REFUSED") || 
-          error.message?.includes("Failed to fetch") ||
-          error.message?.includes("NetworkError")) {
-        console.warn("⚠️ Alerts service not available, using empty array");
-        return [];
-      }
-      console.error("Error fetching alerts:", error);
+      console.error("❌ Error fetching alerts:", error);
       return [];
     }
   },
@@ -539,7 +658,7 @@ export const alertsAPI = {
       
       return [];
     } catch (error) {
-      console.error("Error fetching unread alerts:", error);
+      console.error("❌ Error fetching unread alerts:", error);
       return [];
     }
   },
@@ -568,6 +687,50 @@ export const alertsAPI = {
 
   deleteAll: (): Promise<{ message: string; count: number }> =>
     apiRequest("/api/alerts", { method: "DELETE" }),
+};
+
+// =====================
+// Notifications API
+// =====================
+
+export const notificationsAPI = {
+  getAllForUser: async (userId: string): Promise<Notification[]> => {
+    try {
+      const data = await apiRequest<Notification[] | any>(
+        `/api/notifications/user/${userId}`,
+        { method: "GET" }
+      );
+
+      if (Array.isArray(data)) {
+        console.log(`✅ Fetched ${data.length} notifications`);
+        return data;
+      } else if (data && typeof data === 'object' && Array.isArray(data.notifications)) {
+        console.log(`✅ Fetched ${data.notifications.length} notifications`);
+        return data.notifications;
+      }
+      
+      console.warn("⚠️ Unexpected notifications response format, returning empty array");
+      return [];
+    } catch (error: any) {
+      console.error("❌ Error fetching notifications:", error);
+      return [];
+    }
+  },
+
+  markAsRead: (id: string, userId: string): Promise<Notification> =>
+    apiRequest<Notification>(`/api/notifications/${id}/read?userId=${userId}`, {
+      method: "PATCH",
+    }),
+
+  markAllAsRead: (userId: string): Promise<{ message: string }> =>
+    apiRequest(`/api/notifications/user/${userId}/read-all`, {
+      method: "PATCH",
+    }),
+
+  delete: (id: string, userId: string): Promise<{ message: string }> =>
+    apiRequest(`/api/notifications/${id}?userId=${userId}`, {
+      method: "DELETE",
+    }),
 };
 
 // =====================

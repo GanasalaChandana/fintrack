@@ -62,6 +62,10 @@ spring:
       host: ${SPRING_REDIS_HOST:redis}
       port: ${SPRING_REDIS_PORT:6379}
 
+jwt:
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+  expiration: 86400000
+  
 app:
   environment: ${APP_ENVIRONMENT:production}
   cors:

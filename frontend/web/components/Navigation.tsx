@@ -6,8 +6,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Bell, Mail, LogOut, Menu, X, Check, AlertTriangle } from "lucide-react";
 
-const ALERTS_API = process.env.NEXT_PUBLIC_ALERTS_API_URL || 'http://localhost:8083';
-const NOTIFICATIONS_API = process.env.NEXT_PUBLIC_NOTIFICATIONS_API_URL || 'http://localhost:8086';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 interface Alert {
   id: string;
@@ -50,23 +49,54 @@ export default function Navigation() {
   const router = useRouter();
   const pathname = usePathname() || "";
 
+  // Helper function to check if route is public
+  const isPublicRoute = (path: string) => {
+    const publicPaths = [
+      '/',
+      '/login',
+      '/register',
+      '/signin',
+      '/signup'
+    ];
+    
+    // Check exact matches
+    if (publicPaths.includes(path)) return true;
+    
+    // Check if path starts with any public path
+    return publicPaths.some(publicPath => 
+      path.startsWith(`${publicPath}/`) || 
+      path.startsWith(`${publicPath}?`)
+    );
+  };
+
   useEffect(() => {
     setMounted(true);
+    
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("authToken");
-      setHasToken(!!token);
+      const tokenExists = !!token;
+      setHasToken(tokenExists);
       
-      if (token) {
+      const shouldLoadData = tokenExists && !isPublicRoute(pathname);
+      
+      if (shouldLoadData) {
+        console.log('✅ Loading alerts and notifications for authenticated page:', pathname);
         loadAlerts();
         loadNotifications();
         
         // Poll every 30 seconds
         const interval = setInterval(() => {
-          loadAlerts();
-          loadNotifications();
+          // Double-check we're still on an authenticated page
+          const currentPath = window.location.pathname;
+          if (!isPublicRoute(currentPath) && localStorage.getItem("authToken")) {
+            loadAlerts();
+            loadNotifications();
+          }
         }, 30000);
         
         return () => clearInterval(interval);
+      } else {
+        console.log('⏭️ Skipping data load - Public route or no token. Pathname:', pathname, 'Token:', tokenExists);
       }
     }
   }, [pathname]);
@@ -89,20 +119,43 @@ export default function Navigation() {
   // ============ ALERTS FUNCTIONS ============
   const loadAlerts = async () => {
     try {
-      const token = localStorage.getItem("authToken");
-      if (!token) return;
+      const currentPath = window.location.pathname;
+      
+      // Don't load on public routes
+      if (isPublicRoute(currentPath)) {
+        console.log('⏭️ Skipping alerts load - on public route:', currentPath);
+        return;
+      }
 
-      const response = await fetch(`${ALERTS_API}/api/alerts`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        console.log('⚠️ No auth token, skipping alerts load');
+        return;
+      }
+
+      console.log('📡 Fetching alerts from:', `${API_BASE_URL}/api/alerts`);
+      const response = await fetch(`${API_BASE_URL}/api/alerts`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'omit',
       });
 
       if (response.ok) {
         const data = await response.json();
         setAlerts(data.slice(0, 5));
         setAlertsUnreadCount(data.filter((a: Alert) => !a.isRead).length);
+        console.log('✅ Loaded alerts:', data.length);
+      } else if (response.status === 401) {
+        console.log('⚠️ Unauthorized - clearing invalid token');
+        localStorage.removeItem('authToken');
+        setHasToken(false);
+        setAlerts([]);
+        setAlertsUnreadCount(0);
       }
     } catch (error) {
-      console.error('Failed to load alerts:', error);
+      console.error('❌ Failed to load alerts:', error);
     }
   };
 
@@ -110,9 +163,15 @@ export default function Navigation() {
     e.stopPropagation();
     try {
       const token = localStorage.getItem("authToken");
-      const response = await fetch(`${ALERTS_API}/api/alerts/${id}/read`, {
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/api/alerts/${id}/read`, {
         method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'omit',
       });
 
       if (response.ok) {
@@ -128,9 +187,15 @@ export default function Navigation() {
     e.stopPropagation();
     try {
       const token = localStorage.getItem("authToken");
-      const response = await fetch(`${ALERTS_API}/api/alerts/${id}`, {
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/api/alerts/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'omit',
       });
 
       if (response.ok) {
@@ -168,6 +233,14 @@ export default function Navigation() {
   // ============ NOTIFICATIONS FUNCTIONS ============
   const loadNotifications = async () => {
     try {
+      const currentPath = window.location.pathname;
+      
+      // Don't load on public routes
+      if (isPublicRoute(currentPath)) {
+        console.log('⏭️ Skipping notifications load - on public route:', currentPath);
+        return;
+      }
+
       const token = localStorage.getItem("authToken");
       if (!token) {
         console.log('⚠️ No auth token, skipping notification load');
@@ -181,17 +254,18 @@ export default function Navigation() {
       }
 
       const user = JSON.parse(userStr);
-      console.log('🔍 User from localStorage:', user);
-      console.log('🔍 User ID:', user.id);
-
       if (!user.id) {
         console.warn('⚠️ User object exists but has no ID, skipping notification load');
         return;
       }
 
-      console.log(`✅ Fetching notifications for user: ${user.id}`);
-      const response = await fetch(`${NOTIFICATIONS_API}/api/notifications/user/${user.id}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      console.log(`📡 Fetching notifications for user: ${user.id}`);
+      const response = await fetch(`${API_BASE_URL}/api/notifications/user/${user.id}`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'omit',
       });
 
       if (response.ok) {
@@ -199,6 +273,12 @@ export default function Navigation() {
         console.log(`✅ Loaded ${data.length} notifications`);
         setNotifications(data.slice(0, 5));
         setNotificationsUnreadCount(data.filter((n: Notification) => !n.read).length);
+      } else if (response.status === 401) {
+        console.log('⚠️ Unauthorized - clearing invalid token');
+        localStorage.removeItem('authToken');
+        setHasToken(false);
+        setNotifications([]);
+        setNotificationsUnreadCount(0);
       } else {
         console.error('❌ Failed to load notifications:', response.status, response.statusText);
       }
@@ -211,6 +291,8 @@ export default function Navigation() {
     e.stopPropagation();
     try {
       const token = localStorage.getItem("authToken");
+      if (!token) return;
+
       const user = JSON.parse(localStorage.getItem("user") || "{}");
       
       if (!user.id) {
@@ -218,9 +300,13 @@ export default function Navigation() {
         return;
       }
 
-      const response = await fetch(`${NOTIFICATIONS_API}/api/notifications/${id}/read?userId=${user.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/notifications/${id}/read?userId=${user.id}`, {
         method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'omit',
       });
 
       if (response.ok) {
@@ -236,6 +322,8 @@ export default function Navigation() {
     e.stopPropagation();
     try {
       const token = localStorage.getItem("authToken");
+      if (!token) return;
+
       const user = JSON.parse(localStorage.getItem("user") || "{}");
       
       if (!user.id) {
@@ -243,9 +331,13 @@ export default function Navigation() {
         return;
       }
 
-      const response = await fetch(`${NOTIFICATIONS_API}/api/notifications/${id}?userId=${user.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/notifications/${id}?userId=${user.id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'omit',
       });
 
       if (response.ok) {
@@ -289,9 +381,15 @@ export default function Navigation() {
     if (typeof window !== "undefined") {
       localStorage.removeItem("authToken");
       localStorage.removeItem("user");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("ft_token");
     }
     setHasToken(false);
-    router.push("/register?mode=signin");
+    setAlerts([]);
+    setNotifications([]);
+    setAlertsUnreadCount(0);
+    setNotificationsUnreadCount(0);
+    router.push("/login?mode=signin");
   };
 
   if (!mounted) {
@@ -306,8 +404,10 @@ export default function Navigation() {
     );
   }
 
-  const isAuthPage = pathname === "/login" || pathname.startsWith("/register");
-  if (isAuthPage) return null;
+  // Hide navigation on auth pages
+  if (isPublicRoute(pathname)) {
+    return null;
+  }
 
   const isActive = (path: string) => pathname === path;
 
@@ -420,7 +520,7 @@ export default function Navigation() {
                     <button
                       onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
                       className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition"
-                      title="Messages & Updates"
+                      title="Notifications"
                     >
                       <Mail className="w-5 h-5" />
                       {notificationsUnreadCount > 0 && (
@@ -433,8 +533,8 @@ export default function Navigation() {
                     {isNotificationsOpen && (
                       <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border border-gray-200">
                         <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                          <h3 className="text-lg font-semibold text-gray-900">Messages & Updates</h3>
-                          <Link href="/messages" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsNotificationsOpen(false)}>
+                          <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
+                          <Link href="/notifications" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsNotificationsOpen(false)}>
                             View all
                           </Link>
                         </div>
@@ -443,7 +543,7 @@ export default function Navigation() {
                           {notifications.length === 0 ? (
                             <div className="p-8 text-center">
                               <Mail className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                              <p className="text-gray-600 text-sm">No messages</p>
+                              <p className="text-gray-600 text-sm">No notifications</p>
                             </div>
                           ) : (
                             <div className="divide-y divide-gray-100">
@@ -475,8 +575,8 @@ export default function Navigation() {
 
                         {notifications.length > 0 && (
                           <div className="p-3 border-t border-gray-200 bg-gray-50">
-                            <Link href="/messages" className="block text-center text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsNotificationsOpen(false)}>
-                              See all messages →
+                            <Link href="/notifications" className="block text-center text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsNotificationsOpen(false)}>
+                              See all notifications →
                             </Link>
                           </div>
                         )}
@@ -491,8 +591,8 @@ export default function Navigation() {
               </>
             ) : (
               <>
-                <Link href="/register?mode=signin" className="text-gray-700 hover:text-indigo-600">Log In</Link>
-                <Link href="/register?mode=signup" className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">Sign Up</Link>
+                <Link href="/login?mode=signin" className="text-gray-700 hover:text-indigo-600">Log In</Link>
+                <Link href="/login?mode=signup" className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">Sign Up</Link>
               </>
             )}
           </div>
@@ -520,9 +620,9 @@ export default function Navigation() {
                   {alertsUnreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{alertsUnreadCount}</span>}
                 </Link>
 
-                <Link href="/messages" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/messages") ? "bg-indigo-100" : ""} flex items-center gap-2`}>
+                <Link href="/notifications" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/notifications") ? "bg-indigo-100" : ""} flex items-center gap-2`}>
                   <Mail className="w-4 h-4" />
-                  Messages
+                  Notifications
                   {notificationsUnreadCount > 0 && <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">{notificationsUnreadCount}</span>}
                 </Link>
 
@@ -534,8 +634,8 @@ export default function Navigation() {
               </>
             ) : (
               <>
-                <Link href="/register?mode=signin" className="block px-4 py-3">Log In</Link>
-                <Link href="/register?mode=signup" className="block px-4 py-3 bg-indigo-600 text-white text-center rounded-lg">Sign Up</Link>
+                <Link href="/login?mode=signin" className="block px-4 py-3">Log In</Link>
+                <Link href="/login?mode=signup" className="block px-4 py-3 bg-indigo-600 text-white text-center rounded-lg">Sign Up</Link>
               </>
             )}
           </div>

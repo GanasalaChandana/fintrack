@@ -17,7 +17,7 @@ public class CorsConfig {
 
     configuration.setAllowedOriginPatterns(Arrays.asList(
         "http://localhost:3000",
-        "http://localhost:8080",
+        // "http://localhost:8080",
         "https://fintrack-liart.vercel.app",
         "https://fintrack-liart-*.vercel.app",
         "https://fintrack-api-gateway.onrender.com"));

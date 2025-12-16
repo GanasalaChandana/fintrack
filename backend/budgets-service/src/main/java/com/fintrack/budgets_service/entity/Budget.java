@@ -21,8 +21,7 @@ public class Budget {
     private Long id;
 
     @Column(name = "user_id", nullable = false)
-    @NotBlank(message = "User ID is required")
-    private String userId;
+    private String userId; // Removed validation - set from header in controller
 
     @Column(nullable = false)
     @NotBlank(message = "Category is required")
@@ -39,12 +38,14 @@ public class Budget {
     private Double spent = 0.0;
 
     @Column(nullable = false)
-    @NotBlank(message = "Month is required")
-    private String month; // Format: YYYY-MM
+    private String month; // Removed @NotBlank - auto-set in controller if not provided
 
     @Builder.Default
     @Column(length = 10)
     private String icon = "💰";
+
+    @Column(name = "period")
+    private String period;
 
     @Builder.Default
     @Column(length = 20)

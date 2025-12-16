@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Bell, Check, X, Filter, Settings, AlertTriangle } from 'lucide-react';
 
-const ALERTS_API = process.env.NEXT_PUBLIC_ALERTS_API_URL || 'http://localhost:8083';
+// ✅ FIXED: Use API Gateway instead of direct backend URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 interface Alert {
   id: string;
@@ -34,7 +35,7 @@ export default function AlertsPage() {
       const token = localStorage.getItem('authToken');
       const params = filter === 'unread' ? '?unread=true' : '';
       
-      const response = await fetch(`${ALERTS_API}/api/alerts${params}`, {
+      const response = await fetch(`${API_BASE_URL}/api/alerts${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -54,7 +55,7 @@ export default function AlertsPage() {
   const handleMarkAsRead = async (id: string) => {
     try {
       const token = localStorage.getItem('authToken');
-      await fetch(`${ALERTS_API}/api/alerts/${id}/read`, {
+      await fetch(`${API_BASE_URL}/api/alerts/${id}/read`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -69,7 +70,7 @@ export default function AlertsPage() {
   const handleDismiss = async (id: string) => {
     try {
       const token = localStorage.getItem('authToken');
-      await fetch(`${ALERTS_API}/api/alerts/${id}`, {
+      await fetch(`${API_BASE_URL}/api/alerts/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -86,7 +87,7 @@ export default function AlertsPage() {
       const token = localStorage.getItem('authToken');
       await Promise.all(
         alerts.filter(a => !a.isRead).map(a => 
-          fetch(`${ALERTS_API}/api/alerts/${a.id}/read`, {
+          fetch(`${API_BASE_URL}/api/alerts/${a.id}/read`, {
             method: 'PATCH',
             headers: {
               'Authorization': `Bearer ${token}`,

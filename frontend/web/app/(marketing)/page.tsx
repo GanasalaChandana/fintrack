@@ -367,13 +367,13 @@ export default function FinTrackLanding() {
                 FAQ
               </a>
               <a
-                href="/login"
+                href="/login?mode=signin"
                 className="block px-3 py-2 hover:bg-purple-500/20 rounded"
               >
                 Login
               </a>
               <a
-                href="/register"
+                href="/login?mode=signup"
                 className="block px-3 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded text-center"
               >
                 Get Started
@@ -419,7 +419,7 @@ export default function FinTrackLanding() {
 
               <div className="flex flex-col sm:flex-row gap-5">
                 <a
-                  href="/register"
+                  href="/login?mode=signup"
                   className="group bg-gradient-to-r from-purple-600 via-purple-500 to-pink-500 px-10 py-5 rounded-2xl text-lg font-bold hover:shadow-2xl hover:shadow-purple-500/60 transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 flex items-center justify-center relative overflow-hidden"
                 >
                   <span className="relative z-10 flex items-center">
@@ -934,7 +934,7 @@ export default function FinTrackLanding() {
                   href={
                     plan.name === "Business"
                       ? "mailto:sales@fintrack.com"
-                      : "/register"
+                      : "/login?mode=signup"
                   }
                   className={`block w-full py-4 rounded-full font-semibold transition text-center ${
                     plan.highlighted
@@ -1025,7 +1025,7 @@ export default function FinTrackLanding() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
-              href="/register"
+              href="/login?mode=signup"
               className="bg-gradient-to-r from-purple-500 to-pink-500 px-10 py-5 rounded-full text-lg font-semibold hover:shadow-2xl hover:shadow-purple-500/50 transition transform hover:scale-105"
             >
               Start Your Free Trial
@@ -1229,7 +1229,7 @@ export default function FinTrackLanding() {
 
             <div className="mt-6 flex flex-col sm:flex-row gap-4">
               <a
-                href="/register"
+                href="/login?mode=signup"
                 className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 rounded-full text-center font-semibold hover:shadow-lg hover:shadow-purple-500/50 transition"
               >
                 Start Free Trial

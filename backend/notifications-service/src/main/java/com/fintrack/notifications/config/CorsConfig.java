@@ -1,4 +1,4 @@
-package com.fintrack.notifications_service.config;
+package com.fintrack.notifications.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -7,36 +7,48 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 public class CorsConfig {
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
+        @Bean
+        public CorsConfigurationSource corsConfigurationSource() {
+                CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOriginPatterns(Arrays.asList(
-                "http://localhost:3000",
-                "http://localhost:8080",
-                "https://fintrack-liart.vercel.app",
-                "https://fintrack-liart-*.vercel.app",
-                "https://fintrack-api-gateway.onrender.com"));
+                // Allow all localhost ports and your production domains
+                configuration.setAllowedOriginPatterns(Arrays.asList(
+                                "http://localhost:*",
+                                "http://127.0.0.1:*",
+                                "https://fintrack-liart.vercel.app",
+                                "https://fintrack-liart-*.vercel.app",
+                                "https://*.vercel.app",
+                                "https://fintrack-api-gateway.onrender.com"));
 
-        configuration.setAllowedMethods(Arrays.asList(
-                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+                // Allow all standard HTTP methods
+                configuration.setAllowedMethods(Arrays.asList(
+                                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
 
-        configuration.setAllowedHeaders(Arrays.asList("*"));
+                // Allow all headers
+                configuration.setAllowedHeaders(List.of("*"));
 
-        configuration.setExposedHeaders(Arrays.asList(
-                "Authorization",
-                "X-User-Id"));
+                // Expose important headers to the client
+                configuration.setExposedHeaders(Arrays.asList(
+                                "Authorization",
+                                "X-User-Id",
+                                "Content-Type",
+                                "X-Requested-With"));
 
-        configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L);
+                // Allow credentials (cookies, authorization headers)
+                configuration.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration); // ← /** is critical!
+                // Cache preflight response for 1 hour
+                configuration.setMaxAge(3600L);
 
-        return source;
-    }
+                // Register CORS config for all paths
+                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                source.registerCorsConfiguration("/**", configuration);
+
+                return source;
+        }
 }
