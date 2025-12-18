@@ -1,120 +1,137 @@
-"use client";
+// components/KeyboardShortcuts.tsx
+'use client';
 
-import { useEffect, useState } from "react";
-import { Keyboard, X, Command } from "lucide-react";
-
-interface Shortcut {
-  keys: string[];
-  description: string;
-  action: () => void;
-}
+import { X, Keyboard } from 'lucide-react';
+import { getShortcutLabel } from '@/lib/utils/shortcuts';
 
 interface KeyboardShortcutsProps {
-  shortcuts: Shortcut[];
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-export function KeyboardShortcuts({ shortcuts }: KeyboardShortcutsProps) {
-  const [showHelp, setShowHelp] = useState(false);
+export function KeyboardShortcuts({ isOpen, onClose }: KeyboardShortcutsProps) {
+  if (!isOpen) return null;
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Show help with ?
-      if (e.key === "?" && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault();
-        setShowHelp((prev) => !prev);
-        return;
-      }
-
-      // Check all shortcuts
-      for (const shortcut of shortcuts) {
-        const keys = shortcut.keys;
-        const modifierMatch =
-          (keys.includes("ctrl") && e.ctrlKey) ||
-          (keys.includes("cmd") && e.metaKey) ||
-          (!keys.includes("ctrl") && !keys.includes("cmd"));
-
-        const keyMatch = keys.some((key) =>
-          key !== "ctrl" && key !== "cmd" ? e.key.toLowerCase() === key.toLowerCase() : false
-        );
-
-        if (modifierMatch && keyMatch) {
-          e.preventDefault();
-          shortcut.action();
-          break;
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [shortcuts]);
+  const shortcuts = {
+    navigation: [
+      { shortcutKey: 'd', ctrl: true, description: 'Go to Dashboard' },
+      { shortcutKey: 't', ctrl: true, description: 'Go to Transactions' },
+      { shortcutKey: 'b', ctrl: true, description: 'Go to Budgets' },
+      { shortcutKey: 'r', ctrl: true, description: 'Go to Reports' },
+    ],
+    actions: [
+      { shortcutKey: 'n', ctrl: true, description: 'New Transaction' },
+      { shortcutKey: 'k', ctrl: true, description: 'Search' },
+      { shortcutKey: 's', ctrl: true, description: 'Save Changes' },
+      { shortcutKey: 'e', ctrl: true, description: 'Export Data' },
+    ],
+    general: [
+      { shortcutKey: '?', shift: true, description: 'Show Keyboard Shortcuts' },
+      { shortcutKey: 'Escape', description: 'Close Modal/Dialogs' },
+      { shortcutKey: 'Tab', description: 'Navigate Forward' },
+      { shortcutKey: 'Tab', shift: true, description: 'Navigate Backward' },
+    ],
+  };
 
   return (
-    <>
-      {/* Help Button */}
-      <button
-        onClick={() => setShowHelp(true)}
-        className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-xl transition-transform hover:scale-110 md:bottom-8 md:right-8"
-        title="Keyboard shortcuts (?)"
+    <div 
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fadeIn"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
       >
-        <Keyboard className="h-6 w-6" />
-      </button>
-
-      {/* Help Modal */}
-      {showHelp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl animate-slide-up">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-gray-200 p-6">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 p-2">
-                  <Keyboard className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Keyboard Shortcuts</h2>
-                  <p className="text-sm text-gray-600">Power user features</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowHelp(false)}
-                className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-              >
-                <X className="h-6 w-6" />
-              </button>
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+              <Keyboard className="w-6 h-6 text-purple-600 dark:text-purple-400" />
             </div>
-
-            {/* Shortcuts List */}
-            <div className="max-h-[60vh] overflow-y-auto p-6">
-              <div className="space-y-3">
-                {shortcuts.map((shortcut, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-4 transition-colors hover:bg-gray-100"
-                  >
-                    <span className="font-medium text-gray-700">{shortcut.description}</span>
-                    <div className="flex items-center gap-1">
-                      {shortcut.keys.map((key, i) => (
-                        <div key={i} className="flex items-center gap-1">
-                          {i > 0 && <span className="text-gray-400">+</span>}
-                          <kbd className="min-w-[2rem] rounded-md border-2 border-gray-300 bg-white px-2 py-1 text-center text-sm font-semibold text-gray-700 shadow-sm">
-                            {key === "cmd" ? <Command className="inline h-4 w-4" /> : key.toUpperCase()}
-                          </kbd>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                Keyboard Shortcuts
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Boost your productivity with these shortcuts
+              </p>
             </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-            {/* Footer */}
-            <div className="border-t border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-600">
-              Press <kbd className="rounded bg-white px-2 py-1 font-bold">?</kbd> anytime to toggle this help
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[calc(80vh-100px)]">
+          {/* Navigation */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+              Navigation
+            </h3>
+            <div className="space-y-2">
+              {shortcuts.navigation.map((shortcut, index) => (
+                <ShortcutRow key={index} {...shortcut} />
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+              Actions
+            </h3>
+            <div className="space-y-2">
+              {shortcuts.actions.map((shortcut, index) => (
+                <ShortcutRow key={index} {...shortcut} />
+              ))}
+            </div>
+          </div>
+
+          {/* General */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+              General
+            </h3>
+            <div className="space-y-2">
+              {shortcuts.general.map((shortcut, index) => (
+                <ShortcutRow key={index} {...shortcut} />
+              ))}
             </div>
           </div>
         </div>
-      )}
-    </>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+          <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+            Press <kbd className="px-2 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs">Shift + ?</kbd> anytime to see this help
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
+interface ShortcutRowProps {
+  shortcutKey: string;
+  ctrl?: boolean;
+  alt?: boolean;
+  shift?: boolean;
+  description: string;
+}
+
+function ShortcutRow({ shortcutKey, ctrl, alt, shift, description }: ShortcutRowProps) {
+  const label = getShortcutLabel({ key: shortcutKey, ctrl, alt, shift });
+
+  return (
+    <div className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+      <span className="text-sm text-gray-700 dark:text-gray-300">{description}</span>
+      <kbd className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300 shadow-sm">
+        {label}
+      </kbd>
+    </div>
+  );
+}

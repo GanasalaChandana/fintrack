@@ -12,12 +12,14 @@ const nextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
 
-  compiler: {
-    removeConsole:
-      process.env.NODE_ENV === 'production'
-        ? { exclude: ['error', 'warn'] }
-        : false,
-  },
+  // Remove compiler options when using Turbopack
+  // Turbopack doesn't support compiler.removeConsole yet
+  // This will be applied during build, not in dev mode with Turbopack
+  ...(process.env.NODE_ENV === 'production' && {
+    compiler: {
+      removeConsole: { exclude: ['error', 'warn'] },
+    },
+  }),
 
   experimental: {
     optimizePackageImports: ['lucide-react', 'recharts'],

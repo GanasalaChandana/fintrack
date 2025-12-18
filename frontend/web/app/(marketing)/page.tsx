@@ -1,77 +1,24 @@
 ﻿'use client';
-import React, { useState, useEffect } from 'react';
-import {
-  TrendingUp, Upload, FileText, Shield, Check, Menu, X, Play, Star, ArrowRight,
-  DollarSign, ChevronDown, Mail, Globe, Users, Zap, CreditCard, Lock, BarChart3,
-  Smartphone, Bell, Download, RefreshCw, Target, PieChart, Calculator, Clock,
-  AlertCircle, TrendingDown, Activity, ExternalLink, MessageCircle
-} from 'lucide-react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart as RePieChart, Pie, Cell, BarChart, Bar
-} from 'recharts';
+import React, { useState, useEffect, useRef } from 'react';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
+import { TrendingUp, TrendingDown, DollarSign, PieChart, Shield, Zap, FileText, Bell, Target, Users, Download, Clock, Check, X, ChevronDown, Menu, X as CloseIcon, Moon, Sun, ArrowRight, Play, Star, Upload, Lock, Activity, MessageCircle, Mail, Globe, CreditCard, BarChart3, Smartphone, RefreshCw, Calculator, AlertCircle, ExternalLink } from 'lucide-react';
 
-export default function FinTrackEnhanced() {
+const FinTrackEnhanced = () => {
+  const [isDark, setIsDark] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const [activeFaq, setActiveFaq] = useState<number | null>(null);
+  const [activeTestimonial, setActiveTestimonial] = useState(0);
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const [visibleSections, setVisibleSections] = useState(new Set());
   const [showDemo, setShowDemo] = useState(false);
   const [showEmailCapture, setShowEmailCapture] = useState(false);
-  const [showExitIntent, setShowExitIntent] = useState(false);
-  const [showStickyBar, setShowStickyBar] = useState(false);
   const [email, setEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [liveActivity, setLiveActivity] = useState([]);
-  const [activityIndex, setActivityIndex] = useState(0);
-  const [savingsCalculator, setSavingsCalculator] = useState({
-    transactions: 50,
-    timeSpent: 2
-  });
 
-  // Live activity feed
-  const activities = [
-    { name: 'Sarah J.', action: 'saved $547', location: 'New York', time: '2m ago' },
-    { name: 'Mike C.', action: 'tracked 234 expenses', location: 'SF', time: '5m ago' },
-    { name: 'Emma R.', action: 'created budget', location: 'London', time: '8m ago' },
-    { name: 'David L.', action: 'exported report', location: 'Toronto', time: '12m ago' },
-    { name: 'Lisa K.', action: 'reached goal', location: 'Berlin', time: '15m ago' }
-  ];
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 50);
-      setShowStickyBar(window.scrollY > 800);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Exit intent
-  useEffect(() => {
-    const handleMouseLeave = (e: MouseEvent) => {
-      if (e.clientY <= 0 && !showExitIntent && window.scrollY > 300) {
-        setShowExitIntent(true);
-      }
-    };
-    document.addEventListener('mouseleave', handleMouseLeave);
-    return () => document.removeEventListener('mouseleave', handleMouseLeave);
-  }, [showExitIntent]);
-
-  // Live activity rotation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActivityIndex((prev) => (prev + 1) % activities.length);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const expenseData = [
-    { month: 'Jan', expenses: 2400, income: 4000 },
-    { month: 'Feb', expenses: 1398, income: 3800 },
-    { month: 'Mar', expenses: 3800, income: 4200 },
-    { month: 'Apr', expenses: 2780, income: 4100 },
-    { month: 'May', expenses: 1890, income: 4300 },
-    { month: 'Jun', expenses: 2390, income: 4500 }
+  // Mock data for demo dashboard
+  const mockData = [
+    { month: 'Jan', income: 4200, expenses: 2800 },
+    { month: 'Feb', income: 4500, expenses: 2400 },
+    { month: 'Mar', income: 4300, expenses: 2600 },
+    { month: 'Apr', income: 4700, expenses: 2390 }
   ];
 
   const categoryData = [
@@ -81,557 +28,466 @@ export default function FinTrackEnhanced() {
     { name: 'Entertainment', value: 340, color: '#10b981' }
   ];
 
-  const calculateROI = () => {
-    const monthlyHoursSaved = (savingsCalculator.timeSpent * savingsCalculator.transactions) / 60;
-    const annualHoursSaved = monthlyHoursSaved * 12;
-    const moneySaved = annualHoursSaved * 50; // $50/hour value
-    return { annualHoursSaved: Math.round(annualHoursSaved), moneySaved: Math.round(moneySaved) };
-  };
-
-  const roi = calculateROI();
-
-  const features = [
-    {
-      icon: <TrendingUp className="w-8 h-8" />,
-      title: 'Real-Time Dashboard',
-      description: 'Monitor your financial health with interactive charts showing spending trends, income vs expenses, and category breakdowns.',
-      color: 'from-purple-500 to-pink-500'
-    },
-    {
-      icon: <Upload className="w-8 h-8" />,
-      title: 'Smart CSV Import',
-      description: 'Import transactions from any bank with our intelligent CSV parser. Automatic categorization saves you hours.',
-      color: 'from-blue-500 to-cyan-500'
-    },
-    {
-      icon: <FileText className="w-8 h-8" />,
-      title: 'Detailed Reports',
-      description: 'Generate comprehensive reports. Export to PDF or Excel for tax preparation with custom date ranges.',
-      color: 'from-green-500 to-emerald-500'
-    },
-    {
-      icon: <Shield className="w-8 h-8" />,
-      title: 'Bank-Level Security',
-      description: 'Your data is encrypted with 256-bit SSL. SOC 2 Type II certified with regular security audits.',
-      color: 'from-orange-500 to-red-500'
-    }
-  ];
-
   const testimonials = [
-    {
-      name: 'Sarah Johnson',
-      role: 'Small Business Owner',
-      avatar: 'SJ',
-      content: 'FinTrack helped me identify $547 in unnecessary subscriptions. The automatic categorization is a lifesaver during tax season.',
-      rating: 5
-    },
-    {
-      name: 'Michael Chen',
-      role: 'Freelance Designer',
-      avatar: 'MC',
-      content: 'I used to spend 3 hours every month on expense tracking. Now it takes 5 minutes. The CSV import is incredibly smart.',
-      rating: 5
-    },
-    {
-      name: 'Emily Rodriguez',
-      role: 'Marketing Manager',
-      avatar: 'ER',
-      content: 'Finally understand where my money goes! The visual reports make budgeting actually enjoyable. Worth every penny.',
-      rating: 5
-    }
-  ];
-
-  const pricingPlans = [
-    {
-      name: 'Free',
-      price: '$0',
-      period: 'forever',
-      features: [
-        'Up to 100 transactions/month',
-        'Basic reporting',
-        'CSV import',
-        'Email support',
-        'Mobile app access'
-      ],
-      cta: 'Get Started Free',
-      highlighted: false
-    },
-    {
-      name: 'Pro',
-      price: '$9',
-      period: 'per month',
-      savings: 'Save 20% with annual billing',
-      features: [
-        'Unlimited transactions',
-        'Advanced analytics & AI insights',
-        'Multiple accounts & categories',
-        'Priority support',
-        'Export to Excel/PDF',
-        'Custom categories & tags',
-        'Budget tracking & alerts'
-      ],
-      cta: 'Try Free for 14 Days',
-      highlighted: true
-    },
-    {
-      name: 'Business',
-      price: '$29',
-      period: 'per month',
-      features: [
-        'Everything in Pro',
-        'Team collaboration (up to 5 users)',
-        'API access',
-        'Custom integrations',
-        'Dedicated account manager',
-        'Advanced security & compliance',
-        'White-label reports'
-      ],
-      cta: 'Contact Sales',
-      highlighted: false
-    }
+    { name: "Sarah Johnson", role: "Small Business Owner", initial: "SJ", text: "FinTrack helped me identify $547 in unnecessary subscriptions. The automatic categorization is a lifesaver during tax season." },
+    { name: "Michael Chen", role: "Freelance Designer", initial: "MC", text: "I used to spend 3 hours every month on expense tracking. Now it takes 5 minutes. The CSV import is incredibly smart." },
+    { name: "Emily Rodriguez", role: "Marketing Manager", initial: "ER", text: "Finally understand where my money goes! The visual reports make budgeting actually enjoyable. Worth every penny." }
   ];
 
   const faqs = [
-    {
-      question: 'Is my financial data secure?',
-      answer: 'Absolutely. We use bank-level 256-bit SSL encryption for all data transmission and storage. We never store your bank login credentials.'
-    },
-    {
-      question: 'Which banks and file formats do you support?',
-      answer: 'We support CSV files from all major banks including Chase, Bank of America, Wells Fargo, Citibank, and Capital One.'
-    },
-    {
-      question: 'Can I cancel my subscription anytime?',
-      answer: 'Yes! There are no long-term contracts. You can cancel anytime from your account settings.'
-    },
-    {
-      question: 'Do you offer a free trial?',
-      answer: 'Yes! The Pro plan includes a 14-day free trial with full access to all features. No credit card required.'
-    },
-    {
-      question: 'Can I import historical transactions?',
-      answer: 'Absolutely. You can import transactions going back as far as your bank provides them.'
-    },
-    {
-      question: 'Is there a mobile app?',
-      answer: 'Yes! FinTrack is available on iOS and Android with seamless sync across all devices.'
-    }
+    { q: "Is my financial data secure?", a: "Yes, we use bank-level 256-bit SSL encryption and are SOC 2 Type II certified. We never store your bank credentials." },
+    { q: "Which banks and file formats do you support?", a: "We support CSV exports from all major banks including Chase, Bank of America, Wells Fargo, and more. Our smart parser automatically detects formats." },
+    { q: "Can I cancel my subscription anytime?", a: "Yes, you can cancel anytime with no questions asked. You'll retain access until the end of your billing period." },
+    { q: "Do you offer a free trial?", a: "Yes! Pro plan includes a 14-day free trial with no credit card required." },
+    { q: "Can I import historical transactions?", a: "Yes, you can import transactions from any time period. There's no limit on historical data." },
+    { q: "Is there a mobile app?", a: "Yes! We have native iOS and Android apps that sync seamlessly with the web version." }
   ];
 
+  // Intersection Observer for scroll animations
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.target.id) {
+            setVisibleSections((prev) => new Set([...prev, entry.target.id]));
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    document.querySelectorAll('[data-animate]').forEach((el) => {
+      observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Auto-rotate testimonials
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveTestimonial((prev) => (prev + 1) % testimonials.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  type AnimatedCounterProps = {
+    end: number;
+    duration?: number;
+    prefix?: string;
+    suffix?: string;
+  };
+
+  const AnimatedCounter = ({ end, duration = 2000, prefix = '', suffix = '' }: AnimatedCounterProps) => {
+    const [count, setCount] = useState(0);
+    const countRef = useRef<HTMLSpanElement>(null);
+    const [hasAnimated, setHasAnimated] = useState(false);
+
+    useEffect(() => {
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting && !hasAnimated) {
+            setHasAnimated(true);
+            let start = 0;
+            const increment = end / (duration / 16);
+            const timer = setInterval(() => {
+              start += increment;
+              if (start >= end) {
+                setCount(end);
+                clearInterval(timer);
+              } else {
+                setCount(Math.floor(start));
+              }
+            }, 16);
+          }
+        },
+        { threshold: 0.5 }
+      );
+
+      if (countRef.current) observer.observe(countRef.current);
+      return () => observer.disconnect();
+    }, [end, duration, hasAnimated]);
+
+    return <span ref={countRef}>{prefix}{count.toLocaleString()}{suffix}</span>;
+  };
+
+  const bgColor = isDark ? 'bg-gray-900' : 'bg-gradient-to-br from-slate-50 via-purple-50 to-slate-50';
+  const textColor = isDark ? 'text-gray-100' : 'text-gray-900';
+  const cardBg = isDark ? 'bg-gray-800' : 'bg-white';
+  const borderColor = isDark ? 'border-purple-500/30' : 'border-purple-200';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+    <div className={`min-h-screen ${bgColor} ${textColor} transition-colors duration-300`}>
+      {/* Dark Mode Toggle */}
+      <button
+        onClick={() => setIsDark(!isDark)}
+        className={`fixed top-20 right-6 z-50 p-3 rounded-full ${cardBg} ${borderColor} border-2 shadow-lg hover:scale-110 transition-transform`}
+        aria-label="Toggle dark mode"
+      >
+        {isDark ? <Sun className="w-6 h-6 text-yellow-400" /> : <Moon className="w-6 h-6 text-purple-600" />}
+      </button>
+
       {/* Sticky CTA Bar */}
-      {showStickyBar && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-600 to-pink-600 py-3 px-4 shadow-lg transform translate-y-0 animate-slideDown">
+      {visibleSections.has('pricing') && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-r from-purple-600 to-pink-600 py-4 px-6 shadow-2xl animate-slideUp">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <AlertCircle className="w-5 h-5" />
-              <span className="font-semibold text-sm sm:text-base">
-                Limited Time: Get 2 months free with annual plan!
-              </span>
+            <div className="flex items-center space-x-3">
+              <Zap className="w-6 h-6" />
+              <span className="font-bold">Ready to start? Get 14 days free!</span>
             </div>
             <a
               href="/login?mode=signup"
-              className="bg-white text-purple-600 px-4 sm:px-6 py-2 rounded-full font-bold hover:bg-gray-100 transition text-sm sm:text-base"
+              className="bg-white text-purple-600 px-6 py-2 rounded-full font-bold hover:bg-gray-100 transition"
             >
-              Claim Offer →
+              Start Now →
             </a>
-          </div>
-        </div>
-      )}
-
-      {/* Exit Intent Popup */}
-      {showExitIntent && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-8 max-w-md w-full relative border border-purple-500/30 shadow-2xl">
-            <button
-              onClick={() => setShowExitIntent(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-white transition"
-            >
-              <X className="w-6 h-6" />
-            </button>
-
-            <div className="text-center">
-              <div className="inline-block p-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mb-4">
-                <DollarSign className="w-12 h-12" />
-              </div>
-              <h3 className="text-3xl font-bold mb-3">Wait! Don't Miss Out</h3>
-              <p className="text-xl text-purple-300 font-semibold mb-2">
-                Get 50% OFF your first month
-              </p>
-              <p className="text-gray-400 mb-6">
-                Join 2,500+ users saving an average of $450/month
-              </p>
-
-              <div className="space-y-3">
-                <a
-                  href="/login?mode=signup"
-                  className="block w-full bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-4 rounded-full font-bold hover:shadow-lg hover:shadow-purple-500/50 transition"
-                >
-                  Claim My 50% Discount →
-                </a>
-                <button
-                  onClick={() => setShowExitIntent(false)}
-                  className="block w-full text-gray-400 hover:text-white transition text-sm"
-                >
-                  No thanks, I don't want to save money
-                </button>
-              </div>
-
-              <p className="text-xs text-gray-500 mt-4">
-                ✓ No credit card required ✓ Cancel anytime
-              </p>
-            </div>
           </div>
         </div>
       )}
 
       {/* Navigation */}
-      <nav className={`fixed w-full z-40 transition-all duration-300 ${scrolled ? 'bg-slate-900/95 backdrop-blur-md shadow-lg' : 'bg-transparent'}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <a href="/" className="flex items-center space-x-2">
-              <DollarSign className="w-8 h-8 text-purple-400" />
-              <span className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+      <nav className={`fixed w-full z-50 transition-all duration-300 ${cardBg} ${isMenuOpen || visibleSections.size > 0 ? 'shadow-lg backdrop-blur-md bg-opacity-95' : ''}`}>
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex justify-between items-center">
+            <a href="/" className="flex items-center space-x-2 group">
+              <div className="p-2 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg group-hover:scale-110 transition-transform">
+                <DollarSign className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                 FinTrack
               </span>
             </a>
 
             <div className="hidden md:flex items-center space-x-8">
-              <a href="#features" className="hover:text-purple-400 transition">Features</a>
-              <a href="#how-it-works" className="hover:text-purple-400 transition">How It Works</a>
-              <a href="#pricing" className="hover:text-purple-400 transition">Pricing</a>
-              <a href="#faq" className="hover:text-purple-400 transition">FAQ</a>
-              <a href="/login?mode=signin" className="hover:text-purple-400 transition">Login</a>
+              {['Features', 'How It Works', 'Pricing', 'FAQ'].map((item) => (
+                <a
+                  key={item}
+                  href={`#${item.toLowerCase().replace(' ', '-')}`}
+                  className={`${isDark ? 'hover:text-purple-400' : 'hover:text-purple-600'} transition font-medium`}
+                >
+                  {item}
+                </a>
+              ))}
+              <a
+                href="/login?mode=signin"
+                className={`${isDark ? 'hover:text-purple-400' : 'hover:text-purple-600'} transition font-medium`}
+              >
+                Login
+              </a>
               <a
                 href="/login?mode=signup"
-                className="bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-2 rounded-full hover:shadow-lg hover:shadow-purple-500/50 transition transform hover:scale-105"
+                className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-2.5 rounded-full hover:shadow-lg hover:shadow-purple-500/50 transition transform hover:scale-105 font-semibold"
               >
                 Get Started
               </a>
             </div>
 
-            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden">
-              {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="md:hidden p-2 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900 transition"
+            >
+              {isMenuOpen ? <CloseIcon className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
-        </div>
 
-        {isMenuOpen && (
-          <div className="md:hidden bg-slate-800/95 backdrop-blur-md">
-            <div className="px-2 pt-2 pb-3 space-y-1">
-              <a href="#features" className="block px-3 py-2 hover:bg-purple-500/20 rounded">Features</a>
-              <a href="#how-it-works" className="block px-3 py-2 hover:bg-purple-500/20 rounded">How It Works</a>
-              <a href="#pricing" className="block px-3 py-2 hover:bg-purple-500/20 rounded">Pricing</a>
-              <a href="#faq" className="block px-3 py-2 hover:bg-purple-500/20 rounded">FAQ</a>
-              <a href="/login?mode=signup" className="block px-3 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded text-center">Get Started</a>
-            </div>
-          </div>
-        )}
-      </nav>
-
-      {/* Hero with Live Activity */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute top-20 right-20 w-96 h-96 bg-purple-500/30 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-20 left-20 w-96 h-96 bg-pink-500/30 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-
-        <div className="max-w-7xl mx-auto relative z-10">
-          {/* Live Activity Notification */}
-          <div className="absolute top-0 right-0 max-w-xs animate-slideIn">
-            <div className="bg-slate-800/90 backdrop-blur-xl rounded-2xl p-4 border border-purple-500/30 shadow-2xl">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
-                  <Activity className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">
-                    {activities[activityIndex].name} from {activities[activityIndex].location}
-                  </p>
-                  <p className="text-xs text-gray-400 truncate">
-                    {activities[activityIndex].action} • {activities[activityIndex].time}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="space-y-8">
-              <div className="inline-block animate-bounce">
-                <span className="bg-gradient-to-r from-purple-500/30 to-pink-500/30 backdrop-blur-sm text-purple-200 px-5 py-2.5 rounded-full text-sm font-semibold border border-purple-400/30">
-                  🚀 Join 2,500+ active users
-                </span>
-              </div>
-
-              <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold leading-tight">
-                Your intelligent{' '}
-                <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-                  financial management
-                </span>{' '}
-                platform
-              </h1>
-
-              <p className="text-xl sm:text-2xl text-gray-200 leading-relaxed">
-                Track expenses, analyze spending patterns, and make informed financial decisions with ease.
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-5">
+          {/* Mobile Menu */}
+          {isMenuOpen && (
+            <div className={`md:hidden mt-4 pb-4 space-y-2 animate-fadeIn ${cardBg} rounded-lg p-4 border ${borderColor}`}>
+              {['Features', 'How It Works', 'Pricing', 'FAQ'].map((item) => (
                 <a
-                  href="/login?mode=signup"
-                  className="group bg-gradient-to-r from-purple-600 via-purple-500 to-pink-500 px-10 py-5 rounded-2xl text-lg font-bold hover:shadow-2xl hover:shadow-purple-500/60 transition-all transform hover:scale-105 flex items-center justify-center"
+                  key={item}
+                  href={`#${item.toLowerCase().replace(' ', '-')}`}
+                  className={`block px-4 py-3 rounded-lg ${isDark ? 'hover:bg-purple-900' : 'hover:bg-purple-50'} transition`}
+                  onClick={() => setIsMenuOpen(false)}
                 >
-                  Start Free Trial
-                  <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-2 transition-transform" />
+                  {item}
                 </a>
-                <button
-                  onClick={() => setShowDemo(true)}
-                  className="group backdrop-blur-xl bg-white/10 border-2 border-white/30 px-10 py-5 rounded-2xl text-lg font-bold hover:bg-white/20 transition-all flex items-center justify-center"
-                >
-                  <Play className="mr-2 w-5 h-5" />
-                  Watch Demo
-                </button>
-              </div>
-
-              <div className="grid grid-cols-3 gap-6 pt-6">
-                <div className="group cursor-pointer transform hover:scale-110 transition">
-                  <div className="text-5xl font-black bg-gradient-to-br from-purple-400 to-purple-600 bg-clip-text text-transparent">2.5K+</div>
-                  <div className="text-sm text-gray-300 font-medium mt-1">Active Users</div>
-                </div>
-                <div className="group cursor-pointer transform hover:scale-110 transition">
-                  <div className="text-5xl font-black bg-gradient-to-br from-pink-400 to-pink-600 bg-clip-text text-transparent">$450K+</div>
-                  <div className="text-sm text-gray-300 font-medium mt-1">Money Saved</div>
-                </div>
-                <div className="group cursor-pointer transform hover:scale-110 transition">
-                  <div className="text-5xl font-black bg-gradient-to-br from-cyan-400 to-cyan-600 bg-clip-text text-transparent">4.9★</div>
-                  <div className="text-sm text-gray-300 font-medium mt-1">User Rating</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Interactive Dashboard Preview */}
-            <div className="relative group">
-              <div className="absolute -inset-4 bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 rounded-3xl blur-2xl opacity-40 group-hover:opacity-60 animate-pulse transition" />
-
-              <div className="relative bg-slate-800/80 backdrop-blur-2xl rounded-3xl p-6 sm:p-8 border border-purple-500/30 shadow-2xl transform group-hover:scale-[1.02] transition-all">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                    Dashboard Overview
-                  </h3>
-                  <div className="flex space-x-2">
-                    <div className="w-3 h-3 rounded-full bg-red-400 animate-pulse" />
-                    <div className="w-3 h-3 rounded-full bg-yellow-400 animate-pulse" style={{ animationDelay: '0.2s' }} />
-                    <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse" style={{ animationDelay: '0.4s' }} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-5 mb-8">
-                  <div className="bg-gradient-to-br from-purple-500/30 to-purple-600/30 backdrop-blur-xl rounded-2xl p-5 border border-purple-400/30 transform hover:scale-105 transition cursor-pointer">
-                    <div className="text-sm text-purple-200 mb-1">Balance</div>
-                    <div className="text-3xl font-black text-white">$12,450</div>
-                    <div className="text-xs text-purple-300 mt-1">+12.5% ↑</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-green-500/30 to-emerald-600/30 backdrop-blur-xl rounded-2xl p-5 border border-green-400/30 transform hover:scale-105 transition cursor-pointer">
-                    <div className="text-sm text-green-200 mb-1">Income</div>
-                    <div className="text-3xl font-black text-white">$4,500</div>
-                    <div className="text-xs text-green-300 mt-1">+8.3% ↑</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-pink-500/30 to-rose-600/30 backdrop-blur-xl rounded-2xl p-5 border border-pink-400/30 transform hover:scale-105 transition cursor-pointer">
-                    <div className="text-sm text-pink-200 mb-1">Expenses</div>
-                    <div className="text-3xl font-black text-white">$2,390</div>
-                    <div className="text-xs text-pink-300 mt-1">-3.2% ↓</div>
-                  </div>
-                </div>
-
-                <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={expenseData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="month" stroke="#9ca3af" style={{ fontSize: '12px' }} />
-                    <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }} />
-                    <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} />
-                    <Line type="monotone" dataKey="expenses" stroke="#ec4899" strokeWidth={3} dot={{ r: 4 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Trust Bar */}
-      <section className="py-12 px-4 bg-slate-900/30">
-        <div className="max-w-7xl mx-auto">
-          <p className="text-center text-gray-400 mb-8">Trusted by users from</p>
-          <div className="flex flex-wrap justify-center items-center gap-12 opacity-60">
-            <div className="flex items-center space-x-2"><Globe className="w-6 h-6" /><span className="font-semibold">Google</span></div>
-            <div className="flex items-center space-x-2"><Users className="w-6 h-6" /><span className="font-semibold">Microsoft</span></div>
-            <div className="flex items-center space-x-2"><Zap className="w-6 h-6" /><span className="font-semibold">Amazon</span></div>
-            <div className="flex items-center space-x-2"><CreditCard className="w-6 h-6" /><span className="font-semibold">Stripe</span></div>
-          </div>
-        </div>
-      </section>
-
-      {/* ROI Calculator Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-purple-900/50 to-slate-900/50">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold mb-4">
-              Calculate Your{' '}
-              <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Time & Money Savings
-              </span>
-            </h2>
-            <p className="text-gray-400 text-lg">See how much you could save with FinTrack</p>
-          </div>
-
-          <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 border border-purple-500/30">
-            <div className="grid md:grid-cols-2 gap-8 mb-8">
-              <div>
-                <label className="block text-sm font-semibold mb-3">Monthly Transactions</label>
-                <input
-                  type="range"
-                  min="10"
-                  max="200"
-                  value={savingsCalculator.transactions}
-                  onChange={(e) => setSavingsCalculator({ ...savingsCalculator, transactions: parseInt(e.target.value) })}
-                  className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                />
-                <div className="text-3xl font-bold text-purple-400 mt-2">{savingsCalculator.transactions}</div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-3">Minutes per Transaction</label>
-                <input
-                  type="range"
-                  min="1"
-                  max="5"
-                  value={savingsCalculator.timeSpent}
-                  onChange={(e) => setSavingsCalculator({ ...savingsCalculator, timeSpent: parseInt(e.target.value) })}
-                  className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                />
-                <div className="text-3xl font-bold text-pink-400 mt-2">{savingsCalculator.timeSpent} min</div>
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-2xl p-6 border border-purple-400/30">
-                <Clock className="w-8 h-8 text-purple-400 mb-3" />
-                <div className="text-sm text-gray-400 mb-1">Time Saved Annually</div>
-                <div className="text-4xl font-black text-white">{roi.annualHoursSaved}h</div>
-              </div>
-
-              <div className="bg-gradient-to-br from-green-500/20 to-emerald-600/20 rounded-2xl p-6 border border-green-400/30">
-                <DollarSign className="w-8 h-8 text-green-400 mb-3" />
-                <div className="text-sm text-gray-400 mb-1">Money Saved Annually</div>
-                <div className="text-4xl font-black text-white">${roi.moneySaved}</div>
-              </div>
-            </div>
-
-            <div className="mt-6 text-center">
+              ))}
               <a
                 href="/login?mode=signup"
-                className="inline-flex items-center bg-gradient-to-r from-purple-500 to-pink-500 px-8 py-4 rounded-full font-bold hover:shadow-lg hover:shadow-purple-500/50 transition"
+                className="block px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg text-center font-semibold"
               >
-                Start Saving Now
-                <ArrowRight className="ml-2 w-5 h-5" />
+                Get Started
               </a>
+            </div>
+          )}
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section className="pt-32 pb-20 px-6 relative overflow-hidden" id="hero" data-animate>
+        {/* Animated Background Blobs */}
+        <div className="absolute top-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-20 left-20 w-96 h-96 bg-pink-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-6">
+            <span className={`inline-block ${isDark ? 'bg-purple-900/50' : 'bg-purple-100'} ${isDark ? 'text-purple-200' : 'text-purple-700'} px-6 py-3 rounded-full text-sm font-semibold ${isDark ? 'border border-purple-500/30' : 'border border-purple-300'} animate-bounce`}>
+              🚀 Join <AnimatedCounter end={2500} suffix="+ active users" />
+            </span>
+          </div>
+
+          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-center mb-6 leading-tight">
+            Your intelligent{' '}
+            <span className="bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 bg-clip-text text-transparent">
+              financial management
+            </span>{' '}
+            platform
+          </h1>
+
+          <p className={`text-xl sm:text-2xl text-center ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-10 max-w-3xl mx-auto`}>
+            Track expenses, analyze spending patterns, and make informed financial decisions with ease. Take control of your finances today.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+            <a
+              href="/login?mode=signup"
+              className="group bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-4 rounded-full text-lg font-bold hover:shadow-2xl hover:shadow-purple-500/50 transition-all transform hover:scale-105 flex items-center justify-center"
+            >
+              Start Free Trial
+              <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </a>
+            <button 
+              onClick={() => setShowDemo(true)}
+              className={`group ${cardBg} ${borderColor} border-2 px-8 py-4 rounded-full text-lg font-bold ${isDark ? 'hover:bg-gray-700' : 'hover:bg-purple-50'} transition-all flex items-center justify-center`}
+            >
+              <Play className="mr-2 w-5 h-5" />
+              Watch Demo
+            </button>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-8 max-w-3xl mx-auto mb-16">
+            <div className="text-center group cursor-pointer transform hover:scale-110 transition">
+              <div className="text-4xl lg:text-5xl font-black bg-gradient-to-br from-purple-600 to-purple-800 bg-clip-text text-transparent">
+                <AnimatedCounter end={2500} suffix="+" />
+              </div>
+              <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-2 font-medium`}>Active Users</div>
+            </div>
+            <div className="text-center group cursor-pointer transform hover:scale-110 transition">
+              <div className="text-4xl lg:text-5xl font-black bg-gradient-to-br from-pink-600 to-pink-800 bg-clip-text text-transparent">
+                <AnimatedCounter end={450} prefix="$" suffix="K+" />
+              </div>
+              <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-2 font-medium`}>Money Saved</div>
+            </div>
+            <div className="text-center group cursor-pointer transform hover:scale-110 transition">
+              <div className="text-4xl lg:text-5xl font-black bg-gradient-to-br from-cyan-600 to-cyan-800 bg-clip-text text-transparent">4.9★</div>
+              <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-2 font-medium`}>User Rating</div>
+            </div>
+          </div>
+
+          {/* Dashboard Preview */}
+          <div className="relative max-w-5xl mx-auto group" data-animate>
+            <div className="absolute -inset-4 bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 rounded-3xl blur-2xl opacity-30 group-hover:opacity-50 transition" />
+            
+            <div className={`relative ${cardBg} rounded-3xl p-6 lg:p-8 ${borderColor} border-2 shadow-2xl transform group-hover:scale-[1.02] transition-all`}>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  Dashboard Overview
+                </h3>
+                <div className="flex space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-red-400 animate-pulse" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-400 animate-pulse" style={{ animationDelay: '0.2s' }} />
+                  <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse" style={{ animationDelay: '0.4s' }} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                <div className={`${isDark ? 'bg-gradient-to-br from-purple-900/50 to-purple-800/50' : 'bg-gradient-to-br from-purple-50 to-purple-100'} rounded-2xl p-6 ${isDark ? 'border border-purple-500/30' : 'border border-purple-200'} transform hover:scale-105 transition cursor-pointer`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-sm ${isDark ? 'text-purple-200' : 'text-purple-700'} font-medium`}>Balance</span>
+                    <TrendingUp className="w-4 h-4 text-green-500" />
+                  </div>
+                  <div className="text-3xl font-black">$12,450</div>
+                  <div className="text-sm text-green-500 mt-1 flex items-center">
+                    <TrendingUp className="w-3 h-3 mr-1" />
+                    +12.5%
+                  </div>
+                </div>
+
+                <div className={`${isDark ? 'bg-gradient-to-br from-green-900/50 to-emerald-800/50' : 'bg-gradient-to-br from-green-50 to-emerald-100'} rounded-2xl p-6 ${isDark ? 'border border-green-500/30' : 'border border-green-200'} transform hover:scale-105 transition cursor-pointer`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-sm ${isDark ? 'text-green-200' : 'text-green-700'} font-medium`}>Income</span>
+                    <TrendingUp className="w-4 h-4 text-green-500" />
+                  </div>
+                  <div className="text-3xl font-black">$4,500</div>
+                  <div className="text-sm text-green-500 mt-1 flex items-center">
+                    <TrendingUp className="w-3 h-3 mr-1" />
+                    +8.3%
+                  </div>
+                </div>
+
+                <div className={`${isDark ? 'bg-gradient-to-br from-pink-900/50 to-rose-800/50' : 'bg-gradient-to-br from-pink-50 to-rose-100'} rounded-2xl p-6 ${isDark ? 'border border-pink-500/30' : 'border border-pink-200'} transform hover:scale-105 transition cursor-pointer`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-sm ${isDark ? 'text-pink-200' : 'text-pink-700'} font-medium`}>Expenses</span>
+                    <TrendingDown className="w-4 h-4 text-red-500" />
+                  </div>
+                  <div className="text-3xl font-black">$2,390</div>
+                  <div className="text-sm text-red-500 mt-1 flex items-center">
+                    <TrendingDown className="w-3 h-3 mr-1" />
+                    -3.2%
+                  </div>
+                </div>
+              </div>
+
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={mockData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e5e7eb'} />
+                  <XAxis dataKey="month" stroke={isDark ? '#9ca3af' : '#6b7280'} />
+                  <YAxis stroke={isDark ? '#9ca3af' : '#6b7280'} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: isDark ? '#1e293b' : '#ffffff', 
+                      border: 'none', 
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                    }} 
+                  />
+                  <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={3} dot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="expenses" stroke="#ec4899" strokeWidth={3} dot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Trust Badges */}
+          <div className="flex flex-wrap justify-center items-center gap-8 mt-12 opacity-60">
+            <div className="flex items-center space-x-2">
+              <Shield className="w-5 h-5" />
+              <span className="text-sm font-medium">Bank-level security</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Check className="w-5 h-5" />
+              <span className="text-sm font-medium">iOS & Android apps</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Zap className="w-5 h-5" />
+              <span className="text-sm font-medium">No credit card required</span>
             </div>
           </div>
         </div>
       </section>
 
       {/* How It Works */}
-      <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8">
+      <section id="how-it-works" className="py-20 px-6" data-animate>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-5xl font-bold mb-4">
+            <h2 className="text-4xl lg:text-5xl font-bold mb-4">
               Get started in{' '}
-              <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                 three simple steps
               </span>
             </h2>
-            <p className="text-xl text-gray-400">From signup to insights in under 2 minutes</p>
+            <p className={`text-xl ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>From signup to insights in under 2 minutes</p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
             {[
-              { step: '1', title: 'Sign Up Free', desc: 'Create your account in 30 seconds', icon: <Users className="w-8 h-8" /> },
-              { step: '2', title: 'Upload Transactions', desc: 'Import bank CSV or add manually', icon: <Upload className="w-8 h-8" /> },
-              { step: '3', title: 'Get Insights', desc: 'View analytics and track trends', icon: <BarChart3 className="w-8 h-8" /> }
-            ].map((item, idx) => (
-              <div key={idx} className="relative">
-                <div className="bg-slate-800/50 backdrop-blur-xl rounded-2xl p-8 border border-purple-500/20 hover:border-purple-500/50 transition transform hover:scale-105 text-center">
-                  <div className="inline-block p-4 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 mb-6">{item.icon}</div>
-                  <div className="text-4xl font-bold text-purple-400 mb-2">{item.step}</div>
-                  <h3 className="text-xl font-bold mb-3">{item.title}</h3>
-                  <p className="text-gray-400">{item.desc}</p>
+              { num: '1', title: 'Sign Up Free', desc: 'Create your account in 30 seconds. No credit card required.', icon: Users },
+              { num: '2', title: 'Upload Transactions', desc: 'Import your bank CSV or add transactions manually.', icon: Upload },
+              { num: '3', title: 'Get Insights', desc: 'View analytics, track trends, and make smarter financial decisions.', icon: TrendingUp }
+            ].map((step, idx) => {
+              const Icon = step.icon;
+              return (
+                <div key={idx} className="relative">
+                  <div className={`${cardBg} ${borderColor} border-2 rounded-2xl p-8 hover:shadow-xl transition transform hover:scale-105 text-center`}>
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white text-2xl font-bold mb-4">
+                      {step.num}
+                    </div>
+                    <div className={`inline-block p-4 rounded-full mb-4 ${isDark ? 'bg-gradient-to-r from-purple-900/30 to-pink-900/30' : 'bg-gradient-to-r from-purple-100 to-pink-100'}`}>
+                      <Icon className={`w-8 h-8 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                    </div>
+                    <h3 className="text-xl font-bold mb-3">{step.title}</h3>
+                    <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>{step.desc}</p>
+                  </div>
+                  {idx < 2 && (
+                    <div className="hidden md:block absolute top-1/2 -right-4 transform -translate-y-1/2 z-10">
+                      <ArrowRight className="w-8 h-8 text-purple-500" />
+                    </div>
+                  )}
                 </div>
-                {idx < 2 && <div className="hidden md:block absolute top-1/2 -right-4 transform -translate-y-1/2 z-10"><ArrowRight className="w-8 h-8 text-purple-400" /></div>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* Features */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-900/50">
+      <section id="features" className={`py-20 px-6 ${isDark ? 'bg-gray-800/30' : 'bg-purple-50/50'}`} data-animate>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-5xl font-bold mb-4">
+            <h2 className="text-4xl lg:text-5xl font-bold mb-4">
               Powerful features for{' '}
-              <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                 smart finance management
               </span>
             </h2>
-            <p className="text-xl text-gray-400">Everything you need in one intuitive platform</p>
+            <p className={`text-xl ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              Everything you need to take control of your finances in one intuitive platform
+            </p>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-8 mb-12">
-            {features.map((f, idx) => (
-              <div key={idx} className="group bg-slate-800/50 backdrop-blur-xl rounded-2xl p-8 border border-purple-500/20 hover:border-purple-500/50 transition transform hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/20">
-                <div className={`inline-block p-4 rounded-xl bg-gradient-to-r ${f.color} mb-4 group-hover:scale-110 transition`}>{f.icon}</div>
-                <h3 className="text-2xl font-bold mb-3">{f.title}</h3>
-                <p className="text-gray-400 leading-relaxed">{f.description}</p>
-              </div>
-            ))}
+            {[
+              { icon: TrendingUp, title: 'Real-Time Dashboard', desc: 'Monitor your financial health with interactive charts showing spending trends, income vs expenses, and category breakdowns. Get instant insights with visual analytics that update automatically.' },
+              { icon: Upload, title: 'Smart CSV Import', desc: 'Import transactions from any bank with our intelligent CSV parser. Supports Chase, Bank of America, Wells Fargo, and more. Automatic categorization saves you hours of manual work.' },
+              { icon: FileText, title: 'Detailed Reports', desc: 'Generate comprehensive monthly, quarterly, and annual reports. Export to PDF or Excel for tax preparation. Custom date ranges and filtering options included.' },
+              { icon: Shield, title: 'Bank-Level Security', desc: 'Your data is encrypted with 256-bit SSL encryption. We never store your bank credentials. SOC 2 Type II certified with regular security audits.' }
+            ].map((feature, idx) => {
+              const Icon = feature.icon;
+              return (
+                <div key={idx} className={`group ${cardBg} ${borderColor} border rounded-2xl p-8 hover:shadow-2xl transition-all transform hover:scale-105`}>
+                  <div className="inline-block p-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl mb-4 group-hover:scale-110 transition">
+                    <Icon className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-3">{feature.title}</h3>
+                  <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>{feature.desc}</p>
+                </div>
+              );
+            })}
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { icon: <Bell className="w-6 h-6" />, title: 'Smart Alerts', desc: 'Get notified of unusual spending' },
-              { icon: <Target className="w-6 h-6" />, title: 'Budget Goals', desc: 'Track savings with visual indicators' },
-              { icon: <PieChart className="w-6 h-6" />, title: 'Category Insights', desc: 'Automatic categorization' },
-              { icon: <RefreshCw className="w-6 h-6" />, title: 'Recurring Tracking', desc: 'Manage subscriptions easily' },
-              { icon: <Download className="w-6 h-6" />, title: 'Multi-Format Export', desc: 'Export to PDF, Excel, CSV' },
-              { icon: <Smartphone className="w-6 h-6" />, title: 'Cross-Platform Sync', desc: 'Access on web, iOS, Android' }
-            ].map((f, idx) => (
-              <div key={idx} className="bg-slate-800/30 backdrop-blur-xl rounded-xl p-6 border border-purple-500/10 hover:border-purple-500/30 transition">
-                <div className="flex items-start space-x-4">
-                  <div className="p-3 rounded-lg bg-purple-500/20 text-purple-400">{f.icon}</div>
-                  <div>
-                    <h4 className="font-semibold mb-1">{f.title}</h4>
-                    <p className="text-sm text-gray-400">{f.desc}</p>
+              { icon: Bell, title: 'Smart Alerts', desc: 'Get notified of unusual spending, bill due dates, and budget limits' },
+              { icon: Target, title: 'Budget Goals', desc: 'Set and track savings goals with visual progress indicators' },
+              { icon: PieChart, title: 'Category Insights', desc: 'Automatic categorization with customizable spending categories' },
+              { icon: RefreshCw, title: 'Recurring Tracking', desc: 'Identify and manage subscriptions and recurring payments' },
+              { icon: Download, title: 'Multi-Format Export', desc: 'Export reports in PDF, Excel, or CSV for easy sharing' },
+              { icon: Smartphone, title: 'Cross-Platform Sync', desc: 'Access your data seamlessly across web, iOS, and Android' }
+            ].map((f, idx) => {
+              const Icon = f.icon;
+              return (
+                <div key={idx} className={`${cardBg} ${borderColor} border rounded-xl p-6 hover:shadow-lg transition`}>
+                  <div className="flex items-start space-x-4">
+                    <div className={`p-3 rounded-lg ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'}`}>
+                      <Icon className={`w-6 h-6 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold mb-1">{f.title}</h4>
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{f.desc}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* Interactive Feature Demo */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
+      <section className="py-20 px-6" data-animate>
         <div className="max-w-6xl mx-auto">
-          <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 border border-purple-500/30">
+          <div className={`${cardBg} ${borderColor} border-2 rounded-3xl p-8 shadow-xl`}>
             <div className="grid lg:grid-cols-2 gap-8 items-center">
               <div>
                 <h3 className="text-3xl font-bold mb-4">
                   See Your Spending{' '}
-                  <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                     at a Glance
                   </span>
                 </h3>
-                <p className="text-gray-400 mb-6">
+                <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} mb-6`}>
                   Visualize where your money goes with beautiful, interactive charts. Identify spending patterns and make smarter decisions.
                 </p>
                 <ul className="space-y-3">
@@ -644,7 +500,7 @@ export default function FinTrackEnhanced() {
                 </ul>
               </div>
 
-              <div className="bg-slate-900/50 rounded-2xl p-6">
+              <div className={`${isDark ? 'bg-gray-900/50' : 'bg-gray-50'} rounded-2xl p-6`}>
                 <ResponsiveContainer width="100%" height={300}>
                   <RePieChart>
                     <Pie
@@ -660,7 +516,13 @@ export default function FinTrackEnhanced() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: isDark ? '#1e293b' : '#ffffff', 
+                        border: 'none', 
+                        borderRadius: '8px' 
+                      }} 
+                    />
                   </RePieChart>
                 </ResponsiveContainer>
                 <div className="grid grid-cols-2 gap-4 mt-6">
@@ -678,48 +540,55 @@ export default function FinTrackEnhanced() {
       </section>
 
       {/* Security */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-900/50">
+      <section className={`py-20 px-6 ${isDark ? 'bg-gray-800/30' : 'bg-purple-50/50'}`} data-animate>
         <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-block p-4 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 mb-6">
-            <Shield className="w-12 h-12" />
+          <div className="inline-block p-4 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 mb-6">
+            <Shield className="w-12 h-12 text-white" />
           </div>
           <h2 className="text-4xl font-bold mb-6">
             Your data security is our{' '}
-            <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">top priority</span>
+            <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">top priority</span>
           </h2>
-          <p className="text-lg text-gray-400 mb-8">Industry-leading security measures to protect your financial information</p>
+          <p className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-8`}>
+            We employ industry-leading security measures to protect your financial information
+          </p>
           <div className="grid sm:grid-cols-3 gap-6">
             {[
-              { icon: <Lock className="w-8 h-8" />, title: '256-bit Encryption', desc: 'Bank-level SSL encryption' },
-              { icon: <Shield className="w-8 h-8" />, title: 'SOC 2 Certified', desc: 'Regular security audits' },
-              { icon: <Check className="w-8 h-8" />, title: 'No Credentials Stored', desc: 'We never access your bank' }
-            ].map((s, idx) => (
-              <div key={idx} className="bg-slate-800/50 backdrop-blur-xl rounded-xl p-6 border border-purple-500/20">
-                <div className="text-purple-400 mx-auto mb-3">{s.icon}</div>
-                <h4 className="font-semibold mb-2">{s.title}</h4>
-                <p className="text-sm text-gray-400">{s.desc}</p>
-              </div>
-            ))}
+              { icon: Lock, title: '256-bit Encryption', desc: 'Bank-level SSL encryption for all data' },
+              { icon: Shield, title: 'SOC 2 Certified', desc: 'Regular third-party security audits' },
+              { icon: Check, title: 'No Credentials Stored', desc: 'We never access your bank login' }
+            ].map((s, idx) => {
+              const Icon = s.icon;
+              return (
+                <div key={idx} className={`${cardBg} ${borderColor} border rounded-xl p-6`}>
+                  <Icon className={`w-8 h-8 mx-auto mb-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                  <h4 className="font-semibold mb-2">{s.title}</h4>
+                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{s.desc}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* Comparison */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
+      <section className="py-20 px-6" data-animate>
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold mb-4">Why choose FinTrack?</h2>
-            <p className="text-xl text-gray-400">See how we compare to traditional spreadsheets</p>
+            <p className={`text-xl ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              See how we compare to traditional spreadsheets
+            </p>
           </div>
 
-          <div className="bg-slate-800/50 backdrop-blur-xl rounded-2xl overflow-hidden border border-purple-500/20">
+          <div className={`${cardBg} ${borderColor} border-2 rounded-2xl overflow-hidden`}>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-purple-500/20">
+                  <tr className={`${isDark ? 'border-b border-purple-500/20' : 'border-b border-purple-200'}`}>
                     <th className="p-6 text-left"></th>
-                    <th className="p-6 text-center text-gray-400">Spreadsheets</th>
-                    <th className="p-6 text-center text-purple-400">FinTrack</th>
+                    <th className={`p-6 text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Spreadsheets</th>
+                    <th className="p-6 text-center text-purple-600">FinTrack</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -730,17 +599,17 @@ export default function FinTrackEnhanced() {
                     { feature: 'Bank-level Security', ss: false, ft: true },
                     { feature: 'Time to Setup', ss: 'Hours', ft: '2 mins' }
                   ].map((row, idx) => (
-                    <tr key={idx} className="border-b border-purple-500/10">
+                    <tr key={idx} className={`${isDark ? 'border-b border-purple-500/10' : 'border-b border-purple-100'}`}>
                       <td className="p-6 font-medium">{row.feature}</td>
                       <td className="p-6 text-center">
                         {typeof row.ss === 'boolean' ? (
                           row.ss ? <Check className="w-6 h-6 mx-auto text-green-400" /> : <X className="w-6 h-6 mx-auto text-red-400" />
-                        ) : <span className="text-gray-400">{row.ss}</span>}
+                        ) : <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>{row.ss}</span>}
                       </td>
                       <td className="p-6 text-center">
                         {typeof row.ft === 'boolean' ? (
                           row.ft ? <Check className="w-6 h-6 mx-auto text-green-400" /> : <X className="w-6 h-6 mx-auto text-red-400" />
-                        ) : <span className="text-purple-400 font-semibold">{row.ft}</span>}
+                        ) : <span className="text-purple-600 font-semibold">{row.ft}</span>}
                       </td>
                     </tr>
                   ))}
@@ -752,78 +621,139 @@ export default function FinTrackEnhanced() {
       </section>
 
       {/* Testimonials */}
-      <section id="testimonials" className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-900/50">
+      <section id="testimonials" className={`py-20 px-6 ${isDark ? 'bg-gray-800/30' : 'bg-purple-50/50'}`} data-animate>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-5xl font-bold mb-4">
+            <h2 className="text-4xl lg:text-5xl font-bold mb-4">
               Loved by{' '}
-              <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">thousands of users</span>
+              <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                thousands of users
+              </span>
             </h2>
-            <p className="text-xl text-gray-400">Real results from real people</p>
+            <p className={`text-xl ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Real results from real people</p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {testimonials.map((t, idx) => (
-              <div key={idx} className="bg-slate-800/50 backdrop-blur-xl rounded-2xl p-8 border border-purple-500/20 hover:border-purple-500/50 transition transform hover:scale-105">
-                <div className="flex mb-4">
-                  {[...Array(t.rating)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-                  ))}
+          <div className="relative max-w-4xl mx-auto">
+            <div className={`${cardBg} ${borderColor} border-2 rounded-3xl p-8 lg:p-12 shadow-xl`}>
+              <div className="flex mb-4">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="w-6 h-6 fill-yellow-400 text-yellow-400" />
+                ))}
+              </div>
+              <p className={`text-xl lg:text-2xl ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-8 leading-relaxed`}>
+                "{testimonials[activeTestimonial].text}"
+              </p>
+              <div className="flex items-center space-x-4">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center text-white font-bold text-xl">
+                  {testimonials[activeTestimonial].initial}
                 </div>
-                <p className="text-gray-300 mb-6 leading-relaxed">"{t.content}"</p>
-                <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center font-bold">{t.avatar}</div>
-                  <div>
-                    <div className="font-semibold">{t.name}</div>
-                    <div className="text-sm text-gray-400">{t.role}</div>
+                <div>
+                  <div className="font-bold text-lg">{testimonials[activeTestimonial].name}</div>
+                  <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+                    {testimonials[activeTestimonial].role}
                   </div>
                 </div>
               </div>
-            ))}
+            </div>
+
+            {/* Testimonial Navigation Dots */}
+            <div className="flex justify-center space-x-2 mt-8">
+              {testimonials.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveTestimonial(idx)}
+                  className={`h-3 rounded-full transition-all ${
+                    idx === activeTestimonial 
+                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 w-8' 
+                      : isDark ? 'bg-gray-600 w-3' : 'bg-gray-300 w-3'
+                  }`}
+                  aria-label={`Go to testimonial ${idx + 1}`}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8">
+      <section id="pricing" className="py-20 px-6" data-animate>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-5xl font-bold mb-4">
+            <h2 className="text-4xl lg:text-5xl font-bold mb-4">
               Simple,{' '}
-              <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">transparent pricing</span>
+              <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                transparent pricing
+              </span>
             </h2>
-            <p className="text-xl text-gray-400">Choose the plan that's right for you</p>
+            <p className={`text-xl ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Choose the plan that's right for you</p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            {pricingPlans.map((plan, idx) => (
-              <div key={idx} className={`rounded-2xl p-8 border-2 transition transform hover:scale-105 ${plan.highlighted ? 'bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-400 shadow-2xl' : 'bg-slate-800/50 border-slate-700'}`}>
-                {plan.highlighted && (
-                  <div className="text-center mb-4">
-                    <span className="bg-gradient-to-r from-purple-400 to-pink-400 text-white px-4 py-1 rounded-full text-sm font-semibold">MOST POPULAR</span>
+            {[
+              { 
+                name: 'Free', 
+                price: '$0', 
+                period: 'forever', 
+                features: ['Up to 100 transactions/month', 'Basic reporting', 'CSV import', 'Email support', 'Mobile app access'],
+                highlighted: false
+              },
+              { 
+                name: 'Pro', 
+                price: '$9', 
+                period: 'per month', 
+                badge: 'MOST POPULAR',
+                savings: 'Save 20% with annual billing',
+                features: ['Unlimited transactions', 'Advanced analytics & AI insights', 'Multiple accounts & categories', 'Priority support', 'Export to Excel/PDF', 'Custom categories & tags', 'Budget tracking & alerts'],
+                highlighted: true
+              },
+              { 
+                name: 'Business', 
+                price: '$29', 
+                period: 'per month', 
+                features: ['Everything in Pro', 'Team collaboration (up to 5 users)', 'API access', 'Custom integrations', 'Dedicated account manager', 'Advanced security & compliance', 'White-label reports'],
+                highlighted: false
+              }
+            ].map((plan, idx) => (
+              <div 
+                key={idx} 
+                className={`${plan.highlighted ? 'transform scale-105 z-10' : ''} ${cardBg} ${plan.highlighted ? 'border-purple-500 shadow-2xl' : borderColor} border-2 rounded-3xl p-8 transition hover:shadow-xl relative`}
+              >
+                {plan.badge && (
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                    <span className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-1 rounded-full text-sm font-bold">
+                      {plan.badge}
+                    </span>
                   </div>
                 )}
                 <div className="text-center mb-6">
                   <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-                  <div className="text-5xl font-bold mb-2">{plan.price}</div>
-                  <div className="text-gray-400">{plan.period}</div>
-                  {plan.savings && <div className="text-sm text-purple-400 mt-2">{plan.savings}</div>}
+                  <div className="text-5xl font-black mb-2">{plan.price}</div>
+                  <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>{plan.period}</div>
+                  {plan.savings && <div className="text-sm text-purple-600 mt-2">{plan.savings}</div>}
                 </div>
                 <ul className="space-y-4 mb-8">
-                  {plan.features.map((f, i) => (
-                    <li key={i} className="flex items-start">
-                      <Check className="w-5 h-5 text-green-400 mr-3 mt-0.5 flex-shrink-0" />
-                      <span className="text-gray-300">{f}</span>
+                  {plan.features.map((feature, i) => (
+                    <li key={i} className="flex items-start space-x-3">
+                      <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>{feature}</span>
                     </li>
                   ))}
                 </ul>
                 <a
                   href={plan.name === 'Business' ? 'mailto:sales@fintrack.com' : '/login?mode=signup'}
-                  className={`block w-full py-4 rounded-full font-semibold transition text-center ${plan.highlighted ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-lg' : 'bg-slate-700 hover:bg-slate-600'}`}
+                  className={`block w-full py-4 rounded-full font-bold text-center transition ${
+                    plan.highlighted 
+                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:shadow-lg hover:shadow-purple-500/50'  
+                      : isDark ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-200 hover:bg-gray-300'
+                  }`}
                 >
-                  {plan.cta}
+                  {plan.name === 'Business' ? 'Contact Sales' : plan.name === 'Pro' ? 'Try Free for 14 Days' : 'Get Started Free'}
                 </a>
-                {plan.highlighted && <p className="text-xs text-center text-gray-400 mt-4">No credit card required • Cancel anytime</p>}
+                {plan.name === 'Pro' && (
+                  <p className={`text-xs text-center mt-4 ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                    No credit card required • Cancel anytime
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -831,104 +761,120 @@ export default function FinTrackEnhanced() {
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-900/50">
+      <section id="faq" className={`py-20 px-6 ${isDark ? 'bg-gray-800/30' : 'bg-purple-50/50'}`} data-animate>
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-5xl font-bold mb-4">
+            <h2 className="text-4xl lg:text-5xl font-bold mb-4">
               Frequently Asked{' '}
-              <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Questions</span>
+              <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                Questions
+              </span>
             </h2>
-            <p className="text-xl text-gray-400">Everything you need to know</p>
+            <p className={`text-xl ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Everything you need to know about FinTrack</p>
           </div>
 
           <div className="space-y-4">
             {faqs.map((faq, idx) => (
-              <div key={idx} className="bg-slate-800/50 backdrop-blur-xl rounded-2xl border border-purple-500/20 overflow-hidden">
+              <div key={idx} className={`${cardBg} ${borderColor} border-2 rounded-2xl overflow-hidden transition hover:shadow-lg`}>
                 <button
-                  onClick={() => setActiveFaq(activeFaq === idx ? null : idx)}
-                  className="w-full px-6 py-5 flex justify-between items-center hover:bg-purple-500/5 transition"
+                  onClick={() => setExpandedFaq(expandedFaq === idx ? null : idx)}
+                  className={`w-full px-6 py-5 flex justify-between items-center text-left ${isDark ? 'hover:bg-gray-800' : 'hover:bg-purple-50'} transition`}
                 >
-                  <span className="text-left font-semibold text-lg">{faq.question}</span>
-                  <ChevronDown className={`w-5 h-5 text-purple-400 transition-transform ${activeFaq === idx ? 'rotate-180' : ''}`} />
+                  <span className="font-bold text-lg pr-4">{faq.q}</span>
+                  <ChevronDown className={`w-6 h-6 text-purple-600 flex-shrink-0 transition-transform ${expandedFaq === idx ? 'rotate-180' : ''}`} />
                 </button>
-                {activeFaq === idx && (
-                  <div className="px-6 pb-5 text-gray-400 leading-relaxed">{faq.answer}</div>
+                {expandedFaq === idx && (
+                  <div className={`px-6 pb-5 ${isDark ? 'text-gray-400' : 'text-gray-600'} animate-fadeIn`}>
+                    {faq.a}
+                  </div>
                 )}
               </div>
             ))}
           </div>
 
           <div className="text-center mt-12">
-            <p className="text-gray-400 mb-4">Still have questions?</p>
+            <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} mb-4`}>Still have questions?</p>
             <button
               onClick={() => setShowEmailCapture(true)}
-              className="text-purple-400 hover:text-purple-300 font-semibold transition"
+              className="text-purple-600 hover:text-purple-700 font-semibold transition inline-flex items-center"
             >
-              Contact our support team →
+              Contact our support team
+              <ArrowRight className="w-4 h-4 ml-2" />
             </button>
           </div>
         </div>
       </section>
 
       {/* Final CTA */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
+      <section className="py-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-5xl font-bold mb-6">Ready to take control of your finances?</h2>
-          <p className="text-xl text-gray-400 mb-8">Join 2,500+ users managing their money smarter with FinTrack.</p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <h2 className="text-4xl lg:text-5xl font-bold mb-6">
+            Ready to take control of your finances?
+          </h2>
+          <p className={`text-xl ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-8`}>
+            Join 2,500+ users managing their money smarter with FinTrack.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
             <a
               href="/login?mode=signup"
-              className="bg-gradient-to-r from-purple-500 to-pink-500 px-10 py-5 rounded-full text-lg font-semibold hover:shadow-2xl hover:shadow-purple-500/50 transition transform hover:scale-105"
+              className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-10 py-4 rounded-full text-lg font-bold hover:shadow-2xl hover:shadow-purple-500/50 transition transform hover:scale-105"
             >
               Start Your Free Trial
             </a>
-            <button
+            <button 
               onClick={() => setShowEmailCapture(true)}
-              className="border-2 border-purple-400 px-10 py-5 rounded-full text-lg font-semibold hover:bg-purple-400/10 transition"
+              className={`${cardBg} ${borderColor} border-2 px-10 py-4 rounded-full text-lg font-bold ${isDark ? 'hover:bg-gray-800' : 'hover:bg-purple-50'} transition`}
             >
               Get Updates
             </button>
           </div>
-          <p className="text-sm text-gray-500 mt-6">No credit card required • 14-day free trial • Cancel anytime</p>
+          <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+            No credit card required • 14-day free trial • Cancel anytime
+          </p>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-slate-950 py-12 px-4 sm:px-6 lg:px-8">
+      <footer className={`${isDark ? 'bg-gray-950' : 'bg-gray-900 text-gray-100'} py-12 px-6`}>
         <div className="max-w-7xl mx-auto">
           <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center space-x-2 mb-4">
                 <DollarSign className="w-8 h-8 text-purple-400" />
-                <span className="text-xl font-bold">FinTrack</span>
+                <span className="text-xl font-bold text-white">FinTrack</span>
               </div>
-              <p className="text-gray-400 text-sm">Your intelligent financial management platform</p>
-              <div className="flex items-center space-x-2 mt-4">
-                <Shield className="w-4 h-4 text-purple-400" />
-                <span className="text-xs text-gray-500">SOC 2 Type II Certified</span>
+              <p className="text-gray-400 text-sm mb-4">Your intelligent financial management platform</p>
+              <div className="flex items-center space-x-2 text-xs text-gray-500">
+                <Shield className="w-4 h-4" />
+                <span>SOC 2 Type II Certified</span>
               </div>
             </div>
+            
             {[
               { title: 'Product', links: ['Features', 'Pricing', 'Security', 'Roadmap', 'API Docs'] },
               { title: 'Company', links: ['About', 'Blog', 'Careers', 'Press Kit', 'Contact'] },
               { title: 'Legal', links: ['Privacy Policy', 'Terms of Service', 'Cookie Policy', 'GDPR', 'Data Processing'] }
             ].map((col, idx) => (
               <div key={idx}>
-                <h4 className="font-semibold mb-4">{col.title}</h4>
-                <ul className="space-y-2 text-gray-400 text-sm">
+                <h4 className="font-bold mb-4 text-white">{col.title}</h4>
+                <ul className="space-y-2 text-sm">
                   {col.links.map((link, i) => (
-                    <li key={i}><a href="#" className="hover:text-purple-400 transition">{link}</a></li>
+                    <li key={i}>
+                      <a href="#" className="text-gray-400 hover:text-purple-400 transition">{link}</a>
+                    </li>
                   ))}
                 </ul>
               </div>
             ))}
           </div>
 
-          <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center">
+          <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center">
             <p className="text-gray-400 text-sm">© 2024 FinTrack. All rights reserved.</p>
             <div className="flex space-x-6 mt-4 md:mt-0">
               {['Twitter', 'LinkedIn', 'GitHub'].map((social) => (
-                <a key={social} href={`https://${social.toLowerCase()}.com`} className="text-gray-400 hover:text-purple-400 transition">{social}</a>
+                <a key={social} href={`https://${social.toLowerCase()}.com`} className="text-gray-400 hover:text-purple-400 transition text-sm">
+                  {social}
+                </a>
               ))}
             </div>
           </div>
@@ -936,28 +882,45 @@ export default function FinTrackEnhanced() {
       </footer>
 
       {/* Live Chat Widget */}
-      <button className="fixed bottom-6 right-6 bg-gradient-to-r from-purple-500 to-pink-500 p-4 rounded-full shadow-2xl hover:shadow-purple-500/50 transition transform hover:scale-110 z-40">
-        <MessageCircle className="w-6 h-6" />
+      <button 
+        onClick={() => setShowEmailCapture(true)}
+        className="fixed bottom-6 right-6 bg-gradient-to-r from-purple-600 to-pink-600 p-4 rounded-full shadow-2xl hover:shadow-purple-500/50 transition transform hover:scale-110 z-40"
+        aria-label="Open chat"
+      >
+        <MessageCircle className="w-6 h-6 text-white" />
       </button>
 
       {/* Demo Modal */}
       {showDemo && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setShowDemo(false)}>
-          <div className="bg-slate-800 rounded-2xl p-8 max-w-4xl w-full relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowDemo(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white transition">
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-fadeIn" onClick={() => setShowDemo(false)}>
+          <div className={`${cardBg} rounded-2xl p-8 max-w-4xl w-full relative`} onClick={(e) => e.stopPropagation()}>
+            <button 
+              onClick={() => setShowDemo(false)} 
+              className={`absolute top-4 right-4 ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'} transition`}
+            >
               <X className="w-6 h-6" />
             </button>
             <h3 className="text-3xl font-bold mb-4">Product Demo</h3>
-            <p className="text-gray-400 mb-6">See FinTrack in action</p>
-            <div className="aspect-video bg-slate-900 rounded-xl flex items-center justify-center border border-purple-500/20">
+            <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} mb-6`}>See FinTrack in action</p>
+            <div className={`aspect-video ${isDark ? 'bg-gray-900' : 'bg-gray-100'} rounded-xl flex items-center justify-center ${borderColor} border`}>
               <div className="text-center">
-                <Play className="w-16 h-16 text-purple-400 mx-auto mb-4" />
-                <p className="text-gray-400">Demo video coming soon!</p>
+                <Play className={`w-16 h-16 mx-auto mb-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>Demo video coming soon!</p>
               </div>
             </div>
             <div className="mt-6 flex gap-4">
-              <a href="/login?mode=signup" className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 rounded-full text-center font-semibold">Start Free Trial</a>
-              <button onClick={() => setShowDemo(false)} className="flex-1 border-2 border-purple-400 px-6 py-3 rounded-full font-semibold">Close</button>
+              <a 
+                href="/login?mode=signup" 
+                className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-full text-center font-semibold hover:shadow-lg transition"
+              >
+                Start Free Trial
+              </a>
+              <button 
+                onClick={() => setShowDemo(false)} 
+                className={`flex-1 ${borderColor} border-2 px-6 py-3 rounded-full font-semibold ${isDark ? 'hover:bg-gray-700' : 'hover:bg-purple-50'} transition`}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
@@ -965,30 +928,41 @@ export default function FinTrackEnhanced() {
 
       {/* Email Capture Modal */}
       {showEmailCapture && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setShowEmailCapture(false)}>
-          <div className="bg-slate-800 rounded-2xl p-8 max-w-md w-full relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowEmailCapture(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white transition">
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-fadeIn" onClick={() => setShowEmailCapture(false)}>
+          <div className={`${cardBg} rounded-2xl p-8 max-w-md w-full relative`} onClick={(e) => e.stopPropagation()}>
+            <button 
+              onClick={() => setShowEmailCapture(false)} 
+              className={`absolute top-4 right-4 ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'} transition`}
+            >
               <X className="w-6 h-6" />
             </button>
             <div className="text-center mb-6">
-              <div className="inline-block p-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mb-4">
-                <Mail className="w-8 h-8" />
+              <div className="inline-block p-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full mb-4">
+                <Mail className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold mb-2">Stay Updated</h3>
-              <p className="text-gray-400">Get the latest features and updates</p>
+              <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>Get the latest features and updates</p>
             </div>
-            <form onSubmit={(e) => { e.preventDefault(); alert(`Thanks! We'll send updates to ${email}`); setEmail(''); setShowEmailCapture(false); }} className="space-y-4">
+            <form 
+              onSubmit={(e) => { 
+                e.preventDefault(); 
+                alert(`Thanks! We'll send updates to ${email}`); 
+                setEmail(''); 
+                setShowEmailCapture(false); 
+              }} 
+              className="space-y-4"
+            >
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter your email"
                 required
-                className="w-full px-4 py-3 bg-slate-900 border border-purple-500/20 rounded-lg focus:outline-none focus:border-purple-500 text-white"
+                className={`w-full px-4 py-3 ${isDark ? 'bg-gray-900 border-purple-500/20' : 'bg-gray-50 border-purple-200'} border rounded-lg focus:outline-none focus:border-purple-500 ${textColor}`}
               />
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 rounded-full font-semibold hover:shadow-lg transition"
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-full font-semibold hover:shadow-lg transition"
               >
                 Subscribe
               </button>
@@ -996,6 +970,25 @@ export default function FinTrackEnhanced() {
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.5s ease-out;
+        }
+        .animate-slideUp {
+          animation: slideUp 0.5s ease-out;
+        }
+      `}</style>
     </div>
   );
-}
+};
+
+export default FinTrackEnhanced;
