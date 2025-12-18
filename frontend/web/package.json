@@ -20,8 +20,8 @@
     "cors": "^2.8.5",
     "dompurify": "^3.2.2",
     "framer-motion": "^11.15.0",
-    "jspdf": "^2.5.2",
-    "jspdf-autotable": "^3.8.4",
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.462.0",
     "next": "^14.2.18",
     "papaparse": "^5.4.1",
@@ -32,7 +32,7 @@
     "recharts": "^2.15.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^3.24.1",
-    "zustand": "^5.0.2"
+    "zustand": "^4.5.7"
   },
   "devDependencies": {
     "@types/dompurify": "^3.2.0",
@@ -42,13 +42,17 @@
     "@types/react-dom": "^18.3.5",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
-    "eslint-config-next": "^14.2.18",
+    "eslint-config-next": "^16.0.10",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2"
   },
-  "resolutions": {
-    "jspdf": "^2.5.2",
-    "dompurify": "^3.2.2"
+  "overrides": {
+    "jspdf": {
+      "dompurify": "^3.2.2"
+    },
+    "xlsx": {
+      "dompurify": "^3.2.2"
+    }
   }
 }
