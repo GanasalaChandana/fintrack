@@ -70,6 +70,9 @@ export default function DashboardPage() {
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
 
+  // Keyboard shortcuts modal state
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
+
   // ✅ IMPROVED AUTH CHECK using centralized function
   useEffect(() => {
     console.log('🔍 Dashboard mounted - checking authentication...');
@@ -269,6 +272,56 @@ export default function DashboardPage() {
     }
   }, [isAuthenticated, fetchDashboardData]);
 
+  // ✅ KEYBOARD SHORTCUTS HANDLER
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Show keyboard shortcuts modal with Shift + ?
+      if (e.shiftKey && e.key === '?') {
+        e.preventDefault();
+        setShowKeyboardShortcuts(true);
+        return;
+      }
+
+      // Handle other shortcuts with Ctrl/Cmd
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case 'n':
+            e.preventDefault();
+            setEditingTransaction(null);
+            setShowTransactionModal(true);
+            break;
+          case 'k':
+            e.preventDefault();
+            document.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+            break;
+          case 'd':
+            e.preventDefault();
+            router.push('/dashboard');
+            break;
+          case 'b':
+            e.preventDefault();
+            router.push('/goals-budgets?tab=budgets');
+            break;
+          case 't':
+            e.preventDefault();
+            router.push('/transactions');
+            break;
+          case 'r':
+            e.preventDefault();
+            router.push('/reports');
+            break;
+          case 'g':
+            e.preventDefault();
+            router.push('/goals-budgets?tab=goals');
+            break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [router]);
+
   // ✅ CSV IMPORT using centralized API
   const handleImportTransactions = async (rows: CSVRow[]): Promise<void> => {
     console.log('📥 Importing', rows.length, 'transactions from CSV...');
@@ -344,49 +397,6 @@ export default function DashboardPage() {
     }
   };
 
-  // KEYBOARD SHORTCUTS
-  const shortcuts = [
-    {
-      keys: ["n"],
-      description: "New transaction",
-      action: () => {
-        setEditingTransaction(null);
-        setShowTransactionModal(true);
-      },
-    },
-    {
-      keys: ["ctrl", "k"],
-      description: "Search",
-      action: () =>
-        document.querySelector<HTMLInputElement>('input[type="search"]')?.focus(),
-    },
-    {
-      keys: ["d"],
-      description: "Dashboard",
-      action: () => router.push("/dashboard"),
-    },
-    {
-      keys: ["b"],
-      description: "Budgets",
-      action: () => router.push("/goals-budgets?tab=budgets"),
-    },
-    {
-      keys: ["t"],
-      description: "Transactions",
-      action: () => router.push("/transactions"),
-    },
-    {
-      keys: ["r"],
-      description: "Reports",
-      action: () => router.push("/reports"),
-    },
-    {
-      keys: ["g"],
-      description: "Goals",
-      action: () => router.push("/goals-budgets?tab=goals"),
-    },
-  ];
-
   if (isLoading || !isAuthenticated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
@@ -400,8 +410,11 @@ export default function DashboardPage() {
 
   return (
     <>
-      {/* Global keyboard shortcuts */}
-      <KeyboardShortcuts shortcuts={shortcuts} />
+      {/* Global keyboard shortcuts - FIXED */}
+      <KeyboardShortcuts 
+        isOpen={showKeyboardShortcuts} 
+        onClose={() => setShowKeyboardShortcuts(false)} 
+      />
 
       {/* Transaction Modal */}
       <TransactionModal
