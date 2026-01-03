@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { Bell, Mail, LogOut, Menu, X, Check, AlertTriangle } from "lucide-react";
+import { Bell, Mail, LogOut, Menu, X, Check, AlertTriangle, Camera, Brain, RefreshCw, Activity } from "lucide-react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
@@ -34,13 +34,11 @@ export default function Navigation() {
   const [hasToken, setHasToken] = useState(false);
   const [mounted, setMounted] = useState(false);
   
-  // Alerts state
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsUnreadCount, setAlertsUnreadCount] = useState(0);
   const alertsDropdownRef = useRef<HTMLDivElement>(null);
   
-  // Notifications state
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState(0);
@@ -49,59 +47,34 @@ export default function Navigation() {
   const router = useRouter();
   const pathname = usePathname() || "";
 
-  // Helper function to check if route is public
   const isPublicRoute = (path: string) => {
-    const publicPaths = [
-      '/',
-      '/login',
-      '/register',
-      '/signin',
-      '/signup'
-    ];
-    
-    // Check exact matches
+    const publicPaths = ['/', '/login', '/register', '/signin', '/signup'];
     if (publicPaths.includes(path)) return true;
-    
-    // Check if path starts with any public path
-    return publicPaths.some(publicPath => 
-      path.startsWith(`${publicPath}/`) || 
-      path.startsWith(`${publicPath}?`)
-    );
+    return publicPaths.some(publicPath => path.startsWith(`${publicPath}/`) || path.startsWith(`${publicPath}?`));
   };
 
   useEffect(() => {
     setMounted(true);
-    
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("authToken");
       const tokenExists = !!token;
       setHasToken(tokenExists);
-      
       const shouldLoadData = tokenExists && !isPublicRoute(pathname);
-      
       if (shouldLoadData) {
-        console.log('✅ Loading alerts and notifications for authenticated page:', pathname);
         loadAlerts();
         loadNotifications();
-        
-        // Poll every 30 seconds
         const interval = setInterval(() => {
-          // Double-check we're still on an authenticated page
           const currentPath = window.location.pathname;
           if (!isPublicRoute(currentPath) && localStorage.getItem("authToken")) {
             loadAlerts();
             loadNotifications();
           }
         }, 30000);
-        
         return () => clearInterval(interval);
-      } else {
-        console.log('⏭️ Skipping data load - Public route or no token. Pathname:', pathname, 'Token:', tokenExists);
       }
     }
   }, [pathname]);
 
-  // Click outside handlers
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (alertsDropdownRef.current && !alertsDropdownRef.current.contains(event.target as Node)) {
@@ -111,51 +84,32 @@ export default function Navigation() {
         setIsNotificationsOpen(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // ============ ALERTS FUNCTIONS ============
   const loadAlerts = async () => {
     try {
       const currentPath = window.location.pathname;
-      
-      // Don't load on public routes
-      if (isPublicRoute(currentPath)) {
-        console.log('⏭️ Skipping alerts load - on public route:', currentPath);
-        return;
-      }
-
+      if (isPublicRoute(currentPath)) return;
       const token = localStorage.getItem("authToken");
-      if (!token) {
-        console.log('⚠️ No auth token, skipping alerts load');
-        return;
-      }
-
-      console.log('📡 Fetching alerts from:', `${API_BASE_URL}/api/alerts`);
+      if (!token) return;
       const response = await fetch(`${API_BASE_URL}/api/alerts`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Requested-With': 'XMLHttpRequest'
-        },
+        headers: { 'Authorization': `Bearer ${token}`, 'X-Requested-With': 'XMLHttpRequest' },
         credentials: 'omit',
       });
-
       if (response.ok) {
         const data = await response.json();
         setAlerts(data.slice(0, 5));
         setAlertsUnreadCount(data.filter((a: Alert) => !a.isRead).length);
-        console.log('✅ Loaded alerts:', data.length);
       } else if (response.status === 401) {
-        console.log('⚠️ Unauthorized - clearing invalid token');
         localStorage.removeItem('authToken');
         setHasToken(false);
         setAlerts([]);
         setAlertsUnreadCount(0);
       }
     } catch (error) {
-      console.error('❌ Failed to load alerts:', error);
+      console.error('Failed to load alerts:', error);
     }
   };
 
@@ -164,16 +118,11 @@ export default function Navigation() {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) return;
-
       const response = await fetch(`${API_BASE_URL}/api/alerts/${id}/read`, {
         method: 'PATCH',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Requested-With': 'XMLHttpRequest'
-        },
+        headers: { 'Authorization': `Bearer ${token}`, 'X-Requested-With': 'XMLHttpRequest' },
         credentials: 'omit',
       });
-
       if (response.ok) {
         setAlerts(alerts.map(a => a.id === id ? { ...a, isRead: true } : a));
         setAlertsUnreadCount(prev => Math.max(0, prev - 1));
@@ -188,16 +137,11 @@ export default function Navigation() {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) return;
-
       const response = await fetch(`${API_BASE_URL}/api/alerts/${id}`, {
         method: 'DELETE',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Requested-With': 'XMLHttpRequest'
-        },
+        headers: { 'Authorization': `Bearer ${token}`, 'X-Requested-With': 'XMLHttpRequest' },
         credentials: 'omit',
       });
-
       if (response.ok) {
         const dismissed = alerts.find(a => a.id === id);
         setAlerts(alerts.filter(a => a.id !== id));
@@ -230,60 +174,32 @@ export default function Navigation() {
     }
   };
 
-  // ============ NOTIFICATIONS FUNCTIONS ============
   const loadNotifications = async () => {
     try {
       const currentPath = window.location.pathname;
-      
-      // Don't load on public routes
-      if (isPublicRoute(currentPath)) {
-        console.log('⏭️ Skipping notifications load - on public route:', currentPath);
-        return;
-      }
-
+      if (isPublicRoute(currentPath)) return;
       const token = localStorage.getItem("authToken");
-      if (!token) {
-        console.log('⚠️ No auth token, skipping notification load');
-        return;
-      }
-
+      if (!token) return;
       const userStr = localStorage.getItem("user");
-      if (!userStr || userStr === '{}') {
-        console.log('⚠️ No user data in localStorage, skipping notification load');
-        return;
-      }
-
+      if (!userStr || userStr === '{}') return;
       const user = JSON.parse(userStr);
-      if (!user.id) {
-        console.warn('⚠️ User object exists but has no ID, skipping notification load');
-        return;
-      }
-
-      console.log(`📡 Fetching notifications for user: ${user.id}`);
+      if (!user.id) return;
       const response = await fetch(`${API_BASE_URL}/api/notifications/user/${user.id}`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Requested-With': 'XMLHttpRequest'
-        },
+        headers: { 'Authorization': `Bearer ${token}`, 'X-Requested-With': 'XMLHttpRequest' },
         credentials: 'omit',
       });
-
       if (response.ok) {
         const data = await response.json();
-        console.log(`✅ Loaded ${data.length} notifications`);
         setNotifications(data.slice(0, 5));
         setNotificationsUnreadCount(data.filter((n: Notification) => !n.read).length);
       } else if (response.status === 401) {
-        console.log('⚠️ Unauthorized - clearing invalid token');
         localStorage.removeItem('authToken');
         setHasToken(false);
         setNotifications([]);
         setNotificationsUnreadCount(0);
-      } else {
-        console.error('❌ Failed to load notifications:', response.status, response.statusText);
       }
     } catch (error) {
-      console.error('❌ Error loading notifications:', error);
+      console.error('Error loading notifications:', error);
     }
   };
 
@@ -292,23 +208,13 @@ export default function Navigation() {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) return;
-
       const user = JSON.parse(localStorage.getItem("user") || "{}");
-      
-      if (!user.id) {
-        console.error('Cannot mark notification as read: no user ID');
-        return;
-      }
-
+      if (!user.id) return;
       const response = await fetch(`${API_BASE_URL}/api/notifications/${id}/read?userId=${user.id}`, {
         method: 'PATCH',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Requested-With': 'XMLHttpRequest'
-        },
+        headers: { 'Authorization': `Bearer ${token}`, 'X-Requested-With': 'XMLHttpRequest' },
         credentials: 'omit',
       });
-
       if (response.ok) {
         setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
         setNotificationsUnreadCount(prev => Math.max(0, prev - 1));
@@ -323,23 +229,13 @@ export default function Navigation() {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) return;
-
       const user = JSON.parse(localStorage.getItem("user") || "{}");
-      
-      if (!user.id) {
-        console.error('Cannot dismiss notification: no user ID');
-        return;
-      }
-
+      if (!user.id) return;
       const response = await fetch(`${API_BASE_URL}/api/notifications/${id}?userId=${user.id}`, {
         method: 'DELETE',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Requested-With': 'XMLHttpRequest'
-        },
+        headers: { 'Authorization': `Bearer ${token}`, 'X-Requested-With': 'XMLHttpRequest' },
         credentials: 'omit',
       });
-
       if (response.ok) {
         const dismissed = notifications.find(n => n.id === id);
         setNotifications(notifications.filter(n => n.id !== id));
@@ -368,7 +264,6 @@ export default function Navigation() {
     const itemDate = new Date(date);
     const diffMs = now.getTime() - itemDate.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins}m ago`;
     const diffHours = Math.floor(diffMins / 60);
@@ -404,7 +299,6 @@ export default function Navigation() {
     );
   }
 
-  // Hide navigation on auth pages
   if (isPublicRoute(pathname)) {
     return null;
   }
@@ -419,58 +313,32 @@ export default function Navigation() {
             FinTrack
           </Link>
 
-          {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-6">
             {hasToken ? (
               <>
-                <Link href="/dashboard" className={`${isActive("/dashboard") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600`}>
-                  Dashboard
-                </Link>
-                <Link href="/transactions" className={`${isActive("/transactions") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600`}>
-                  Transactions
-                </Link>
-                <Link href="/goals-budgets" className={`${isActive("/goals-budgets") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600`}>
-                  Goals & Budgets
-                </Link>
-                <Link href="/reports" className={`${isActive("/reports") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600`}>
-                  Reports
-                </Link>
-
+                <Link href="/dashboard" className={`${isActive("/dashboard") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600`}>Dashboard</Link>
+                <Link href="/transactions" className={`${isActive("/transactions") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600`}>Transactions</Link>
+                <Link href="/goals-budgets" className={`${isActive("/goals-budgets") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600`}>Goals & Budgets</Link>
+                <Link href="/reports" className={`${isActive("/reports") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600`}>Reports</Link>
+                <Link href="/receipts" className={`${isActive("/receipts") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600 flex items-center gap-1`}><Camera className="w-4 h-4" />Receipts</Link>
+                <Link href="/health" className={`${isActive("/health") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600 flex items-center gap-1`}><Activity className="w-4 h-4" />Health</Link>
+                <Link href="/insights" className={`${isActive("/insights") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600 flex items-center gap-1`}><Brain className="w-4 h-4" />Insights</Link>
+                <Link href="/recurring" className={`${isActive("/recurring") ? "text-indigo-600 font-bold" : "text-gray-700"} hover:text-indigo-600 flex items-center gap-1`}><RefreshCw className="w-4 h-4" />Recurring</Link>
                 <div className="flex items-center gap-3 ml-4 pl-4 border-l border-gray-300">
-                  
-                  {/* 🚨 ALERTS BELL */}
                   <div className="relative" ref={alertsDropdownRef}>
-                    <button
-                      onClick={() => setIsAlertsOpen(!isAlertsOpen)}
-                      className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition"
-                      title="Financial Alerts"
-                    >
+                    <button onClick={() => setIsAlertsOpen(!isAlertsOpen)} className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition" title="Financial Alerts">
                       <Bell className="w-5 h-5" />
-                      {alertsUnreadCount > 0 && (
-                        <span className="absolute top-0 right-0 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">
-                          {alertsUnreadCount > 9 ? '9+' : alertsUnreadCount}
-                        </span>
-                      )}
+                      {alertsUnreadCount > 0 && <span className="absolute top-0 right-0 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">{alertsUnreadCount > 9 ? '9+' : alertsUnreadCount}</span>}
                     </button>
-
                     {isAlertsOpen && (
                       <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border border-gray-200">
                         <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                            <AlertTriangle className="w-5 h-5 text-red-600" />
-                            Financial Alerts
-                          </h3>
-                          <Link href="/alerts" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsAlertsOpen(false)}>
-                            View all
-                          </Link>
+                          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-red-600" />Financial Alerts</h3>
+                          <Link href="/alerts" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsAlertsOpen(false)}>View all</Link>
                         </div>
-
                         <div className="max-h-96 overflow-y-auto">
                           {alerts.length === 0 ? (
-                            <div className="p-8 text-center">
-                              <Bell className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                              <p className="text-gray-600 text-sm">No alerts</p>
-                            </div>
+                            <div className="p-8 text-center"><Bell className="w-12 h-12 text-gray-400 mx-auto mb-2" /><p className="text-gray-600 text-sm">No alerts</p></div>
                           ) : (
                             <div className="divide-y divide-gray-100">
                               {alerts.map((alert) => (
@@ -480,22 +348,14 @@ export default function Navigation() {
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2">
                                         <p className="text-sm font-medium text-gray-900 truncate">{alert.title}</p>
-                                        <span className={`text-xs font-semibold ${getAlertPriorityColor(alert.priority)}`}>
-                                          {alert.priority.toUpperCase()}
-                                        </span>
+                                        <span className={`text-xs font-semibold ${getAlertPriorityColor(alert.priority)}`}>{alert.priority.toUpperCase()}</span>
                                       </div>
                                       <p className="text-sm text-gray-600 mt-1 line-clamp-2">{alert.message}</p>
                                       <p className="text-xs text-gray-500 mt-1">{formatTime(alert.createdAt)}</p>
                                     </div>
                                     <div className="flex gap-1">
-                                      {!alert.isRead && (
-                                        <button onClick={(e) => handleAlertMarkAsRead(alert.id, e)} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Mark as read">
-                                          <Check className="w-4 h-4" />
-                                        </button>
-                                      )}
-                                      <button onClick={(e) => handleAlertDismiss(alert.id, e)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Dismiss">
-                                        <X className="w-4 h-4" />
-                                      </button>
+                                      {!alert.isRead && <button onClick={(e) => handleAlertMarkAsRead(alert.id, e)} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Mark as read"><Check className="w-4 h-4" /></button>}
+                                      <button onClick={(e) => handleAlertDismiss(alert.id, e)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Dismiss"><X className="w-4 h-4" /></button>
                                     </div>
                                   </div>
                                 </div>
@@ -503,48 +363,24 @@ export default function Navigation() {
                             </div>
                           )}
                         </div>
-
-                        {alerts.length > 0 && (
-                          <div className="p-3 border-t border-gray-200 bg-gray-50">
-                            <Link href="/alerts" className="block text-center text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsAlertsOpen(false)}>
-                              See all alerts →
-                            </Link>
-                          </div>
-                        )}
+                        {alerts.length > 0 && <div className="p-3 border-t border-gray-200 bg-gray-50"><Link href="/alerts" className="block text-center text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsAlertsOpen(false)}>See all alerts →</Link></div>}
                       </div>
                     )}
                   </div>
-
-                  {/* 📬 NOTIFICATIONS MAIL */}
                   <div className="relative" ref={notificationsDropdownRef}>
-                    <button
-                      onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-                      className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition"
-                      title="Notifications"
-                    >
+                    <button onClick={() => setIsNotificationsOpen(!isNotificationsOpen)} className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition" title="Notifications">
                       <Mail className="w-5 h-5" />
-                      {notificationsUnreadCount > 0 && (
-                        <span className="absolute top-0 right-0 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-blue-500 rounded-full">
-                          {notificationsUnreadCount > 9 ? '9+' : notificationsUnreadCount}
-                        </span>
-                      )}
+                      {notificationsUnreadCount > 0 && <span className="absolute top-0 right-0 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-blue-500 rounded-full">{notificationsUnreadCount > 9 ? '9+' : notificationsUnreadCount}</span>}
                     </button>
-
                     {isNotificationsOpen && (
                       <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border border-gray-200">
                         <div className="flex items-center justify-between p-4 border-b border-gray-200">
                           <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
-                          <Link href="/notifications" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsNotificationsOpen(false)}>
-                            View all
-                          </Link>
+                          <Link href="/notifications" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsNotificationsOpen(false)}>View all</Link>
                         </div>
-
                         <div className="max-h-96 overflow-y-auto">
                           {notifications.length === 0 ? (
-                            <div className="p-8 text-center">
-                              <Mail className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                              <p className="text-gray-600 text-sm">No notifications</p>
-                            </div>
+                            <div className="p-8 text-center"><Mail className="w-12 h-12 text-gray-400 mx-auto mb-2" /><p className="text-gray-600 text-sm">No notifications</p></div>
                           ) : (
                             <div className="divide-y divide-gray-100">
                               {notifications.map((notification) => (
@@ -557,14 +393,8 @@ export default function Navigation() {
                                       <p className="text-xs text-gray-500 mt-1">{formatTime(notification.createdAt)}</p>
                                     </div>
                                     <div className="flex gap-1">
-                                      {!notification.read && (
-                                        <button onClick={(e) => handleNotificationMarkAsRead(notification.id, e)} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Mark as read">
-                                          <Check className="w-4 h-4" />
-                                        </button>
-                                      )}
-                                      <button onClick={(e) => handleNotificationDismiss(notification.id, e)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Dismiss">
-                                        <X className="w-4 h-4" />
-                                      </button>
+                                      {!notification.read && <button onClick={(e) => handleNotificationMarkAsRead(notification.id, e)} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Mark as read"><Check className="w-4 h-4" /></button>}
+                                      <button onClick={(e) => handleNotificationDismiss(notification.id, e)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Dismiss"><X className="w-4 h-4" /></button>
                                     </div>
                                   </div>
                                 </div>
@@ -572,21 +402,11 @@ export default function Navigation() {
                             </div>
                           )}
                         </div>
-
-                        {notifications.length > 0 && (
-                          <div className="p-3 border-t border-gray-200 bg-gray-50">
-                            <Link href="/notifications" className="block text-center text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsNotificationsOpen(false)}>
-                              See all notifications →
-                            </Link>
-                          </div>
-                        )}
+                        {notifications.length > 0 && <div className="p-3 border-t border-gray-200 bg-gray-50"><Link href="/notifications" className="block text-center text-sm text-indigo-600 hover:text-indigo-800 font-medium" onClick={() => setIsNotificationsOpen(false)}>See all notifications →</Link></div>}
                       </div>
                     )}
                   </div>
-
-                  <button onClick={handleLogout} className="px-4 py-2 text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2">
-                    <LogOut className="w-4 h-4" /> Logout
-                  </button>
+                  <button onClick={handleLogout} className="px-4 py-2 text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2"><LogOut className="w-4 h-4" /> Logout</button>
                 </div>
               </>
             ) : (
@@ -596,14 +416,9 @@ export default function Navigation() {
               </>
             )}
           </div>
-
-          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden p-2 text-gray-700">
-            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
+          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden p-2 text-gray-700">{isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}</button>
         </div>
       </div>
-
-      {/* Mobile Menu */}
       {isMenuOpen && (
         <div className="md:hidden bg-white border-t border-gray-200 shadow-xl">
           <div className="px-4 py-4 space-y-2">
@@ -613,24 +428,13 @@ export default function Navigation() {
                 <Link href="/transactions" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/transactions") ? "bg-indigo-100" : ""}`}>Transactions</Link>
                 <Link href="/goals-budgets" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/goals-budgets") ? "bg-indigo-100" : ""}`}>Goals & Budgets</Link>
                 <Link href="/reports" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/reports") ? "bg-indigo-100" : ""}`}>Reports</Link>
-                
-                <Link href="/alerts" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/alerts") ? "bg-indigo-100" : ""} flex items-center gap-2`}>
-                  <Bell className="w-4 h-4" />
-                  Financial Alerts
-                  {alertsUnreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{alertsUnreadCount}</span>}
-                </Link>
-
-                <Link href="/notifications" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/notifications") ? "bg-indigo-100" : ""} flex items-center gap-2`}>
-                  <Mail className="w-4 h-4" />
-                  Notifications
-                  {notificationsUnreadCount > 0 && <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">{notificationsUnreadCount}</span>}
-                </Link>
-
-                <div className="pt-2 border-t border-gray-300">
-                  <button onClick={() => { handleLogout(); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2">
-                    <LogOut className="w-4 h-4" /> Logout
-                  </button>
-                </div>
+                <Link href="/receipts" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/receipts") ? "bg-indigo-100" : ""} flex items-center gap-2`}><Camera className="w-4 h-4" />Receipt Scanner</Link>
+                <Link href="/health" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/health") ? "bg-indigo-100" : ""} flex items-center gap-2`}><Activity className="w-4 h-4" />Health Score</Link>
+                <Link href="/insights" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/insights") ? "bg-indigo-100" : ""} flex items-center gap-2`}><Brain className="w-4 h-4" />AI Insights</Link>
+                <Link href="/recurring" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/recurring") ? "bg-indigo-100" : ""} flex items-center gap-2`}><RefreshCw className="w-4 h-4" />Recurring</Link>
+                <Link href="/alerts" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/alerts") ? "bg-indigo-100" : ""} flex items-center gap-2`}><Bell className="w-4 h-4" />Financial Alerts{alertsUnreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{alertsUnreadCount}</span>}</Link>
+                <Link href="/notifications" onClick={() => setIsMenuOpen(false)} className={`block px-4 py-3 rounded-lg ${isActive("/notifications") ? "bg-indigo-100" : ""} flex items-center gap-2`}><Mail className="w-4 h-4" />Notifications{notificationsUnreadCount > 0 && <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">{notificationsUnreadCount}</span>}</Link>
+                <div className="pt-2 border-t border-gray-300"><button onClick={() => { handleLogout(); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2"><LogOut className="w-4 h-4" /> Logout</button></div>
               </>
             ) : (
               <>

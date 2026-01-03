@@ -1,4 +1,4 @@
-// lib/api.ts - Complete updated version with improved token handling
+// lib/api.ts - Complete fixed version with proper port routing
 
 // =====================
 // Types
@@ -21,11 +21,12 @@ export interface Transaction {
   id?: string;
   date: string;
   description: string;
-  merchant: string;
+  merchant?: string;
   category: string;
-  type: "income" | "expense";
+  type: "income" | "expense" | "INCOME" | "EXPENSE";
   amount: number;
   userId?: string;
+  recurring?: boolean;
   createdAt?: string;
   updatedAt?: string;
   [key: string]: any;
@@ -92,12 +93,21 @@ export interface Notification {
 function getBaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
   const cleanUrl = url.replace(/\/$/, "");
-  console.log('🌐 Using API base URL:', cleanUrl);
+  console.log('🌐 Using API Gateway URL:', cleanUrl);
   return cleanUrl;
 }
 
-function buildApiUrl(endpoint: string): string {
-  const baseUrl = getBaseUrl();
+function getTransactionsUrl(): string {
+  // IMPORTANT: Transactions are on port 8082
+  const envUrl = process.env.NEXT_PUBLIC_TRANSACTIONS_API_URL;
+  const url = envUrl || "http://localhost:8082";
+  const cleanUrl = url.replace(/\/$/, "");
+  console.log('💰 Using Transactions Service URL:', cleanUrl);
+  return cleanUrl;
+}
+
+function buildApiUrl(endpoint: string, useTransactionsService: boolean = false): string {
+  const baseUrl = useTransactionsService ? getTransactionsUrl() : getBaseUrl();
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   return `${baseUrl}${cleanEndpoint}`;
 }
@@ -140,7 +150,6 @@ export function setToken(token: string): void {
   if (typeof window === "undefined") return;
   
   console.log('🔐 Setting token in all storage locations');
-  console.log('📝 Token preview:', token.substring(0, 30) + '...');
   
   localStorage.setItem(PRIMARY_TOKEN_KEY, token);
   localStorage.setItem(LEGACY_TOKEN_KEY, token);
@@ -184,7 +193,6 @@ export function setUser(user: User): void {
   if (typeof window === "undefined") return;
   localStorage.setItem("user", JSON.stringify(user));
   
-  // Also store userId separately for easy access
   if (user.id) {
     localStorage.setItem("userId", user.id.toString());
   }
@@ -206,9 +214,10 @@ const pendingRequests = new Map<string, Promise<any>>();
 
 export async function apiRequest<T = any>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  useTransactionsService: boolean = false
 ): Promise<T> {
-  const url = buildApiUrl(endpoint);
+  const url = buildApiUrl(endpoint, useTransactionsService);
   const token = getToken();
 
   console.log(`
@@ -218,11 +227,11 @@ export async function apiRequest<T = any>(
 │ Method:   ${options.method || 'GET'}
 │ Endpoint: ${endpoint}
 │ URL:      ${url}
+│ Service:  ${useTransactionsService ? 'Transactions (8082)' : 'Gateway (8080)'}
 │ Token:    ${token ? '✅ Present' : '❌ Missing'}
 └─────────────────────────────────────────
   `);
 
-  // Prevent duplicate requests
   const requestKey = `${options.method || "GET"}-${endpoint}-${JSON.stringify(options.body || "")}`;
 
   if (pendingRequests.has(requestKey)) {
@@ -238,9 +247,6 @@ export async function apiRequest<T = any>(
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
-    console.log(`🔐 Authorization header set: Bearer ${token.substring(0, 20)}...`);
-  } else {
-    console.warn('⚠️ No token available for:', endpoint);
   }
 
   if (options.headers) {
@@ -273,28 +279,16 @@ export async function apiRequest<T = any>(
       const contentType = response.headers.get("content-type") || "";
       let data: any = undefined;
 
-      // Handle empty responses
       if (response.status === 204 || response.headers.get("content-length") === "0") {
-        console.log('✅ Empty response (204 or content-length 0)');
         return {} as T;
       }
 
-      // Try to read the response body
       const text = await response.text();
-      
-      if (text) {
-        console.log(`📄 Response body preview:`, text.substring(0, 200) + (text.length > 200 ? '...' : ''));
-      }
 
-      // Parse JSON if available
       if (text && contentType.includes("application/json")) {
         try {
           data = JSON.parse(text);
-          console.log('✅ JSON parsed successfully');
         } catch (err) {
-          console.error("❌ Failed to parse JSON:", err);
-          console.error("Raw response text:", text);
-          
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${text || response.statusText}`);
           }
@@ -304,18 +298,8 @@ export async function apiRequest<T = any>(
         data = text;
       }
 
-      // Handle HTTP errors
       if (!response.ok) {
         if (response.status === 401) {
-          console.error(`
-┌─────────────────────────────────────────
-│ ❌ 401 UNAUTHORIZED
-├─────────────────────────────────────────
-│ Token expired or invalid
-│ Clearing tokens and redirecting...
-└─────────────────────────────────────────
-          `);
-          
           removeToken();
           
           if (typeof window !== 'undefined') {
@@ -330,22 +314,13 @@ export async function apiRequest<T = any>(
           (typeof data === "string" && data) ||
           `HTTP error! status: ${response.status}`;
 
-        console.error('❌ API Error:', errorMessage);
         throw new Error(errorMessage);
       }
 
-      console.log('✅ API request successful');
       return data as T;
       
     } catch (error: any) {
-      console.error(`
-┌─────────────────────────────────────────
-│ ❌ API ERROR
-├─────────────────────────────────────────
-│ Endpoint: ${endpoint}
-│ Error:    ${error.message}
-└─────────────────────────────────────────
-      `);
+      console.error(`❌ API ERROR: ${error.message}`);
       throw error;
     } finally {
       pendingRequests.delete(requestKey);
@@ -366,20 +341,13 @@ export const authAPI = {
     email: string;
     password: string;
   }): Promise<AuthResponse> => {
-    console.log('📝 Registering user:', userData.email);
-    
     const response = await apiRequest<AuthResponse>("/api/auth/register", {
       method: "POST",
       body: JSON.stringify(userData),
-    });
+    }, false);
 
-    if (response.token) {
-      setToken(response.token);
-    }
-    
-    if (response.user) {
-      setUser(response.user);
-    }
+    if (response.token) setToken(response.token);
+    if (response.user) setUser(response.user);
 
     return response;
   },
@@ -388,30 +356,20 @@ export const authAPI = {
     email: string;
     password: string;
   }): Promise<AuthResponse> => {
-    console.log('📝 Logging in user:', credentials.email);
-    
     const response = await apiRequest<AuthResponse>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify(credentials),
-    });
+    }, false);
 
-    if (response.token) {
-      setToken(response.token);
-      console.log('✅ Token saved after login');
-    }
-    
-    if (response.user) {
-      setUser(response.user);
-    }
+    if (response.token) setToken(response.token);
+    if (response.user) setUser(response.user);
 
     return response;
   },
 
   logout: async (): Promise<void> => {
-    console.log('🚪 Logging out user');
-    
     try {
-      await apiRequest("/api/auth/logout", { method: "POST" });
+      await apiRequest("/api/auth/logout", { method: "POST" }, false);
     } catch (error) {
       console.error("❌ Logout API error:", error);
     } finally {
@@ -420,21 +378,15 @@ export const authAPI = {
   },
 
   getCurrentUser: (): Promise<User> => {
-    console.log('👤 Fetching current user');
-    return apiRequest<User>("/api/auth/me", { method: "GET" });
+    return apiRequest<User>("/api/auth/me", { method: "GET" }, false);
   },
 
   refreshToken: async (): Promise<AuthResponse> => {
-    console.log('🔄 Refreshing token');
-    
     const response = await apiRequest<AuthResponse>("/api/auth/refresh", {
       method: "POST",
-    });
+    }, false);
 
-    if (response.token) {
-      setToken(response.token);
-    }
-    
+    if (response.token) setToken(response.token);
     return response;
   },
 
@@ -442,12 +394,9 @@ export const authAPI = {
     const response = await apiRequest<User>("/api/auth/profile", {
       method: "PUT",
       body: JSON.stringify(userData),
-    });
+    }, false);
 
-    if (response) {
-      setUser(response);
-    }
-    
+    if (response) setUser(response);
     return response;
   },
 
@@ -458,12 +407,12 @@ export const authAPI = {
     return apiRequest("/api/auth/change-password", {
       method: "POST",
       body: JSON.stringify(data),
-    });
+    }, false);
   },
 };
 
 // =====================
-// Transactions API
+// Transactions API - FIXED TO USE PORT 8082
 // =====================
 
 export const transactionsAPI = {
@@ -482,9 +431,12 @@ export const transactionsAPI = {
       : "/api/transactions";
 
     try {
+      console.log('🔍 Fetching transactions from service on port 8082...');
+      
+      // Use apiRequest with useTransactionsService=true
       const data = await apiRequest<Transaction[] | any>(endpoint, {
         method: "GET",
-      });
+      }, true); // THIS IS THE KEY FIX - set to true to use port 8082
 
       let transactions: Transaction[];
       
@@ -505,7 +457,7 @@ export const transactionsAPI = {
         return [];
       }
 
-      console.log(`✅ Fetched ${transactions.length} transactions`);
+      console.log(`✅ Fetched ${transactions.length} transactions from API`);
       return transactions;
       
     } catch (error: any) {
@@ -514,29 +466,40 @@ export const transactionsAPI = {
     }
   },
 
-  getById: (id: string): Promise<Transaction> =>
-    apiRequest<Transaction>(`/api/transactions/${id}`, { method: "GET" }),
+  getById: async (id: string): Promise<Transaction> => {
+    return apiRequest<Transaction>(`/api/transactions/${id}`, {
+      method: "GET",
+    }, true); // Use transactions service
+  },
 
-  create: (transaction: Omit<Transaction, "id">): Promise<Transaction> =>
-    apiRequest<Transaction>("/api/transactions", {
+  create: async (transaction: Omit<Transaction, "id">): Promise<Transaction> => {
+    return apiRequest<Transaction>("/api/transactions", {
       method: "POST",
       body: JSON.stringify(transaction),
-    }),
+    }, true); // Use transactions service
+  },
 
-  update: (id: string, transaction: Partial<Transaction>): Promise<Transaction> =>
-    apiRequest<Transaction>(`/api/transactions/${id}`, {
+  update: async (id: string, transaction: Partial<Transaction>): Promise<Transaction> => {
+    return apiRequest<Transaction>(`/api/transactions/${id}`, {
       method: "PUT",
       body: JSON.stringify(transaction),
-    }),
+    }, true); // Use transactions service
+  },
 
-  delete: (id: string): Promise<{ message: string }> =>
-    apiRequest(`/api/transactions/${id}`, { method: "DELETE" }),
+  delete: async (id: string): Promise<{ message: string }> => {
+    return apiRequest<{ message: string }>(`/api/transactions/${id}`, {
+      method: "DELETE",
+    }, true); // Use transactions service
+  },
 
   exportCsv: async (): Promise<Blob> => {
-    const response = await fetch(buildApiUrl("/api/transactions/export"), {
+    const url = buildApiUrl("/api/transactions/export", true);
+    const token = getToken();
+    
+    const response = await fetch(url, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+        Authorization: `Bearer ${token}`,
       },
     });
 
@@ -559,19 +522,15 @@ export const budgetsAPI = {
     try {
       const data = await apiRequest<Budget[] | any>(`/api/budgets${params}`, { 
         method: "GET" 
-      });
+      }, false);
 
       if (Array.isArray(data)) {
         console.log(`✅ Fetched ${data.length} budgets`);
         return data;
       } else if (data && typeof data === 'object') {
-        if (Array.isArray(data.budgets)) {
-          return data.budgets;
-        } else if (Array.isArray(data.data)) {
-          return data.data;
-        } else if (Array.isArray(data.content)) {
-          return data.content;
-        }
+        if (Array.isArray(data.budgets)) return data.budgets;
+        if (Array.isArray(data.data)) return data.data;
+        if (Array.isArray(data.content)) return data.content;
       }
       
       console.warn("⚠️ Unexpected budgets response format, returning empty array");
@@ -583,34 +542,34 @@ export const budgetsAPI = {
   },
 
   getById: (id: string): Promise<Budget> =>
-    apiRequest<Budget>(`/api/budgets/${id}`, { method: "GET" }),
+    apiRequest<Budget>(`/api/budgets/${id}`, { method: "GET" }, false),
 
   create: (budget: Omit<Budget, "id">): Promise<Budget> =>
     apiRequest<Budget>("/api/budgets", {
       method: "POST",
       body: JSON.stringify(budget),
-    }),
+    }, false),
 
   update: (id: string, budget: Partial<Budget>): Promise<Budget> =>
     apiRequest<Budget>(`/api/budgets/${id}`, {
       method: "PUT",
       body: JSON.stringify(budget),
-    }),
+    }, false),
 
   delete: (id: string): Promise<{ message: string }> =>
-    apiRequest(`/api/budgets/${id}`, { method: "DELETE" }),
+    apiRequest(`/api/budgets/${id}`, { method: "DELETE" }, false),
 
   updateSpent: (id: string, spent: number): Promise<Budget> =>
     apiRequest<Budget>(`/api/budgets/${id}/spent`, {
       method: "PATCH",
       body: JSON.stringify({ spent }),
-    }),
+    }, false),
 
   getSummary: (month?: string): Promise<BudgetSummary> => {
     const params = month ? `?month=${month}` : "";
     return apiRequest<BudgetSummary>(`/api/budgets/summary${params}`, {
       method: "GET",
-    });
+    }, false);
   },
 };
 
@@ -623,18 +582,13 @@ export const alertsAPI = {
     try {
       const data = await apiRequest<Alert[] | any>("/api/alerts", {
         method: "GET",
-      });
+      }, false);
 
-      if (Array.isArray(data)) {
-        return data;
-      } else if (data && typeof data === 'object') {
-        if (Array.isArray(data.alerts)) {
-          return data.alerts;
-        } else if (Array.isArray(data.data)) {
-          return data.data;
-        } else if (Array.isArray(data.content)) {
-          return data.content;
-        }
+      if (Array.isArray(data)) return data;
+      if (data && typeof data === 'object') {
+        if (Array.isArray(data.alerts)) return data.alerts;
+        if (Array.isArray(data.data)) return data.data;
+        if (Array.isArray(data.content)) return data.content;
       }
       
       return [];
@@ -648,13 +602,10 @@ export const alertsAPI = {
     try {
       const data = await apiRequest<Alert[] | any>("/api/alerts/unread", {
         method: "GET",
-      });
+      }, false);
 
-      if (Array.isArray(data)) {
-        return data;
-      } else if (data && typeof data === 'object' && Array.isArray(data.alerts)) {
-        return data.alerts;
-      }
+      if (Array.isArray(data)) return data;
+      if (data && typeof data === 'object' && Array.isArray(data.alerts)) return data.alerts;
       
       return [];
     } catch (error) {
@@ -664,29 +615,29 @@ export const alertsAPI = {
   },
 
   getById: (id: string): Promise<Alert> =>
-    apiRequest<Alert>(`/api/alerts/${id}`, { method: "GET" }),
+    apiRequest<Alert>(`/api/alerts/${id}`, { method: "GET" }, false),
 
   create: (alert: Omit<Alert, "id">): Promise<Alert> =>
     apiRequest<Alert>("/api/alerts", {
       method: "POST",
       body: JSON.stringify(alert),
-    }),
+    }, false),
 
   markAsRead: (id: string): Promise<Alert> =>
     apiRequest<Alert>(`/api/alerts/${id}/read`, {
       method: "PATCH",
-    }),
+    }, false),
 
   markAllAsRead: (): Promise<{ message: string; count: number }> =>
     apiRequest("/api/alerts/mark-all-read", {
       method: "PATCH",
-    }),
+    }, false),
 
   delete: (id: string): Promise<{ message: string }> =>
-    apiRequest(`/api/alerts/${id}`, { method: "DELETE" }),
+    apiRequest(`/api/alerts/${id}`, { method: "DELETE" }, false),
 
   deleteAll: (): Promise<{ message: string; count: number }> =>
-    apiRequest("/api/alerts", { method: "DELETE" }),
+    apiRequest("/api/alerts", { method: "DELETE" }, false),
 };
 
 // =====================
@@ -698,7 +649,8 @@ export const notificationsAPI = {
     try {
       const data = await apiRequest<Notification[] | any>(
         `/api/notifications/user/${userId}`,
-        { method: "GET" }
+        { method: "GET" },
+        false
       );
 
       if (Array.isArray(data)) {
@@ -720,17 +672,17 @@ export const notificationsAPI = {
   markAsRead: (id: string, userId: string): Promise<Notification> =>
     apiRequest<Notification>(`/api/notifications/${id}/read?userId=${userId}`, {
       method: "PATCH",
-    }),
+    }, false),
 
   markAllAsRead: (userId: string): Promise<{ message: string }> =>
     apiRequest(`/api/notifications/user/${userId}/read-all`, {
       method: "PATCH",
-    }),
+    }, false),
 
   delete: (id: string, userId: string): Promise<{ message: string }> =>
     apiRequest(`/api/notifications/${id}?userId=${userId}`, {
       method: "DELETE",
-    }),
+    }, false),
 };
 
 // =====================
@@ -745,7 +697,7 @@ export const reportsAPI = {
     const endpoint = params.toString()
       ? `/api/reports/overview?${params}`
       : "/api/reports/overview";
-    return apiRequest(endpoint, { method: "GET" });
+    return apiRequest(endpoint, { method: "GET" }, false);
   },
 
   getByCategory: (startDate?: string, endDate?: string): Promise<any> => {
@@ -755,13 +707,13 @@ export const reportsAPI = {
     const endpoint = params.toString()
       ? `/api/reports/category?${params}`
       : "/api/reports/category";
-    return apiRequest(endpoint, { method: "GET" });
+    return apiRequest(endpoint, { method: "GET" }, false);
   },
 
   getTrends: (
     period: "daily" | "weekly" | "monthly" | "yearly" = "monthly"
   ): Promise<any> =>
-    apiRequest(`/api/reports/trends?period=${period}`, { method: "GET" }),
+    apiRequest(`/api/reports/trends?period=${period}`, { method: "GET" }, false),
 };
 
 // =====================
@@ -770,10 +722,10 @@ export const reportsAPI = {
 
 export const healthAPI = {
   check: (): Promise<{ status: string; timestamp: string }> =>
-    apiRequest("/api/health", { method: "GET" }),
+    apiRequest("/api/health", { method: "GET" }, false),
 
   ping: (): Promise<{ message: string }> =>
-    apiRequest("/api/health/ping", { method: "GET" }),
+    apiRequest("/api/health/ping", { method: "GET" }, false),
 };
 
 // =====================
@@ -781,13 +733,14 @@ export const healthAPI = {
 // =====================
 
 const api = {
-  get: <T = any>(endpoint: string, options?: RequestInit): Promise<T> =>
-    apiRequest<T>(endpoint, { ...options, method: "GET" }),
+  get: <T = any>(endpoint: string, options?: RequestInit, useTransactionsService?: boolean): Promise<T> =>
+    apiRequest<T>(endpoint, { ...options, method: "GET" }, useTransactionsService),
 
   post: <T = any>(
     endpoint: string,
     body?: any,
-    options?: RequestInit
+    options?: RequestInit,
+    useTransactionsService?: boolean
   ): Promise<T> =>
     apiRequest<T>(endpoint, {
       ...options,
@@ -798,32 +751,34 @@ const api = {
           : body
           ? JSON.stringify(body)
           : undefined,
-    }),
+    }, useTransactionsService),
 
   put: <T = any>(
     endpoint: string,
     body?: any,
-    options?: RequestInit
+    options?: RequestInit,
+    useTransactionsService?: boolean
   ): Promise<T> =>
     apiRequest<T>(endpoint, {
       ...options,
       method: "PUT",
       body: body ? JSON.stringify(body) : undefined,
-    }),
+    }, useTransactionsService),
 
-  delete: <T = any>(endpoint: string, options?: RequestInit): Promise<T> =>
-    apiRequest<T>(endpoint, { ...options, method: "DELETE" }),
+  delete: <T = any>(endpoint: string, options?: RequestInit, useTransactionsService?: boolean): Promise<T> =>
+    apiRequest<T>(endpoint, { ...options, method: "DELETE" }, useTransactionsService),
 
   patch: <T = any>(
     endpoint: string,
     body?: any,
-    options?: RequestInit
+    options?: RequestInit,
+    useTransactionsService?: boolean
   ): Promise<T> =>
     apiRequest<T>(endpoint, {
       ...options,
       method: "PATCH",
       body: body ? JSON.stringify(body) : undefined,
-    }),
+    }, useTransactionsService),
 };
 
 export default api;

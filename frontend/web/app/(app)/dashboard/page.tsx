@@ -13,6 +13,10 @@ import {
   Loader2,
   Upload,
   BarChart3,
+  Camera,
+  Brain,
+  RefreshCw,
+  Activity,
 } from "lucide-react";
 
 import { SpendingTrendChart } from "@/components/dashboard/SpendingTrendChart";
@@ -410,7 +414,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      {/* Global keyboard shortcuts - FIXED */}
+      {/* Global keyboard shortcuts */}
       <KeyboardShortcuts 
         isOpen={showKeyboardShortcuts} 
         onClose={() => setShowKeyboardShortcuts(false)} 
@@ -550,10 +554,10 @@ export default function DashboardPage() {
                 <GoalProgressChart goals={goals} />
               </div>
 
-              {/* Quick Actions */}
+              {/* Quick Actions - UPDATED WITH NEW FEATURES */}
               <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-purple-600 p-8 text-white shadow-xl">
                 <h3 className="mb-4 text-2xl font-bold">Quick Actions</h3>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   {/* Add Transaction */}
                   <button
                     onClick={() => setShowTransactionModal(true)}
@@ -599,6 +603,54 @@ export default function DashboardPage() {
                     <p className="font-semibold">View Reports</p>
                     <p className="text-sm text-blue-100">
                       See insights and trends
+                    </p>
+                  </button>
+
+                  {/* 🆕 Receipt Scanner */}
+                  <button
+                    onClick={() => router.push("/receipts")}
+                    className="rounded-xl bg-white/20 p-4 text-left backdrop-blur-sm transition-all hover:bg-white/30"
+                  >
+                    <Camera className="mb-2 h-8 w-8" />
+                    <p className="font-semibold">Scan Receipt</p>
+                    <p className="text-sm text-blue-100">
+                      Extract data from photos
+                    </p>
+                  </button>
+
+                  {/* 🆕 Health Score */}
+                  <button
+                    onClick={() => router.push("/health")}
+                    className="rounded-xl bg-white/20 p-4 text-left backdrop-blur-sm transition-all hover:bg-white/30"
+                  >
+                    <Activity className="mb-2 h-8 w-8" />
+                    <p className="font-semibold">Health Score</p>
+                    <p className="text-sm text-blue-100">
+                      Check your financial wellness
+                    </p>
+                  </button>
+
+                  {/* 🆕 AI Insights */}
+                  <button
+                    onClick={() => router.push("/insights")}
+                    className="rounded-xl bg-white/20 p-4 text-left backdrop-blur-sm transition-all hover:bg-white/30"
+                  >
+                    <Brain className="mb-2 h-8 w-8" />
+                    <p className="font-semibold">AI Insights</p>
+                    <p className="text-sm text-blue-100">
+                      Smart spending analysis
+                    </p>
+                  </button>
+
+                  {/* 🆕 Recurring Transactions */}
+                  <button
+                    onClick={() => router.push("/recurring")}
+                    className="rounded-xl bg-white/20 p-4 text-left backdrop-blur-sm transition-all hover:bg-white/30"
+                  >
+                    <RefreshCw className="mb-2 h-8 w-8" />
+                    <p className="font-semibold">Recurring</p>
+                    <p className="text-sm text-blue-100">
+                      Manage subscriptions
                     </p>
                   </button>
                 </div>
