@@ -7,6 +7,39 @@ spring:
 
   cloud:
     gateway:
+      # ✅ FIXED: Global CORS Configuration for Vercel
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+              - "http://localhost:3001"
+              - "https://fintrack-liart.vercel.app"
+              - "https://*.vercel.app"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            exposedHeaders:
+              - Authorization
+              - Content-Type
+            allowCredentials: true
+            maxAge: 3600
+
+      # ✅ DISABLE Rate Limiting Completely
+      filter:
+        request-rate-limiter:
+          enabled: false
+      
+      redis-rate-limiter:
+        enabled: false
+
       # FIXED: Ensure CORS headers aren't duplicated
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
@@ -68,7 +101,6 @@ spring:
             - Path=/api/notifications/**
           filters:
             - AuthenticationFilter
-            # FIXED: Increased timeout for notifications
             - name: CircuitBreaker
               args:
                 name: notificationsCircuitBreaker
@@ -97,7 +129,6 @@ spring:
               args:
                 regexp: /api/transactions/(?<segment>.*)
                 replacement: /api/transactions/${segment}
-            # FIXED: Circuit breaker for resilience
             - name: CircuitBreaker
               args:
                 name: transactionsCircuitBreaker
@@ -126,7 +157,6 @@ spring:
               args:
                 regexp: /api/budgets/(?<segment>.*)
                 replacement: /budgets/${segment}
-            # FIXED: Circuit breaker for resilience
             - name: CircuitBreaker
               args:
                 name: budgetsCircuitBreaker
@@ -143,7 +173,6 @@ spring:
               args:
                 regexp: /api/goals/(?<segment>.*)
                 replacement: /goals/${segment}
-            # FIXED: Circuit breaker for resilience
             - name: CircuitBreaker
               args:
                 name: goalsCircuitBreaker
@@ -172,7 +201,6 @@ spring:
               args:
                 regexp: /api/reports/(?<segment>.*)
                 replacement: /api/reports/${segment}
-            # FIXED: Circuit breaker for resilience
             - name: CircuitBreaker
               args:
                 name: reportsCircuitBreaker
@@ -217,10 +245,6 @@ resilience4j:
     configs:
       default:
         timeoutDuration: 30s
-
-# FIXED: Rate limiting configuration (increased limits)
-spring.cloud.gateway.filter.request-rate-limiter:
-  enabled: false  # Disabled to prevent 429 errors
 
 management:
   endpoints:
