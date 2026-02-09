@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   TrendingUp, TrendingDown, AlertCircle, CheckCircle, X, Plus, 
@@ -650,7 +650,8 @@ const PlaidBankConnection = () => {
   );
 };
 
-export default function AdvancedFeaturesPage() {
+// Component that uses searchParams - wrapped in Suspense
+function AdvancedFeaturesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isAuth, setIsAuth] = useState(false);
@@ -758,5 +759,21 @@ export default function AdvancedFeaturesPage() {
         {activeTab === 'plaid' && <PlaidBankConnection />}
       </main>
     </div>
+  );
+}
+
+// Main page component with Suspense boundary
+export default function AdvancedFeaturesPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="text-center">
+          <Loader2 className="mx-auto mb-4 h-16 w-16 animate-spin text-indigo-600" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <AdvancedFeaturesContent />
+    </Suspense>
   );
 }
