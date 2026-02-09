@@ -1,7 +1,7 @@
-﻿'use client';
+﻿﻿'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, PieChart, Shield, Zap, FileText, Bell, Target, Users, Download, Clock, Check, X, ChevronDown, Menu, X as CloseIcon, Moon, Sun, ArrowRight, Play, Star, Upload, Lock, Activity, MessageCircle, Mail, Globe, CreditCard, BarChart3, Smartphone, RefreshCw, Calculator, AlertCircle, ExternalLink } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
+import { TrendingUp, TrendingDown, DollarSign, Shield, Zap, FileText, Bell, Target, Users, Download, Check, X, ChevronDown, Menu, X as CloseIcon, Moon, Sun, ArrowRight, Play, Star, Upload, Lock, MessageCircle, Mail, Smartphone, RefreshCw, PieChart, Award, Sparkles } from 'lucide-react';
 
 const FinTrackEnhanced = () => {
   const [isDark, setIsDark] = useState(false);
@@ -13,7 +13,6 @@ const FinTrackEnhanced = () => {
   const [showEmailCapture, setShowEmailCapture] = useState(false);
   const [email, setEmail] = useState('');
 
-  // Mock data for demo dashboard
   const mockData = [
     { month: 'Jan', income: 4200, expenses: 2800 },
     { month: 'Feb', income: 4500, expenses: 2400 },
@@ -29,21 +28,56 @@ const FinTrackEnhanced = () => {
   ];
 
   const testimonials = [
-    { name: "Sarah Johnson", role: "Small Business Owner", initial: "SJ", text: "FinTrack helped me identify $547 in unnecessary subscriptions. The automatic categorization is a lifesaver during tax season." },
-    { name: "Michael Chen", role: "Freelance Designer", initial: "MC", text: "I used to spend 3 hours every month on expense tracking. Now it takes 5 minutes. The CSV import is incredibly smart." },
-    { name: "Emily Rodriguez", role: "Marketing Manager", initial: "ER", text: "Finally understand where my money goes! The visual reports make budgeting actually enjoyable. Worth every penny." }
+    { 
+      name: "Sarah Johnson", 
+      role: "Small Business Owner", 
+      initial: "SJ", 
+      text: "Discovered $547 in forgotten subscriptions in my first week. The automatic categorization saves me hours during tax season.",
+      highlight: "$547 saved"
+    },
+    { 
+      name: "Michael Chen", 
+      role: "Freelance Designer", 
+      initial: "MC", 
+      text: "Cut my monthly expense tracking from 3 hours to 5 minutes. The CSV import is incredibly smart and handles any bank format.",
+      highlight: "3 hours saved monthly"
+    },
+    { 
+      name: "Emily Rodriguez", 
+      role: "Marketing Manager", 
+      initial: "ER", 
+      text: "Finally understand where every dollar goes. The visual reports transformed budgeting from a chore into something I actually enjoy.",
+      highlight: "30% better savings"
+    }
   ];
 
   const faqs = [
-    { q: "Is my financial data secure?", a: "Yes, we use bank-level 256-bit SSL encryption and are SOC 2 Type II certified. We never store your bank credentials." },
-    { q: "Which banks and file formats do you support?", a: "We support CSV exports from all major banks including Chase, Bank of America, Wells Fargo, and more. Our smart parser automatically detects formats." },
-    { q: "Can I cancel my subscription anytime?", a: "Yes, you can cancel anytime with no questions asked. You'll retain access until the end of your billing period." },
-    { q: "Do you offer a free trial?", a: "Yes! Pro plan includes a 14-day free trial with no credit card required." },
-    { q: "Can I import historical transactions?", a: "Yes, you can import transactions from any time period. There's no limit on historical data." },
-    { q: "Is there a mobile app?", a: "Yes! We have native iOS and Android apps that sync seamlessly with the web version." }
+    { 
+      q: "Is my financial data secure?", 
+      a: "Absolutely. We use bank-level 256-bit SSL encryption and are SOC 2 Type II certified. We never store your bank credentials and conduct regular third-party security audits. Your data is encrypted both in transit and at rest." 
+    },
+    { 
+      q: "Which banks and file formats do you support?", 
+      a: "We support CSV exports from all major banks including Chase, Bank of America, Wells Fargo, Citibank, Capital One, and 100+ others. Our intelligent parser automatically detects formats and handles various date and currency formats without manual configuration." 
+    },
+    { 
+      q: "Can I cancel my subscription anytime?", 
+      a: "Yes, absolutely. Cancel anytime with no questions asked and no cancellation fees. You'll retain full access until the end of your billing period, and all your data remains exportable." 
+    },
+    { 
+      q: "Do you offer a free trial?", 
+      a: "Yes! The Pro plan includes a full 14-day free trial with access to all premium features. No credit card required to start. You can explore every feature risk-free." 
+    },
+    { 
+      q: "Can I import historical transactions?", 
+      a: "Yes, import transactions from any time period with no restrictions. Many users import 2-3 years of historical data to get comprehensive insights into their spending patterns and trends." 
+    },
+    { 
+      q: "Is there a mobile app?", 
+      a: "Yes! We have native iOS and Android apps with full feature parity. All data syncs seamlessly in real-time across web, iOS, and Android. Track expenses on the go and view your dashboard anywhere." 
+    }
   ];
 
-  // Intersection Observer for scroll animations
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -63,11 +97,10 @@ const FinTrackEnhanced = () => {
     return () => observer.disconnect();
   }, []);
 
-  // Auto-rotate testimonials
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveTestimonial((prev) => (prev + 1) % testimonials.length);
-    }, 5000);
+    }, 6000);
     return () => clearInterval(interval);
   }, []);
 
@@ -130,14 +163,14 @@ const FinTrackEnhanced = () => {
       {/* Sticky CTA Bar */}
       {visibleSections.has('pricing') && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-r from-purple-600 to-pink-600 py-4 px-6 shadow-2xl animate-slideUp">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center space-x-3">
-              <Zap className="w-6 h-6" />
-              <span className="font-bold">Ready to start? Get 14 days free!</span>
+              <Zap className="w-6 h-6 text-white" />
+              <span className="font-bold text-white text-center sm:text-left">Ready to start? Get 14 days free, no credit card needed!</span>
             </div>
             <a
               href="/login?mode=signup"
-              className="bg-white text-purple-600 px-6 py-2 rounded-full font-bold hover:bg-gray-100 transition"
+              className="bg-white text-purple-600 px-6 py-2 rounded-full font-bold hover:bg-gray-100 transition whitespace-nowrap"
             >
               Start Now →
             </a>
@@ -185,6 +218,7 @@ const FinTrackEnhanced = () => {
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="md:hidden p-2 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900 transition"
+              aria-label="Toggle menu"
             >
               {isMenuOpen ? <CloseIcon className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -216,27 +250,26 @@ const FinTrackEnhanced = () => {
 
       {/* Hero Section */}
       <section className="pt-32 pb-20 px-6 relative overflow-hidden" id="hero" data-animate>
-        {/* Animated Background Blobs */}
         <div className="absolute top-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" />
         <div className="absolute bottom-20 left-20 w-96 h-96 bg-pink-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
 
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-6">
-            <span className={`inline-block ${isDark ? 'bg-purple-900/50' : 'bg-purple-100'} ${isDark ? 'text-purple-200' : 'text-purple-700'} px-6 py-3 rounded-full text-sm font-semibold ${isDark ? 'border border-purple-500/30' : 'border border-purple-300'} animate-bounce`}>
-              🚀 Join <AnimatedCounter end={2500} suffix="+ active users" />
+            <span className={`inline-flex items-center gap-2 ${isDark ? 'bg-purple-900/50' : 'bg-purple-100'} ${isDark ? 'text-purple-200' : 'text-purple-700'} px-6 py-3 rounded-full text-sm font-semibold ${isDark ? 'border border-purple-500/30' : 'border border-purple-300'} animate-bounce`}>
+              <Sparkles className="w-4 h-4" />
+              Join <AnimatedCounter end={2500} suffix="+ active users" />
             </span>
           </div>
 
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-center mb-6 leading-tight">
-            Your intelligent{' '}
+            Save $500+ yearly by{' '}
             <span className="bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 bg-clip-text text-transparent">
-              financial management
-            </span>{' '}
-            platform
+              tracking every dollar
+            </span>
           </h1>
 
           <p className={`text-xl sm:text-2xl text-center ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-10 max-w-3xl mx-auto`}>
-            Track expenses, analyze spending patterns, and make informed financial decisions with ease. Take control of your finances today.
+            Discover forgotten subscriptions, understand spending patterns, and make smarter financial decisions. Join thousands who've already transformed their finances.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
@@ -257,22 +290,22 @@ const FinTrackEnhanced = () => {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-8 max-w-3xl mx-auto mb-16">
+          <div className="grid grid-cols-3 gap-4 sm:gap-8 max-w-3xl mx-auto mb-16">
             <div className="text-center group cursor-pointer transform hover:scale-110 transition">
-              <div className="text-4xl lg:text-5xl font-black bg-gradient-to-br from-purple-600 to-purple-800 bg-clip-text text-transparent">
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black bg-gradient-to-br from-purple-600 to-purple-800 bg-clip-text text-transparent">
                 <AnimatedCounter end={2500} suffix="+" />
               </div>
-              <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-2 font-medium`}>Active Users</div>
+              <div className={`text-xs sm:text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-2 font-medium`}>Active Users</div>
             </div>
             <div className="text-center group cursor-pointer transform hover:scale-110 transition">
-              <div className="text-4xl lg:text-5xl font-black bg-gradient-to-br from-pink-600 to-pink-800 bg-clip-text text-transparent">
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black bg-gradient-to-br from-pink-600 to-pink-800 bg-clip-text text-transparent">
                 <AnimatedCounter end={450} prefix="$" suffix="K+" />
               </div>
-              <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-2 font-medium`}>Money Saved</div>
+              <div className={`text-xs sm:text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-2 font-medium`}>Money Saved</div>
             </div>
             <div className="text-center group cursor-pointer transform hover:scale-110 transition">
-              <div className="text-4xl lg:text-5xl font-black bg-gradient-to-br from-cyan-600 to-cyan-800 bg-clip-text text-transparent">4.9★</div>
-              <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-2 font-medium`}>User Rating</div>
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black bg-gradient-to-br from-cyan-600 to-cyan-800 bg-clip-text text-transparent">4.9★</div>
+              <div className={`text-xs sm:text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-2 font-medium`}>User Rating</div>
             </div>
           </div>
 
@@ -280,9 +313,9 @@ const FinTrackEnhanced = () => {
           <div className="relative max-w-5xl mx-auto group" data-animate>
             <div className="absolute -inset-4 bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 rounded-3xl blur-2xl opacity-30 group-hover:opacity-50 transition" />
             
-            <div className={`relative ${cardBg} rounded-3xl p-6 lg:p-8 ${borderColor} border-2 shadow-2xl transform group-hover:scale-[1.02] transition-all`}>
+            <div className={`relative ${cardBg} rounded-3xl p-4 sm:p-6 lg:p-8 ${borderColor} border-2 shadow-2xl transform group-hover:scale-[1.02] transition-all`}>
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                <h3 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                   Dashboard Overview
                 </h3>
                 <div className="flex space-x-2">
@@ -293,36 +326,36 @@ const FinTrackEnhanced = () => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                <div className={`${isDark ? 'bg-gradient-to-br from-purple-900/50 to-purple-800/50' : 'bg-gradient-to-br from-purple-50 to-purple-100'} rounded-2xl p-6 ${isDark ? 'border border-purple-500/30' : 'border border-purple-200'} transform hover:scale-105 transition cursor-pointer`}>
+                <div className={`${isDark ? 'bg-gradient-to-br from-purple-900/50 to-purple-800/50' : 'bg-gradient-to-br from-purple-50 to-purple-100'} rounded-2xl p-4 sm:p-6 ${isDark ? 'border border-purple-500/30' : 'border border-purple-200'} transform hover:scale-105 transition cursor-pointer`}>
                   <div className="flex items-center justify-between mb-2">
                     <span className={`text-sm ${isDark ? 'text-purple-200' : 'text-purple-700'} font-medium`}>Balance</span>
                     <TrendingUp className="w-4 h-4 text-green-500" />
                   </div>
-                  <div className="text-3xl font-black">$12,450</div>
+                  <div className="text-2xl sm:text-3xl font-black">$12,450</div>
                   <div className="text-sm text-green-500 mt-1 flex items-center">
                     <TrendingUp className="w-3 h-3 mr-1" />
                     +12.5%
                   </div>
                 </div>
 
-                <div className={`${isDark ? 'bg-gradient-to-br from-green-900/50 to-emerald-800/50' : 'bg-gradient-to-br from-green-50 to-emerald-100'} rounded-2xl p-6 ${isDark ? 'border border-green-500/30' : 'border border-green-200'} transform hover:scale-105 transition cursor-pointer`}>
+                <div className={`${isDark ? 'bg-gradient-to-br from-green-900/50 to-emerald-800/50' : 'bg-gradient-to-br from-green-50 to-emerald-100'} rounded-2xl p-4 sm:p-6 ${isDark ? 'border border-green-500/30' : 'border border-green-200'} transform hover:scale-105 transition cursor-pointer`}>
                   <div className="flex items-center justify-between mb-2">
                     <span className={`text-sm ${isDark ? 'text-green-200' : 'text-green-700'} font-medium`}>Income</span>
                     <TrendingUp className="w-4 h-4 text-green-500" />
                   </div>
-                  <div className="text-3xl font-black">$4,500</div>
+                  <div className="text-2xl sm:text-3xl font-black">$4,500</div>
                   <div className="text-sm text-green-500 mt-1 flex items-center">
                     <TrendingUp className="w-3 h-3 mr-1" />
                     +8.3%
                   </div>
                 </div>
 
-                <div className={`${isDark ? 'bg-gradient-to-br from-pink-900/50 to-rose-800/50' : 'bg-gradient-to-br from-pink-50 to-rose-100'} rounded-2xl p-6 ${isDark ? 'border border-pink-500/30' : 'border border-pink-200'} transform hover:scale-105 transition cursor-pointer`}>
+                <div className={`${isDark ? 'bg-gradient-to-br from-pink-900/50 to-rose-800/50' : 'bg-gradient-to-br from-pink-50 to-rose-100'} rounded-2xl p-4 sm:p-6 ${isDark ? 'border border-pink-500/30' : 'border border-pink-200'} transform hover:scale-105 transition cursor-pointer`}>
                   <div className="flex items-center justify-between mb-2">
                     <span className={`text-sm ${isDark ? 'text-pink-200' : 'text-pink-700'} font-medium`}>Expenses</span>
                     <TrendingDown className="w-4 h-4 text-red-500" />
                   </div>
-                  <div className="text-3xl font-black">$2,390</div>
+                  <div className="text-2xl sm:text-3xl font-black">$2,390</div>
                   <div className="text-sm text-red-500 mt-1 flex items-center">
                     <TrendingDown className="w-3 h-3 mr-1" />
                     -3.2%
@@ -351,18 +384,18 @@ const FinTrackEnhanced = () => {
           </div>
 
           {/* Trust Badges */}
-          <div className="flex flex-wrap justify-center items-center gap-8 mt-12 opacity-60">
+          <div className="flex flex-wrap justify-center items-center gap-6 sm:gap-8 mt-12 opacity-60">
             <div className="flex items-center space-x-2">
               <Shield className="w-5 h-5" />
-              <span className="text-sm font-medium">Bank-level security</span>
+              <span className="text-xs sm:text-sm font-medium">Bank-level security</span>
             </div>
             <div className="flex items-center space-x-2">
               <Check className="w-5 h-5" />
-              <span className="text-sm font-medium">iOS & Android apps</span>
+              <span className="text-xs sm:text-sm font-medium">iOS & Android apps</span>
             </div>
             <div className="flex items-center space-x-2">
               <Zap className="w-5 h-5" />
-              <span className="text-sm font-medium">No credit card required</span>
+              <span className="text-xs sm:text-sm font-medium">No credit card required</span>
             </div>
           </div>
         </div>
@@ -384,13 +417,13 @@ const FinTrackEnhanced = () => {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { num: '1', title: 'Sign Up Free', desc: 'Create your account in 30 seconds. No credit card required.', icon: Users },
-              { num: '2', title: 'Upload Transactions', desc: 'Import your bank CSV or add transactions manually.', icon: Upload },
-              { num: '3', title: 'Get Insights', desc: 'View analytics, track trends, and make smarter financial decisions.', icon: TrendingUp }
+              { num: '2', title: 'Import Transactions', desc: 'Upload your bank CSV or connect automatically. Import 1000+ transactions in seconds.', icon: Upload },
+              { num: '3', title: 'Get AI Insights', desc: 'View real-time analytics, discover savings opportunities, and track spending trends automatically.', icon: TrendingUp }
             ].map((step, idx) => {
               const Icon = step.icon;
               return (
                 <div key={idx} className="relative">
-                  <div className={`${cardBg} ${borderColor} border-2 rounded-2xl p-8 hover:shadow-xl transition transform hover:scale-105 text-center`}>
+                  <div className={`${cardBg} ${borderColor} border-2 rounded-2xl p-8 hover:shadow-xl transition transform hover:scale-105 text-center h-full`}>
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white text-2xl font-bold mb-4">
                       {step.num}
                     </div>
@@ -429,10 +462,10 @@ const FinTrackEnhanced = () => {
 
           <div className="grid sm:grid-cols-2 gap-8 mb-12">
             {[
-              { icon: TrendingUp, title: 'Real-Time Dashboard', desc: 'Monitor your financial health with interactive charts showing spending trends, income vs expenses, and category breakdowns. Get instant insights with visual analytics that update automatically.' },
-              { icon: Upload, title: 'Smart CSV Import', desc: 'Import transactions from any bank with our intelligent CSV parser. Supports Chase, Bank of America, Wells Fargo, and more. Automatic categorization saves you hours of manual work.' },
-              { icon: FileText, title: 'Detailed Reports', desc: 'Generate comprehensive monthly, quarterly, and annual reports. Export to PDF or Excel for tax preparation. Custom date ranges and filtering options included.' },
-              { icon: Shield, title: 'Bank-Level Security', desc: 'Your data is encrypted with 256-bit SSL encryption. We never store your bank credentials. SOC 2 Type II certified with regular security audits.' }
+              { icon: TrendingUp, title: 'Real-Time Dashboard', desc: 'Monitor your financial health with interactive charts. Get instant insights with visual analytics that update automatically as you add transactions.' },
+              { icon: Upload, title: 'Smart CSV Import', desc: 'Import 1000+ transactions in under 30 seconds from Chase, BofA, Wells Fargo & 100+ banks. Automatic categorization saves you hours of manual work.' },
+              { icon: FileText, title: 'Detailed Reports', desc: 'Generate comprehensive reports for tax preparation. Export to PDF or Excel with custom date ranges and filtering options.' },
+              { icon: Shield, title: 'Bank-Level Security', desc: 'Your data is protected with 256-bit SSL encryption. SOC 2 Type II certified with regular third-party security audits. We never store credentials.' }
             ].map((feature, idx) => {
               const Icon = feature.icon;
               return (
@@ -635,23 +668,29 @@ const FinTrackEnhanced = () => {
 
           <div className="relative max-w-4xl mx-auto">
             <div className={`${cardBg} ${borderColor} border-2 rounded-3xl p-8 lg:p-12 shadow-xl`}>
-              <div className="flex mb-4">
+              <div className="flex items-center gap-1 mb-4">
                 {[...Array(5)].map((_, i) => (
                   <Star key={i} className="w-6 h-6 fill-yellow-400 text-yellow-400" />
                 ))}
               </div>
-              <p className={`text-xl lg:text-2xl ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-8 leading-relaxed`}>
+              <p className={`text-xl lg:text-2xl ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-6 leading-relaxed`}>
                 "{testimonials[activeTestimonial].text}"
               </p>
-              <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center text-white font-bold text-xl">
-                  {testimonials[activeTestimonial].initial}
-                </div>
-                <div>
-                  <div className="font-bold text-lg">{testimonials[activeTestimonial].name}</div>
-                  <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>
-                    {testimonials[activeTestimonial].role}
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center space-x-4">
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
+                    {testimonials[activeTestimonial].initial}
                   </div>
+                  <div>
+                    <div className="font-bold text-lg">{testimonials[activeTestimonial].name}</div>
+                    <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+                      {testimonials[activeTestimonial].role}
+                    </div>
+                  </div>
+                </div>
+                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${isDark ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-700'} font-semibold`}>
+                  <Award className="w-5 h-5" />
+                  {testimonials[activeTestimonial].highlight}
                 </div>
               </div>
             </div>
@@ -695,7 +734,8 @@ const FinTrackEnhanced = () => {
                 price: '$0', 
                 period: 'forever', 
                 features: ['Up to 100 transactions/month', 'Basic reporting', 'CSV import', 'Email support', 'Mobile app access'],
-                highlighted: false
+                highlighted: false,
+                cta: 'Get Started Free'
               },
               { 
                 name: 'Pro', 
@@ -704,14 +744,16 @@ const FinTrackEnhanced = () => {
                 badge: 'MOST POPULAR',
                 savings: 'Save 20% with annual billing',
                 features: ['Unlimited transactions', 'Advanced analytics & AI insights', 'Multiple accounts & categories', 'Priority support', 'Export to Excel/PDF', 'Custom categories & tags', 'Budget tracking & alerts'],
-                highlighted: true
+                highlighted: true,
+                cta: 'Try Free for 14 Days'
               },
               { 
                 name: 'Business', 
                 price: '$29', 
                 period: 'per month', 
                 features: ['Everything in Pro', 'Team collaboration (up to 5 users)', 'API access', 'Custom integrations', 'Dedicated account manager', 'Advanced security & compliance', 'White-label reports'],
-                highlighted: false
+                highlighted: false,
+                cta: 'Contact Sales'
               }
             ].map((plan, idx) => (
               <div 
@@ -747,7 +789,7 @@ const FinTrackEnhanced = () => {
                       : isDark ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-200 hover:bg-gray-300'
                   }`}
                 >
-                  {plan.name === 'Business' ? 'Contact Sales' : plan.name === 'Pro' ? 'Try Free for 14 Days' : 'Get Started Free'}
+                  {plan.cta}
                 </a>
                 {plan.name === 'Pro' && (
                   <p className={`text-xs text-center mt-4 ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
@@ -868,9 +910,9 @@ const FinTrackEnhanced = () => {
             ))}
           </div>
 
-          <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center">
+          <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-gray-400 text-sm">© 2024 FinTrack. All rights reserved.</p>
-            <div className="flex space-x-6 mt-4 md:mt-0">
+            <div className="flex space-x-6">
               {['Twitter', 'LinkedIn', 'GitHub'].map((social) => (
                 <a key={social} href={`https://${social.toLowerCase()}.com`} className="text-gray-400 hover:text-purple-400 transition text-sm">
                   {social}
@@ -897,15 +939,17 @@ const FinTrackEnhanced = () => {
             <button 
               onClick={() => setShowDemo(false)} 
               className={`absolute top-4 right-4 ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'} transition`}
+              aria-label="Close demo"
             >
               <X className="w-6 h-6" />
             </button>
             <h3 className="text-3xl font-bold mb-4">Product Demo</h3>
-            <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} mb-6`}>See FinTrack in action</p>
+            <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} mb-6`}>See FinTrack in action - Import transactions, view analytics, and discover insights</p>
             <div className={`aspect-video ${isDark ? 'bg-gray-900' : 'bg-gray-100'} rounded-xl flex items-center justify-center ${borderColor} border`}>
               <div className="text-center">
                 <Play className={`w-16 h-16 mx-auto mb-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
-                <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>Demo video coming soon!</p>
+                <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>Interactive demo video coming soon!</p>
+                <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>In the meantime, start your free trial to explore all features</p>
               </div>
             </div>
             <div className="mt-6 flex gap-4">
@@ -933,6 +977,7 @@ const FinTrackEnhanced = () => {
             <button 
               onClick={() => setShowEmailCapture(false)} 
               className={`absolute top-4 right-4 ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'} transition`}
+              aria-label="Close"
             >
               <X className="w-6 h-6" />
             </button>
@@ -941,7 +986,7 @@ const FinTrackEnhanced = () => {
                 <Mail className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold mb-2">Stay Updated</h3>
-              <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>Get the latest features and updates</p>
+              <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>Get product updates, tips, and exclusive offers</p>
             </div>
             <form 
               onSubmit={(e) => { 
