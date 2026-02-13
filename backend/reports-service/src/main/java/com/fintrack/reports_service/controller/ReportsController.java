@@ -1,5 +1,6 @@
 package com.fintrack.reports_service.controller;
 
+import com.fintrack.reports_service.service.PdfGeneratorService;
 import com.fintrack.reports_service.service.ReportsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -12,17 +13,17 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/reports")
 @RequiredArgsConstructor
-// ❌ REMOVED @CrossOrigin - handled by CorsConfig instead
 public class ReportsController {
 
     private final ReportsService reportsService;
+    private final PdfGeneratorService pdfGeneratorService; // ✅ Added
 
     @GetMapping("/financial")
     public ResponseEntity<Map<String, Object>> getFinancialReports(
             @RequestParam(defaultValue = "last-30-days") String range,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             Authentication authentication) {
-        
+
         String finalUserId = userId != null ? userId : getUserIdFromAuth(authentication);
         Map<String, Object> reports = reportsService.getFinancialReports(finalUserId, range);
         return ResponseEntity.ok(reports);
@@ -33,7 +34,7 @@ public class ReportsController {
             @RequestParam(defaultValue = "last-6-months") String range,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             Authentication authentication) {
-        
+
         String finalUserId = userId != null ? userId : getUserIdFromAuth(authentication);
         List<Map<String, Object>> summary = reportsService.getMonthlySummary(finalUserId, range);
         return ResponseEntity.ok(summary);
@@ -44,11 +45,11 @@ public class ReportsController {
             @RequestParam(defaultValue = "last-30-days") String range,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             Authentication authentication) {
-        
+
         String finalUserId = userId != null ? userId : getUserIdFromAuth(authentication);
         java.time.LocalDate[] dateRange = parseDateRange(range);
         List<Map<String, Object>> breakdown = reportsService.getCategoryBreakdown(
-            finalUserId, dateRange[0], dateRange[1]);
+                finalUserId, dateRange[0], dateRange[1]);
         return ResponseEntity.ok(breakdown);
     }
 
@@ -56,7 +57,7 @@ public class ReportsController {
     public ResponseEntity<List<Map<String, Object>>> getSavingsGoals(
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             Authentication authentication) {
-        
+
         String finalUserId = userId != null ? userId : getUserIdFromAuth(authentication);
         List<Map<String, Object>> goals = reportsService.getSavingsGoals(finalUserId);
         return ResponseEntity.ok(goals);
@@ -68,11 +69,11 @@ public class ReportsController {
             @RequestParam(defaultValue = "5") int limit,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             Authentication authentication) {
-        
+
         String finalUserId = userId != null ? userId : getUserIdFromAuth(authentication);
         java.time.LocalDate[] dateRange = parseDateRange(range);
         List<Map<String, Object>> expenses = reportsService.getTopExpenses(
-            finalUserId, dateRange[0], dateRange[1], limit);
+                finalUserId, dateRange[0], dateRange[1], limit);
         return ResponseEntity.ok(expenses);
     }
 
@@ -81,24 +82,36 @@ public class ReportsController {
             @RequestParam(defaultValue = "last-30-days") String range,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             Authentication authentication) {
-        
+
         String finalUserId = userId != null ? userId : getUserIdFromAuth(authentication);
         java.time.LocalDate[] dateRange = parseDateRange(range);
         List<String> insights = reportsService.generateInsights(
-            finalUserId, dateRange[0], dateRange[1]);
+                finalUserId, dateRange[0], dateRange[1]);
         return ResponseEntity.ok(insights);
     }
 
+    // ✅ FIXED - was returning empty new byte[0], now generates a real PDF
     @GetMapping("/export/pdf")
     public ResponseEntity<byte[]> exportReportPDF(
             @RequestParam(defaultValue = "last-30-days") String range,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             Authentication authentication) {
-        
+
+        String finalUserId = userId != null ? userId : getUserIdFromAuth(authentication);
+
+        // Fetch the same report data shown in the Overview tab
+        Map<String, Object> reportData = reportsService.getFinancialReports(finalUserId, range);
+
+        // Generate real PDF bytes
+        byte[] pdfBytes = pdfGeneratorService.generateFinancialReport(reportData, range);
+
+        String filename = "financial-report-" + range + ".pdf";
+
         return ResponseEntity.ok()
-            .header("Content-Type", "application/pdf")
-            .header("Content-Disposition", "attachment; filename=financial-report.pdf")
-            .body(new byte[0]);
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                .header("Content-Length", String.valueOf(pdfBytes.length))
+                .body(pdfBytes);
     }
 
     @GetMapping("/comparison")
@@ -107,11 +120,10 @@ public class ReportsController {
             @RequestParam String period2,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             Authentication authentication) {
-        
+
         return ResponseEntity.ok(Map.of(
-            "period1", Map.of(),
-            "period2", Map.of()
-        ));
+                "period1", Map.of(),
+                "period2", Map.of()));
     }
 
     @GetMapping("/forecast")
@@ -119,10 +131,9 @@ public class ReportsController {
             @RequestParam(defaultValue = "6") int months,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             Authentication authentication) {
-        
+
         return ResponseEntity.ok(Map.of(
-            "forecast", List.of()
-        ));
+                "forecast", List.of()));
     }
 
     private String getUserIdFromAuth(Authentication authentication) {
@@ -156,6 +167,6 @@ public class ReportsController {
                 startDate = endDate.minusDays(30);
         }
 
-        return new java.time.LocalDate[]{startDate, endDate};
+        return new java.time.LocalDate[] { startDate, endDate };
     }
 }

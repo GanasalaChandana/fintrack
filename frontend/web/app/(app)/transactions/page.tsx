@@ -31,8 +31,7 @@ import {
   transactionsAPI,
   type Transaction as ApiTransaction,
 } from "@/lib/api";
-import { SearchAndFilters } from "@/components/SearchAndFilters";
-import { EmptyState } from "@/components/EmptyState";
+
 
 /* =========================
    Types
@@ -442,6 +441,197 @@ export default function TransactionManager() {
     return { income, expenses, net: income - expenses };
   }, [filteredTransactions]);
 
+  // ✅ CSV Export Function
+  const handleExportCSV = async () => {
+    console.log('📄 CSV Export Started');
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Create CSV headers
+      const headers = "Date,Merchant,Description,Category,Amount,Type,Payment Method,Status";
+      
+      // Create CSV rows
+      const rows = filteredTransactions.map(t => {
+        const catInfo = getCategoryInfo(t.category);
+        const amount = formatCurrency(t.amount);
+        return `"${t.date}","${t.merchant || 'Unknown'}","${t.description}","${catInfo.name}","${amount}","${t.type}","${t.paymentMethod}","${t.status}"`;
+      });
+      
+      const csv = [headers, ...rows].join('\n');
+      console.log('✅ CSV created, length:', csv.length);
+      
+      // Download CSV
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transactions-${today}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      showToast("success", `Exported ${filteredTransactions.length} transactions as CSV`);
+      console.log('✅ CSV Export Complete');
+    } catch (err: any) {
+      console.error('❌ CSV Export Error:', err);
+      showToast("error", `Export failed: ${err.message}`);
+    }
+  };
+
+  // ✅ Excel Export Function
+  const handleExportExcel = async () => {
+    console.log('📊 Excel Export Started');
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Create Excel HTML
+      const rows = filteredTransactions.map((t, i) => {
+        const catInfo = getCategoryInfo(t.category);
+        const amount = formatCurrency(t.amount);
+        const bg = i % 2 === 0 ? '#ffffff' : '#f9fafb';
+        const color = t.type === 'income' ? '#059669' : '#dc2626';
+        
+        return `<tr style="background:${bg}">
+          <td style="padding:7px;border:1px solid #e5e7eb">${t.date}</td>
+          <td style="padding:7px;border:1px solid #e5e7eb">${t.merchant || 'Unknown'}</td>
+          <td style="padding:7px;border:1px solid #e5e7eb">${t.description}</td>
+          <td style="padding:7px;border:1px solid #e5e7eb">${catInfo.name}</td>
+          <td style="padding:7px;border:1px solid #e5e7eb;color:${color};font-weight:bold;text-align:right">
+            ${t.type === 'income' ? '+' : '-'}${amount}
+          </td>
+          <td style="padding:7px;border:1px solid #e5e7eb">${t.type}</td>
+          <td style="padding:7px;border:1px solid #e5e7eb">${t.paymentMethod}</td>
+          <td style="padding:7px;border:1px solid #e5e7eb;text-align:center">${t.status}</td>
+        </tr>`;
+      }).join('');
+      
+      const html = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+        <head><meta charset="utf-8"></head>
+        <body>
+          <h1 style="color:#1e40af">FinTrack Transaction Report</h1>
+          <p>Generated: ${new Date().toLocaleDateString()} | Total: ${filteredTransactions.length} transactions</p>
+          <table border="1" cellspacing="0" style="border-collapse:collapse;width:100%">
+            <thead>
+              <tr style="background:#1e40af;color:white">
+                <th style="padding:10px">Date</th>
+                <th style="padding:10px">Merchant</th>
+                <th style="padding:10px">Description</th>
+                <th style="padding:10px">Category</th>
+                <th style="padding:10px">Amount</th>
+                <th style="padding:10px">Type</th>
+                <th style="padding:10px">Payment</th>
+                <th style="padding:10px">Status</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </body>
+        </html>
+      `;
+      
+      console.log('✅ HTML created, length:', html.length);
+      
+      // Download Excel
+      const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transactions-${today}.xls`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      showToast("success", `Exported ${filteredTransactions.length} transactions as Excel`);
+      console.log('✅ Excel Export Complete');
+    } catch (err: any) {
+      console.error('❌ Excel Export Error:', err);
+      showToast("error", `Export failed: ${err.message}`);
+    }
+  };
+
+  // ✅ PDF Export Function
+  const handleExportPDF = async () => {
+    console.log('📄 PDF Export Started');
+    try {
+      // Create PDF print view
+      const rows = filteredTransactions.map((t, i) => {
+        const catInfo = getCategoryInfo(t.category);
+        const amount = formatCurrency(t.amount);
+        const bg = i % 2 === 0 ? '#ffffff' : '#f9fafb';
+        const color = t.type === 'income' ? '#059669' : '#dc2626';
+        
+        return `<tr style="background:${bg}">
+          <td style="padding:8px;border:1px solid #ddd;font-size:10px">${t.date}</td>
+          <td style="padding:8px;border:1px solid #ddd;font-size:10px">${t.merchant || 'Unknown'}</td>
+          <td style="padding:8px;border:1px solid #ddd;font-size:10px">${t.description}</td>
+          <td style="padding:8px;border:1px solid #ddd;font-size:10px">${catInfo.name}</td>
+          <td style="padding:8px;border:1px solid #ddd;font-size:10px;color:${color};font-weight:bold;text-align:right">
+            ${t.type === 'income' ? '+' : '-'}${amount}
+          </td>
+        </tr>`;
+      }).join('');
+      
+      const printWindow = window.open('', '_blank');
+      
+      if (!printWindow) {
+        throw new Error('Popup blocked. Please allow popups to export PDF.');
+      }
+      
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>FinTrack Transaction Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { color: #1e40af; font-size: 24px; margin-bottom: 10px; }
+            p { color: #6b7280; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th { background: #1e40af; color: white; padding: 10px; text-align: left; border: 1px solid #1e3a8a; font-size: 11px; }
+            .print-btn { 
+              position: fixed; top: 20px; right: 20px; background: #2563eb; 
+              color: white; border: none; padding: 12px 24px; border-radius: 8px; 
+              cursor: pointer; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+              font-size: 14px;
+            }
+            .print-btn:hover { background: #1d4ed8; }
+            @media print { .print-btn { display: none; } }
+          </style>
+        </head>
+        <body>
+          <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+          <h1>FinTrack Transaction Report</h1>
+          <p>Generated: ${new Date().toLocaleString()} | Total: ${filteredTransactions.length} transactions</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th><th>Merchant</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </body>
+        </html>
+      `);
+      
+      printWindow.document.close();
+      
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+      
+      showToast("success", "PDF print dialog opened");
+      console.log('✅ PDF Export Complete');
+    } catch (err: any) {
+      console.error('❌ PDF Export Error:', err);
+      showToast("error", `Export failed: ${err.message}`);
+    }
+  };
+
   const onToggleSelect = (id: string) => {
     setSelectedTransactions((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
@@ -627,21 +817,6 @@ export default function TransactionManager() {
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const blob = await transactionsAPI.exportCsv();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `transactions-${new Date().toISOString().split("T")[0]}.csv`;
-      a.click();
-      showToast("success", "Transactions exported successfully");
-    } catch (err) {
-      showToast("error", "Failed to export transactions");
-      console.error(err);
-    }
-  };
-
   const applyQuickDateFilter = (days: number) => {
     const today = new Date();
     const fromDate = new Date();
@@ -799,36 +974,59 @@ export default function TransactionManager() {
                 )}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2 border-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 px-3 py-2 border-2 rounded-lg text-sm font-medium transition-colors ${
                   showFilters || activeFilterCount > 0
                     ? "bg-blue-50 border-blue-300 text-blue-700"
                     : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
                 }`}
               >
                 <Filter className="w-4 h-4" />
-                Filters
+                <span className="hidden sm:inline">Filters</span>
                 {activeFilterCount > 0 && (
                   <span className="bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full">
                     {activeFilterCount}
                   </span>
                 )}
               </button>
+              
+              {/* Export Buttons - CSV, Excel, PDF */}
               <button
-                onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                onClick={handleExportCSV}
+                className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors shadow-sm"
+                title="Export as CSV"
               >
                 <Download className="w-4 h-4" />
-                Export
+                <span>CSV</span>
               </button>
+
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+                title="Export as Excel"
+              >
+                <Download className="w-4 h-4" />
+                <span>Excel</span>
+              </button>
+
+              <button
+                onClick={handleExportPDF}
+                className="flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors shadow-sm"
+                title="Export as PDF"
+              >
+                <Download className="w-4 h-4" />
+                <span>PDF</span>
+              </button>
+             
               <button
                 onClick={() => setShowAdd(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg text-sm font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg"
+                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg text-sm font-semibold hover:from-indigo-700 hover:to-indigo-800 transition-all shadow-md"
               >
                 <Plus className="w-4 h-4" />
-                Add Transaction
+                <span className="hidden sm:inline">Add Transaction</span>
+                <span className="sm:hidden">Add</span>
               </button>
             </div>
           </div>
