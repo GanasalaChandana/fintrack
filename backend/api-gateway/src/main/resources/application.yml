@@ -7,50 +7,14 @@ spring:
 
   cloud:
     gateway:
-      # ✅ FIXED: Global CORS Configuration for Vercel
-      globalcors:
-        add-to-simple-url-handler-mapping: true
-        corsConfigurations:
-          '[/**]':
-            allowedOrigins:
-              - "http://localhost:3000"
-              - "http://localhost:3001"
-              - "https://fintrack-liart.vercel.app"
-              - "https://*.vercel.app"
-            allowedMethods:
-              - GET
-              - POST
-              - PUT
-              - DELETE
-              - PATCH
-              - OPTIONS
-            allowedHeaders:
-              - "*"
-            exposedHeaders:
-              - Authorization
-              - Content-Type
-            allowCredentials: true
-            maxAge: 3600
+      # ✅ REMOVED globalcors block — handled by CorsConfig.java bean instead
+      # ✅ REMOVED DedupeResponseHeader — no longer needed
 
-      # ✅ DISABLE Rate Limiting Completely
-      filter:
-        request-rate-limiter:
-          enabled: false
-      
-      redis-rate-limiter:
-        enabled: false
-
-      # FIXED: Ensure CORS headers aren't duplicated
-      default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
-
-      # FIXED: Increased default timeout to prevent 504 errors
       httpclient:
         connect-timeout: 10000
         response-timeout: 30s
 
       routes:
-        # ================= AUTH (NO AUTH REQUIRED) =================
         - id: users-service-auth
           uri: ${USERS_SERVICE_URL:http://localhost:8081}
           predicates:
@@ -61,7 +25,6 @@ spring:
                 regexp: /api/auth/(?<segment>.*)
                 replacement: /api/auth/${segment}
 
-        # ✅ OAUTH2 LOGIN ROUTES (NO AUTH REQUIRED)
         - id: oauth2-login
           uri: ${USERS_SERVICE_URL:http://localhost:8081}
           predicates:
@@ -72,7 +35,6 @@ spring:
                 regexp: /oauth2/(?<segment>.*)
                 replacement: /oauth2/${segment}
 
-        # ✅ LOGIN CALLBACK ROUTES (NO AUTH REQUIRED)
         - id: login-oauth2-code
           uri: ${USERS_SERVICE_URL:http://localhost:8081}
           predicates:
@@ -83,7 +45,6 @@ spring:
                 regexp: /login/oauth2/code/(?<segment>.*)
                 replacement: /login/oauth2/code/${segment}
 
-        # ✅ GOOGLE AUTH CALLBACK (NO AUTH REQUIRED)
         - id: google-auth-callback
           uri: ${USERS_SERVICE_URL:http://localhost:8081}
           predicates:
@@ -94,7 +55,6 @@ spring:
                 regexp: /api/auth/google/callback
                 replacement: /api/auth/google/callback
 
-        # ================= NOTIFICATIONS (WITH AUTH) =================
         - id: notifications-service
           uri: ${NOTIFICATIONS_SERVICE_URL:http://localhost:8086}
           predicates:
@@ -105,8 +65,7 @@ spring:
               args:
                 name: notificationsCircuitBreaker
                 fallbackUri: forward:/fallback/notifications
-            
-        # ================= USERS (REQUIRES AUTH) =================
+
         - id: users-service
           uri: ${USERS_SERVICE_URL:http://localhost:8081}
           predicates:
@@ -118,7 +77,6 @@ spring:
                 regexp: /api/users/(?<segment>.*)
                 replacement: /api/users/${segment}
 
-        # ================= TRANSACTIONS (REQUIRES AUTH) =================
         - id: transactions-service
           uri: ${TRANSACTIONS_SERVICE_URL:http://localhost:8082}
           predicates:
@@ -134,7 +92,6 @@ spring:
                 name: transactionsCircuitBreaker
                 fallbackUri: forward:/fallback/transactions
 
-        # ================= RECURRING TRANSACTIONS =================
         - id: transactions-service-recurring
           uri: ${TRANSACTIONS_SERVICE_URL:http://localhost:8082}
           predicates:
@@ -146,7 +103,6 @@ spring:
                 regexp: /api/recurring-transactions/(?<segment>.*)
                 replacement: /api/recurring-transactions/${segment}
 
-        # ================= BUDGETS (REQUIRES AUTH) =================
         - id: budgets-service
           uri: ${BUDGETS_SERVICE_URL:http://localhost:8085}
           predicates:
@@ -162,7 +118,6 @@ spring:
                 name: budgetsCircuitBreaker
                 fallbackUri: forward:/fallback/budgets
 
-        # ================= GOALS (REQUIRES AUTH) =================
         - id: goals-service
           uri: ${BUDGETS_SERVICE_URL:http://localhost:8085}
           predicates:
@@ -178,7 +133,6 @@ spring:
                 name: goalsCircuitBreaker
                 fallbackUri: forward:/fallback/goals
 
-        # ================= ALERTS (REQUIRES AUTH) =================
         - id: alerts-service
           uri: ${ALERTS_SERVICE_URL:http://localhost:8083}
           predicates:
@@ -190,7 +144,6 @@ spring:
                 regexp: /api/alerts/(?<segment>.*)
                 replacement: /api/alerts/${segment}
 
-        # ================= REPORTS (REQUIRES AUTH) =================
         - id: reports-service
           uri: ${REPORTS_SERVICE_URL:http://localhost:8084}
           predicates:
@@ -206,7 +159,6 @@ spring:
                 name: reportsCircuitBreaker
                 fallbackUri: forward:/fallback/reports
 
-# ✅ Environment configuration
 app:
   environment: ${APP_ENVIRONMENT:production}
   dev:
@@ -217,7 +169,6 @@ jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
   expiration: ${JWT_EXPIRATION:86400000}
 
-# FIXED: Circuit breaker configuration
 resilience4j:
   circuitbreaker:
     configs:
@@ -240,7 +191,7 @@ resilience4j:
         baseConfig: default
       notificationsCircuitBreaker:
         baseConfig: default
-  
+
   timelimiter:
     configs:
       default:
@@ -264,11 +215,7 @@ logging:
     root: INFO
     com.fintrack: DEBUG
     org.springframework.cloud.gateway: DEBUG
-    org.springframework.cloud.gateway.handler.RoutePredicateHandlerMapping: DEBUG
     org.springframework.web: DEBUG
-    org.springframework.web.server.adapter.HttpWebHandlerAdapter: DEBUG
     org.springframework.security: DEBUG
-    org.springframework.security.oauth2: DEBUG
-    reactor.netty.http.server: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n%wEx"

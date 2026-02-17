@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -40,6 +41,14 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
             ServerHttpRequest request = exchange.getRequest();
 
             log.debug("🔍 Processing request: {} {}", request.getMethod(), request.getURI().getPath());
+
+            // ✅ CRITICAL FIX: Short-circuit ALL OPTIONS preflight requests
+            // Without this, the filter intercepts CORS preflights and returns 401
+            // before CORS headers can be written, causing browser CORS errors
+            if (HttpMethod.OPTIONS.equals(request.getMethod())) {
+                log.debug("✅ OPTIONS preflight request - bypassing auth");
+                return chain.filter(exchange);
+            }
 
             // Development mode bypass
             if (isDevelopmentMode()) {
@@ -81,10 +90,10 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
                     return onError(exchange, "Invalid token payload", HttpStatus.UNAUTHORIZED);
                 }
 
-                // ✅ FIXED: Forward both the Authorization header AND add X-User-Id
+                // Forward both the Authorization header AND add X-User-Id
                 ServerHttpRequest modifiedRequest = request.mutate()
-                        .header(HttpHeaders.AUTHORIZATION, authHeader) // ✅ Forward the original token
-                        .header("X-User-Id", userId) // ✅ Add user ID for convenience
+                        .header(HttpHeaders.AUTHORIZATION, authHeader)
+                        .header("X-User-Id", userId)
                         .build();
 
                 log.info("✅ Authentication successful for user: {} | Route: {}", userId, request.getURI().getPath());

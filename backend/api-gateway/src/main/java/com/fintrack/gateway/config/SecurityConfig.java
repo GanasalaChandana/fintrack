@@ -10,12 +10,7 @@ import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
-import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
-import org.springframework.web.cors.reactive.CorsWebFilter;
-import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
-
-import java.util.Arrays;
 
 @Configuration
 @EnableWebFluxSecurity
@@ -37,27 +32,14 @@ public class SecurityConfig {
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http
-                // ✅ CRITICAL: Disable sessions - we're using JWT tokens
                 .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
-
-                // ✅ Enable CORS with our custom configuration
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
-
-                // ✅ Disable CSRF for REST APIs
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
-
-                // ✅ CRITICAL: Disable HTTP Basic Auth (prevents browser login popup)
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
-
-                // ✅ CRITICAL: Disable form login
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
-
-                // ✅ Configure authorization
                 .authorizeExchange(exchange -> exchange
-                        // ✅ CRITICAL: Allow ALL OPTIONS requests (CORS preflight)
+                        // ✅ CRITICAL: Must be first — allow ALL preflight requests
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                        // ✅ Public auth endpoints
                         .pathMatchers(
                                 "/api/auth/login",
                                 "/api/auth/register",
@@ -66,17 +48,9 @@ public class SecurityConfig {
                                 "/oauth2/**",
                                 "/login/oauth2/code/**")
                         .permitAll()
-
-                        // ✅ Health check endpoints
                         .pathMatchers("/api/health/**", "/actuator/**").permitAll()
-
-                        // ✅ All other requests require authentication
                         .anyExchange().authenticated())
-
-                // ✅ Add JWT authentication filter
-                .addFilterAt(jwtAuthenticationWebFilter(),
-                        SecurityWebFiltersOrder.AUTHENTICATION)
-
+                .addFilterAt(jwtAuthenticationWebFilter(), SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();
     }
 }
