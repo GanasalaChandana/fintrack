@@ -7,8 +7,10 @@ spring:
 
   cloud:
     gateway:
-      # ✅ REMOVED globalcors block — handled by CorsConfig.java bean instead
-      # ✅ REMOVED DedupeResponseHeader — no longer needed
+      # ✅ DedupeResponseHeader added back — needed because downstream services
+      # (users-service, etc.) also set CORS headers, causing duplicates
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
 
       httpclient:
         connect-timeout: 10000

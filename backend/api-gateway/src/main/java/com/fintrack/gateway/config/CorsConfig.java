@@ -39,4 +39,8 @@ public class CorsConfig {
 
                 return source;
         }
+
+        // ✅ NO CorsWebFilter bean here — it would duplicate CORS headers
+        // Spring Security's .cors() in SecurityConfig uses corsConfigurationSource()
+        // directly
 }
