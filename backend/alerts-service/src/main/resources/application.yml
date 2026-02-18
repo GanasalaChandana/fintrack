@@ -1,5 +1,5 @@
 ﻿server:
-  port: ${SERVER_PORT:8083}
+  port: ${PORT:8083}
   tomcat:
     max-connections: 10000
     threads:

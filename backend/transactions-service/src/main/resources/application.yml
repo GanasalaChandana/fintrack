@@ -1,5 +1,5 @@
 ﻿server:
-  port: ${SERVER_PORT:8082}
+  port: ${PORT:8082}
   # FIXED: Increased connection limits and disabled rate limiting
   tomcat:
     max-connections: 10000
