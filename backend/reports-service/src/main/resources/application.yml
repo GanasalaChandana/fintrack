@@ -1,5 +1,5 @@
 ﻿server:
-  port: ${REPORTS_SERVICE_PORT:8084}
+  port: ${PORT:8084}
   # FIXED: Increased connection limits
   tomcat:
     max-connections: 10000
