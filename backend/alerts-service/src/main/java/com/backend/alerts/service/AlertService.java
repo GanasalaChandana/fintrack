@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import com.backend.alerts.model.Alert;
 import com.backend.alerts.repository.AlertRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -14,16 +15,18 @@ public class AlertService {
     @Autowired
     private AlertRepository alertRepository;
 
+    // ─── Basic CRUD ───────────────────────────────────────────────────────────
+
     public List<Alert> getAllAlerts() {
         return alertRepository.findAll();
     }
 
     public Alert getAlertById(Long id) {
         return alertRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Alert not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Alert not found: " + id));
     }
 
-    public List<Alert> getAlertsByUserId(Long userId) {
+    public List<Alert> getAlertsByUserId(String userId) {
         return alertRepository.findByUserId(userId);
     }
 
@@ -32,12 +35,12 @@ public class AlertService {
     }
 
     public Alert updateAlert(Long id, Alert alert) {
-        Alert existingAlert = getAlertById(id);
-        existingAlert.setMessage(alert.getMessage());
-        existingAlert.setType(alert.getType());
-        existingAlert.setStatus(alert.getStatus());
-        existingAlert.setPriority(alert.getPriority());
-        return alertRepository.save(existingAlert);
+        Alert existing = getAlertById(id);
+        existing.setMessage(alert.getMessage());
+        existing.setType(alert.getType());
+        existing.setStatus(alert.getStatus());
+        existing.setPriority(alert.getPriority());
+        return alertRepository.save(existing);
     }
 
     public void deleteAlert(Long id) {
@@ -50,14 +53,13 @@ public class AlertService {
         return alertRepository.save(alert);
     }
 
-    // Kafka-related helper methods - Fixed to use Long instead of String
+    // ─── Kafka helpers (UUID → String) ───────────────────────────────────────
 
     public void createBudgetExceededAlert(UUID userId, String category, double spent, double budget) {
         Alert alert = new Alert();
-        alert.setUserId(userId.getMostSignificantBits()); // Convert UUID to Long
+        alert.setUserId(userId.toString());
         alert.setType("BUDGET_EXCEEDED");
-        alert.setMessage(String.format("Budget exceeded for %s: $%.2f spent (Budget: $%.2f)",
-                category, spent, budget));
+        alert.setMessage(String.format("Budget exceeded for %s: $%.2f spent (Budget: $%.2f)", category, spent, budget));
         alert.setStatus("UNREAD");
         alert.setPriority("HIGH");
         alertRepository.save(alert);
@@ -65,10 +67,10 @@ public class AlertService {
 
     public void createBudgetWarningAlert(UUID userId, String category, double spent, double budget, double percentage) {
         Alert alert = new Alert();
-        alert.setUserId(userId.getMostSignificantBits()); // Convert UUID to Long
+        alert.setUserId(userId.toString());
         alert.setType("BUDGET_WARNING");
-        alert.setMessage(String.format("Budget warning for %s: $%.2f spent (%.0f%% of $%.2f budget)",
-                category, spent, percentage, budget));
+        alert.setMessage(String.format("Budget warning for %s: $%.2f spent (%.0f%% of $%.2f budget)", category, spent,
+                percentage, budget));
         alert.setStatus("UNREAD");
         alert.setPriority("MEDIUM");
         alertRepository.save(alert);
@@ -76,10 +78,9 @@ public class AlertService {
 
     public void createGoalMilestoneAlert(UUID userId, UUID goalId, String goalName, double progress) {
         Alert alert = new Alert();
-        alert.setUserId(userId.getMostSignificantBits()); // Convert UUID to Long
+        alert.setUserId(userId.toString());
         alert.setType("GOAL_MILESTONE");
-        alert.setMessage(String.format("Goal milestone reached for '%s': %.0f%% complete",
-                goalName, progress));
+        alert.setMessage(String.format("Goal milestone reached for '%s': %.0f%% complete", goalName, progress));
         alert.setStatus("UNREAD");
         alert.setPriority("MEDIUM");
         alertRepository.save(alert);
@@ -87,7 +88,7 @@ public class AlertService {
 
     public void createGoalAchievedAlert(UUID userId, UUID goalId, String goalName) {
         Alert alert = new Alert();
-        alert.setUserId(userId.getMostSignificantBits()); // Convert UUID to Long
+        alert.setUserId(userId.toString());
         alert.setType("GOAL_ACHIEVED");
         alert.setMessage(String.format("Congratulations! Goal '%s' has been achieved!", goalName));
         alert.setStatus("UNREAD");
@@ -97,12 +98,70 @@ public class AlertService {
 
     public void createUnusualSpendingAlert(UUID userId, String category, double amount, double average) {
         Alert alert = new Alert();
-        alert.setUserId(userId.getMostSignificantBits()); // Convert UUID to Long
+        alert.setUserId(userId.toString());
         alert.setType("UNUSUAL_SPENDING");
-        alert.setMessage(String.format("Unusual spending detected in %s: $%.2f (Average: $%.2f)",
-                category, amount, average));
+        alert.setMessage(
+                String.format("Unusual spending detected in %s: $%.2f (Average: $%.2f)", category, amount, average));
         alert.setStatus("UNREAD");
         alert.setPriority("MEDIUM");
         alertRepository.save(alert);
+    }
+
+    // ─── Acknowledge ──────────────────────────────────────────────────────────
+
+    public Alert acknowledgeAlert(Long id) {
+        Alert alert = getAlertById(id);
+        alert.setRead(true);
+        alert.setAcknowledged(true);
+        return alertRepository.save(alert);
+    }
+
+    public int acknowledgeAllByUserId(String userId) {
+        List<Alert> unread = alertRepository.findByUserIdAndReadFalse(userId);
+        unread.forEach(a -> {
+            a.setRead(true);
+            a.setAcknowledged(true);
+        });
+        alertRepository.saveAll(unread);
+        return unread.size();
+    }
+
+    public int acknowledgeAllAlerts() {
+        List<Alert> unread = alertRepository.findByReadFalse();
+        unread.forEach(a -> {
+            a.setRead(true);
+            a.setAcknowledged(true);
+        });
+        alertRepository.saveAll(unread);
+        return unread.size();
+    }
+
+    // ─── Dedup-safe creation ──────────────────────────────────────────────────
+
+    public void createAlertIfNotExists(String userId, String category,
+            String type, String title, String message, String severity) {
+
+        LocalDateTime startOfMonth = LocalDateTime.now()
+                .withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+
+        boolean exists = alertRepository.existsByUserIdAndCategoryAndTypeAndCreatedAtAfter(
+                userId, category, type, startOfMonth);
+
+        if (!exists) {
+            Alert alert = new Alert();
+            alert.setUserId(userId);
+            alert.setTitle(title);
+            alert.setMessage(message);
+            alert.setType(type);
+            alert.setSeverity(severity);
+            alert.setCategory(category);
+            alert.setRead(false);
+            alert.setAcknowledged(false);
+            alert.setCreatedAt(LocalDateTime.now());
+            alertRepository.save(alert);
+            System.out.println("✅ Alert created for user " + userId + " - " + title);
+        } else {
+            System.out.println("⏭️ Alert already exists for user " + userId + " - " + type);
+        }
     }
 }

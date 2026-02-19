@@ -99,3 +99,9 @@ CREATE INDEX IF NOT EXISTS idx_alert_rules_active ON alerts.alert_rules(is_activ
 -- ==================== COMMENTS ====================
 COMMENT ON TABLE alerts.alert_history IS 'Stores user alerts and notifications history';
 COMMENT ON TABLE alerts.alert_rules IS 'Stores user-defined alert rules and conditions';
+
+ALTER TABLE alert ADD COLUMN title VARCHAR(255);
+ALTER TABLE alert ADD COLUMN severity VARCHAR(50);
+ALTER TABLE alert ADD COLUMN category VARCHAR(100);
+ALTER TABLE alert ADD COLUMN read BOOLEAN DEFAULT FALSE;
+ALTER TABLE alert ADD COLUMN acknowledged BOOLEAN DEFAULT FALSE;

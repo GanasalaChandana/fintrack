@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "alerts", schema = "alerts")
+
 public class Alert {
 
     @Id
@@ -12,7 +13,7 @@ public class Alert {
     private Long id;
 
     @Column(name = "user_id")
-    private Long userId;
+    private String userId;
 
     private String message;
 
@@ -21,6 +22,53 @@ public class Alert {
     private String status; // e.g., "ACTIVE", "READ", "DISMISSED"
 
     private String priority; // e.g., "HIGH", "MEDIUM", "LOW"
+
+    private String title;
+    private String severity;
+    private String category;
+    private boolean read = false;
+    private boolean acknowledged = false;
+
+    // getters/setters for all 5 fields
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public String getSeverity() {
+        return severity;
+    }
+
+    public void setSeverity(String severity) {
+        this.severity = severity;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public boolean isRead() {
+        return read;
+    }
+
+    public void setRead(boolean read) {
+        this.read = read;
+    }
+
+    public boolean isAcknowledged() {
+        return acknowledged;
+    }
+
+    public void setAcknowledged(boolean acknowledged) {
+        this.acknowledged = acknowledged;
+    }
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -48,11 +96,11 @@ public class Alert {
         this.id = id;
     }
 
-    public Long getUserId() {
+    public String getUserId() {
         return userId;
     }
 
-    public void setUserId(Long userId) {
+    public void setUserId(String userId) {
         this.userId = userId;
     }
 
