@@ -7,8 +7,25 @@ spring:
 
   cloud:
     gateway:
-      # ✅ DedupeResponseHeader added back — needed because downstream services
-      # (users-service, etc.) also set CORS headers, causing duplicates
+      # ✅ Global CORS configuration — handles CORS for ALL routes including error responses
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins:
+              - "https://fintrack-liart.vercel.app"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+            maxAge: 3600
+
+      # ✅ DedupeResponseHeader — prevents duplicate CORS headers from downstream services
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
 
