@@ -4,12 +4,21 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
+import org.springframework.web.cors.reactive.CorsWebFilter;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
 
 @Configuration
 public class CorsConfig {
+
+        // ✅ CorsWebFilter applies CORS at the WebFlux filter level —
+        // this ensures CORS headers are present on ALL responses,
+        // including 4xx/5xx errors from downstream or Render's rate limiter (429)
+        @Bean
+        public CorsWebFilter corsWebFilter() {
+                return new CorsWebFilter(corsConfigurationSource());
+        }
 
         @Bean
         public CorsConfigurationSource corsConfigurationSource() {
@@ -39,8 +48,4 @@ public class CorsConfig {
 
                 return source;
         }
-
-        // ✅ NO CorsWebFilter bean here — it would duplicate CORS headers
-        // Spring Security's .cors() in SecurityConfig uses corsConfigurationSource()
-        // directly
 }

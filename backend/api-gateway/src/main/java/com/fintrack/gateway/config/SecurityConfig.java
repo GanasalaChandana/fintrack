@@ -10,18 +10,15 @@ import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
-import org.springframework.web.cors.reactive.CorsConfigurationSource;
 
 @Configuration
 @EnableWebFluxSecurity
 public class SecurityConfig {
 
     private final JwtUtil jwtUtil;
-    private final CorsConfigurationSource corsConfigurationSource;
 
-    public SecurityConfig(JwtUtil jwtUtil, CorsConfigurationSource corsConfigurationSource) {
+    public SecurityConfig(JwtUtil jwtUtil) {
         this.jwtUtil = jwtUtil;
-        this.corsConfigurationSource = corsConfigurationSource;
     }
 
     @Bean
@@ -33,12 +30,15 @@ public class SecurityConfig {
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http
                 .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
-                .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                // ✅ CORS is handled globally by CorsWebFilter in CorsConfig.java
+                // which runs BEFORE the security chain — ensuring CORS headers are
+                // present on ALL responses including 429s and error responses
+                .cors(ServerHttpSecurity.CorsSpec::disable)
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
                 .authorizeExchange(exchange -> exchange
-                        // ✅ CRITICAL: Must be first — allow ALL preflight requests
+                        // ✅ CRITICAL: Must be first — allow ALL preflight OPTIONS requests
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .pathMatchers(
                                 "/api/auth/login",
