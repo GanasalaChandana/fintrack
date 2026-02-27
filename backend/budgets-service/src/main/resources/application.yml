@@ -84,6 +84,16 @@ management:
     health:
       show-details: always
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+    try-it-out-enabled: true
+  show-actuator: false
+
 logging:
   level:
     com.fintrack: DEBUG

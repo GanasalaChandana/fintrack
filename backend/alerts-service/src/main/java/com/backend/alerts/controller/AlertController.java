@@ -12,6 +12,15 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/alerts")
+@CrossOrigin(
+    origins = {
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://fintrack-liart.vercel.app"
+    },
+    allowCredentials = "true",
+    maxAge = 3600
+)
 public class AlertController {
 
     @Autowired

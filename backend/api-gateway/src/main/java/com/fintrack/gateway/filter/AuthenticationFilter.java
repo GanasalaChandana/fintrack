@@ -35,18 +35,33 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
         super(Config.class);
     }
 
+    // Swagger / OpenAPI paths that should bypass authentication
+    private static final java.util.List<String> SWAGGER_PATHS = java.util.List.of(
+        "/v3/api-docs",
+        "/swagger-ui",
+        "/swagger-ui.html",
+        "/webjars/swagger-ui"
+    );
+
     @Override
     public GatewayFilter apply(Config config) {
         return (exchange, chain) -> {
             ServerHttpRequest request = exchange.getRequest();
+            String path = request.getURI().getPath();
 
-            log.debug("🔍 Processing request: {} {}", request.getMethod(), request.getURI().getPath());
+            log.debug("🔍 Processing request: {} {}", request.getMethod(), path);
 
             // ✅ CRITICAL FIX: Short-circuit ALL OPTIONS preflight requests
             // Without this, the filter intercepts CORS preflights and returns 401
             // before CORS headers can be written, causing browser CORS errors
             if (HttpMethod.OPTIONS.equals(request.getMethod())) {
                 log.debug("✅ OPTIONS preflight request - bypassing auth");
+                return chain.filter(exchange);
+            }
+
+            // ✅ Bypass authentication for Swagger / OpenAPI documentation paths
+            if (SWAGGER_PATHS.stream().anyMatch(path::startsWith)) {
+                log.debug("✅ Swagger path - bypassing auth: {}", path);
                 return chain.filter(exchange);
             }
 

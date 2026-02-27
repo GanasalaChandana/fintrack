@@ -19,6 +19,15 @@ import java.util.Optional;
 @RequestMapping("/api/budgets")
 @RequiredArgsConstructor
 @Slf4j
+@CrossOrigin(
+    origins = {
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://fintrack-liart.vercel.app"
+    },
+    allowCredentials = "true",
+    maxAge = 3600
+)
 public class BudgetController {
 
     private final BudgetsService budgetsService;

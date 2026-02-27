@@ -3,6 +3,8 @@ package com.fintrack.transactions.service;
 import com.fintrack.transactions.client.MLClassifierClient;
 import com.fintrack.transactions.dto.*;
 import com.fintrack.transactions.entity.Transaction;
+import com.fintrack.transactions.kafka.TransactionEvent;
+import com.fintrack.transactions.kafka.TransactionEventPublisher;
 import com.fintrack.transactions.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +28,7 @@ public class TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final MLClassifierClient mlClassifierClient;
+    private final TransactionEventPublisher transactionEventPublisher;
 
     @Transactional
     public TransactionResponse createTransaction(CreateTransactionRequest request, String userId) {
@@ -56,6 +59,9 @@ public class TransactionService {
 
         Transaction saved = transactionRepository.save(transaction);
         log.info("Transaction created with ID: {}", saved.getId());
+
+        // Publish Kafka event for downstream services (alerts, reports, etc.)
+        transactionEventPublisher.publishTransactionCreated(buildEvent(saved));
 
         return mapToResponse(saved);
     }
@@ -88,6 +94,9 @@ public class TransactionService {
 
         Transaction saved = transactionRepository.save(transaction);
         log.info("Transaction created with ID: {}", saved.getId());
+
+        // Publish Kafka event for downstream services
+        transactionEventPublisher.publishTransactionCreated(saved);
 
         return mapToResponse(saved);
     }
@@ -171,6 +180,18 @@ public class TransactionService {
         summary.put("transactionCount", transactionCount);
 
         return summary;
+    }
+
+    private TransactionEvent buildEvent(Transaction transaction) {
+        return TransactionEvent.builder()
+                .transactionId(String.valueOf(transaction.getId()))
+                .userId(transaction.getUserId())
+                .description(transaction.getDescription())
+                .amount(transaction.getAmount())
+                .category(transaction.getCategory())
+                .type(transaction.getType())
+                .date(transaction.getDate())
+                .build();
     }
 
     private TransactionResponse mapToResponse(Transaction transaction) {

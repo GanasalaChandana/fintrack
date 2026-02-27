@@ -26,6 +26,9 @@ public class JwtUtil {
     @Value("${jwt.expiration:86400000}") // Default 24 hours
     private Long expiration;
 
+    @Value("${jwt.refresh-expiration:604800000}") // Default 7 days
+    private Long refreshExpiration;
+
     private SecretKey getSigningKey() {
         // Ensure the secret is at least 256 bits (32 bytes) for HS256
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
@@ -145,5 +148,37 @@ public class JwtUtil {
         Claims claims = extractAllClaims(token);
         Object email = claims.get("email");
         return email != null ? email.toString() : extractUsername(token);
+    }
+
+    // Generate a long-lived refresh token (7 days by default)
+    public String generateRefreshToken(User user) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", user.getId().toString());
+        claims.put("email", user.getEmail());
+        claims.put("tokenType", "refresh");
+
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + refreshExpiration);
+
+        log.debug("🔄 Generating refresh token for user: {} (expires: {})", user.getEmail(), expiryDate);
+
+        return Jwts.builder()
+                .claims(claims)
+                .subject(user.getEmail())
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(getSigningKey())
+                .compact();
+    }
+
+    // Check whether a token is a refresh token (has tokenType=refresh claim)
+    public boolean isRefreshToken(String token) {
+        try {
+            Claims claims = extractAllClaims(token);
+            return "refresh".equals(claims.get("tokenType", String.class));
+        } catch (Exception e) {
+            log.error("❌ Failed to check refresh token type: {}", e.getMessage());
+            return false;
+        }
     }
 }

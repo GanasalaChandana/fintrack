@@ -1,22 +1,36 @@
 package com.fintrack.reports_service.controller;
 
+import com.fintrack.reports_service.entity.ScheduledReport;
 import com.fintrack.reports_service.service.PdfGeneratorService;
+import com.fintrack.reports_service.service.ReportSchedulerService;
 import com.fintrack.reports_service.service.ReportsService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/reports")
 @RequiredArgsConstructor
+@CrossOrigin(
+    origins = {
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://fintrack-liart.vercel.app"
+    },
+    allowCredentials = "true",
+    maxAge = 3600
+)
 public class ReportsController {
 
     private final ReportsService reportsService;
-    private final PdfGeneratorService pdfGeneratorService; // ✅ Added
+    private final PdfGeneratorService pdfGeneratorService;
+    private final ReportSchedulerService reportSchedulerService;
 
     @GetMapping("/financial")
     public ResponseEntity<Map<String, Object>> getFinancialReports(
@@ -135,6 +149,60 @@ public class ReportsController {
         return ResponseEntity.ok(Map.of(
                 "forecast", List.of()));
     }
+
+    // ── Email scheduling endpoints ────────────────────────────────────────────
+
+    @PostMapping("/schedule")
+    public ResponseEntity<?> createSchedule(
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        try {
+            String finalUserId = userId != null ? userId : getUserIdFromAuth(authentication);
+            String frequency   = (String) body.getOrDefault("frequency", "MONTHLY");
+            String email       = (String) body.getOrDefault("email", "");
+            String reportType  = (String) body.getOrDefault("reportType", "FINANCIAL");
+
+            if (email == null || email.isBlank()) {
+                return ResponseEntity.badRequest().body(
+                        Map.of("error", "email is required"));
+            }
+
+            ScheduledReport schedule = reportSchedulerService.createSchedule(
+                    UUID.fromString(finalUserId), email, frequency, reportType);
+            return ResponseEntity.status(HttpStatus.CREATED).body(schedule);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/schedule")
+    public ResponseEntity<List<ScheduledReport>> getSchedules(
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        String finalUserId = userId != null ? userId : getUserIdFromAuth(authentication);
+        List<ScheduledReport> schedules = reportSchedulerService.getSchedulesForUser(
+                UUID.fromString(finalUserId));
+        return ResponseEntity.ok(schedules);
+    }
+
+    @DeleteMapping("/schedule/{id}")
+    public ResponseEntity<?> deleteSchedule(
+            @PathVariable UUID id,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        try {
+            reportSchedulerService.deleteSchedule(id);
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ── Helper methods ────────────────────────────────────────────────────────
 
     private String getUserIdFromAuth(Authentication authentication) {
         if (authentication == null || authentication.getPrincipal() == null) {

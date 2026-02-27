@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+data:
+  fintrack-overview.json: |
+    {
+      "title": "FinTrack - Service Overview",
+      "uid": "fintrack-overview",
+      "version": 1,
+      "schemaVersion": 38,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "HTTP Request Rate (req/s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [
+            {
+              "expr": "sum(rate(http_server_requests_seconds_count[1m])) by (uri, application)",
+              "legendFormat": "{{application}} - {{uri}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "reqps" }
+          }
+        },
+        {
+          "id": 2,
+          "title": "HTTP Error Rate (%)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [
+            {
+              "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[1m])) by (application) / sum(rate(http_server_requests_seconds_count[1m])) by (application) * 100",
+              "legendFormat": "{{application}} error %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "percent" }
+          }
+        },
+        {
+          "id": 3,
+          "title": "JVM Heap Used (MB)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            {
+              "expr": "jvm_memory_used_bytes{area=\"heap\"} / 1024 / 1024",
+              "legendFormat": "{{application}} heap MB"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "decmbytes" }
+          }
+        },
+        {
+          "id": 4,
+          "title": "HTTP P95 Latency (ms)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, application)) * 1000",
+              "legendFormat": "{{application}} p95"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "ms" }
+          }
+        },
+        {
+          "id": 5,
+          "title": "Kafka Consumer Lag",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "targets": [
+            {
+              "expr": "kafka_consumer_fetch_manager_records_lag",
+              "legendFormat": "{{topic}} - {{partition}}"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "Active DB Connections",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "targets": [
+            {
+              "expr": "hikaricp_connections_active",
+              "legendFormat": "{{application}}"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Redis Cache Hit Rate (%)",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 12, "x": 0, "y": 24 },
+          "targets": [
+            {
+              "expr": "sum(rate(cache_gets_total{result=\"hit\"}[5m])) / sum(rate(cache_gets_total[5m])) * 100",
+              "legendFormat": "Cache Hit Rate"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "percent", "min": 0, "max": 100 }
+          }
+        },
+        {
+          "id": 8,
+          "title": "Pod Restarts",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 12, "x": 12, "y": 24 },
+          "targets": [
+            {
+              "expr": "sum(kube_pod_container_status_restarts_total) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        }
+      ]
+    }

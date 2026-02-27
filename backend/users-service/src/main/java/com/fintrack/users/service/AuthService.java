@@ -46,6 +46,7 @@ public class AuthService {
 
                 // Generate JWT token
                 String token = jwtUtil.generateToken(savedUser);
+                String refreshToken = jwtUtil.generateRefreshToken(savedUser);
 
                 // Build response
                 AuthResponse.UserDto userDto = AuthResponse.UserDto.builder()
@@ -59,6 +60,7 @@ public class AuthService {
 
                 return AuthResponse.builder()
                                 .token(token)
+                                .refreshToken(refreshToken)
                                 .user(userDto)
                                 .build();
         }
@@ -78,6 +80,7 @@ public class AuthService {
 
                 // Generate JWT token
                 String token = jwtUtil.generateToken(user);
+                String refreshToken = jwtUtil.generateRefreshToken(user);
 
                 // Build response
                 AuthResponse.UserDto userDto = AuthResponse.UserDto.builder()
@@ -91,6 +94,46 @@ public class AuthService {
 
                 return AuthResponse.builder()
                                 .token(token)
+                                .refreshToken(refreshToken)
+                                .user(userDto)
+                                .build();
+        }
+
+        @Transactional(readOnly = true)
+        public AuthResponse refreshToken(String refreshToken) {
+                // Validate it's actually a refresh token
+                if (!jwtUtil.isRefreshToken(refreshToken)) {
+                        throw new IllegalArgumentException("Invalid refresh token");
+                }
+
+                // Check token is not expired
+                if (!jwtUtil.isTokenValid(refreshToken)) {
+                        throw new IllegalArgumentException("Refresh token has expired");
+                }
+
+                // Extract email and load user
+                String email = jwtUtil.extractEmail(refreshToken);
+                User user = userRepository.findByEmail(email)
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                log.info("🔄 Refreshing token for user: {}", email);
+
+                // Issue new access token (and rotate refresh token)
+                String newToken = jwtUtil.generateToken(user);
+                String newRefreshToken = jwtUtil.generateRefreshToken(user);
+
+                AuthResponse.UserDto userDto = AuthResponse.UserDto.builder()
+                                .id(user.getId())
+                                .email(user.getEmail())
+                                .username(user.getUsername())
+                                .firstName(user.getFirstName())
+                                .lastName(user.getLastName())
+                                .role(user.getRole().toString())
+                                .build();
+
+                return AuthResponse.builder()
+                                .token(newToken)
+                                .refreshToken(newRefreshToken)
                                 .user(userDto)
                                 .build();
         }

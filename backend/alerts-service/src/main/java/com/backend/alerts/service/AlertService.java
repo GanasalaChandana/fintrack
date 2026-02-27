@@ -1,15 +1,18 @@
 package com.backend.alerts.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import com.backend.alerts.model.Alert;
 import com.backend.alerts.repository.AlertRepository;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class AlertService {
 
     @Autowired
@@ -134,6 +137,50 @@ public class AlertService {
         });
         alertRepository.saveAll(unread);
         return unread.size();
+    }
+
+    // ─── Kafka consumer entry-point ──────────────────────────────────────────
+
+    /**
+     * Called by TransactionEventConsumer when a new transaction is received via Kafka.
+     * Creates a notification alert for the user and optionally a budget warning.
+     *
+     * @param userId   the user who made the transaction (String)
+     * @param category the transaction category (e.g. "Dining", "Shopping")
+     * @param amount   the transaction amount
+     */
+    public void checkBudgetThreshold(String userId, String category, BigDecimal amount) {
+        if (userId == null || category == null || amount == null) {
+            log.warn("⚠️ checkBudgetThreshold called with null parameter(s): userId={}, category={}, amount={}",
+                    userId, category, amount);
+            return;
+        }
+
+        log.info("📊 Checking budget threshold for user={} category={} amount={}", userId, category, amount);
+
+        // Create a transaction notification alert (dedup-safe)
+        createAlertIfNotExists(
+                userId,
+                category,
+                "TRANSACTION_ALERT",
+                "New " + category + " transaction",
+                String.format("A new expense of $%.2f was recorded in %s", amount.doubleValue(), category),
+                "LOW"
+        );
+
+        // Trigger a budget warning for high-spend categories (threshold: $500)
+        BigDecimal highSpendThreshold = new BigDecimal("500.00");
+        if (amount.compareTo(highSpendThreshold) >= 0) {
+            createAlertIfNotExists(
+                    userId,
+                    category,
+                    "HIGH_SPEND_ALERT",
+                    "High spend detected in " + category,
+                    String.format("A single transaction of $%.2f in %s exceeded the $500 threshold",
+                            amount.doubleValue(), category),
+                    "HIGH"
+            );
+        }
     }
 
     // ─── Dedup-safe creation ──────────────────────────────────────────────────

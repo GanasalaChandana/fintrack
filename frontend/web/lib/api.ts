@@ -13,6 +13,7 @@ export interface User {
 
 export interface AuthResponse {
   token: string;
+  refreshToken?: string;
   user: User;
   message?: string;
 }
@@ -118,6 +119,7 @@ function buildApiUrl(endpoint: string, useTransactionsService: boolean = false):
 
 const PRIMARY_TOKEN_KEY = "authToken";
 const LEGACY_TOKEN_KEY = "ft_token";
+const REFRESH_TOKEN_KEY = "refreshToken";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -162,19 +164,30 @@ export function setToken(token: string): void {
 
 export function removeToken(): void {
   if (typeof window === "undefined") return;
-  
+
   console.log('🗑️ Removing all tokens and user data');
-  
+
   localStorage.removeItem(PRIMARY_TOKEN_KEY);
   localStorage.removeItem(LEGACY_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem("user");
   localStorage.removeItem("userId");
-  
+
   sessionStorage.removeItem(PRIMARY_TOKEN_KEY);
-  
+
   document.cookie = `${PRIMARY_TOKEN_KEY}=; path=/; max-age=0`;
-  
+
   console.log('✅ All tokens removed');
+}
+
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+export function setRefreshToken(refreshToken: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
 }
 
 export function getUser(): User | null {
@@ -300,8 +313,53 @@ export async function apiRequest<T = any>(
 
       if (!response.ok) {
         if (response.status === 401) {
+          // Attempt silent token refresh before redirecting to login
+          const storedRefreshToken = getRefreshToken();
+          if (storedRefreshToken && !endpoint.includes('/auth/refresh')) {
+            try {
+              console.log('🔄 Attempting silent token refresh...');
+              const refreshUrl = buildApiUrl('/api/auth/refresh', false);
+              const refreshResponse = await fetch(refreshUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken: storedRefreshToken }),
+                credentials: 'include',
+              });
+
+              if (refreshResponse.ok) {
+                const refreshData = await refreshResponse.json();
+                if (refreshData.token) {
+                  setToken(refreshData.token);
+                  if (refreshData.refreshToken) setRefreshToken(refreshData.refreshToken);
+                  console.log('✅ Token refreshed successfully, retrying original request');
+
+                  // Retry the original request with the new token
+                  const retryResponse = await fetch(url, {
+                    ...config,
+                    headers: {
+                      ...config.headers as Record<string, string>,
+                      Authorization: `Bearer ${refreshData.token}`,
+                    },
+                  });
+
+                  if (retryResponse.ok) {
+                    const retryText = await retryResponse.text();
+                    if (!retryText) return {} as T;
+                    const retryContentType = retryResponse.headers.get('content-type') || '';
+                    if (retryContentType.includes('application/json')) {
+                      return JSON.parse(retryText) as T;
+                    }
+                    return retryText as unknown as T;
+                  }
+                }
+              }
+            } catch (refreshError) {
+              console.warn('⚠️ Token refresh failed:', refreshError);
+            }
+          }
+
           removeToken();
-          
+
           if (typeof window !== 'undefined') {
             setTimeout(() => {
               window.location.href = '/register?mode=signin&reason=session_expired';
@@ -347,6 +405,7 @@ export const authAPI = {
     }, false);
 
     if (response.token) setToken(response.token);
+    if (response.refreshToken) setRefreshToken(response.refreshToken);
     if (response.user) setUser(response.user);
 
     return response;
@@ -362,6 +421,7 @@ export const authAPI = {
     }, false);
 
     if (response.token) setToken(response.token);
+    if (response.refreshToken) setRefreshToken(response.refreshToken);
     if (response.user) setUser(response.user);
 
     return response;
@@ -382,11 +442,14 @@ export const authAPI = {
   },
 
   refreshToken: async (): Promise<AuthResponse> => {
+    const storedRefreshToken = getRefreshToken();
     const response = await apiRequest<AuthResponse>("/api/auth/refresh", {
       method: "POST",
+      body: JSON.stringify({ refreshToken: storedRefreshToken }),
     }, false);
 
     if (response.token) setToken(response.token);
+    if (response.refreshToken) setRefreshToken(response.refreshToken);
     return response;
   },
 

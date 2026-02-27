@@ -2,19 +2,24 @@ package com.fintrack.transactions.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 @Slf4j
 @Component
 public class MLClassifierClient {
 
-    @Value("${ml-classifier.url:http://localhost:5000}")
+    @Value("${ml-classifier.url:http://localhost:8000}")
     private String mlClassifierUrl;
 
-    @Value("${ml-classifier.enabled:false}")
+    @Value("${ml-classifier.enabled:true}")
     private boolean enabled;
 
     private final RestTemplate restTemplate = new RestTemplate();
@@ -26,11 +31,36 @@ public class MLClassifierClient {
         }
 
         try {
-            log.info("Calling ML Classifier for: {}", description);
-            // TODO: Implement actual ML service call when available
+            log.info("Calling ML Classifier /predict for: {}", description);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, Object> requestBody = Map.of(
+                "description", description != null ? description : "",
+                "amount", amount != null ? amount.doubleValue() : 0.0,
+                "merchant", merchant != null ? merchant : ""
+            );
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+            @SuppressWarnings("unchecked")
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                mlClassifierUrl + "/predict", entity, Map.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object category = response.getBody().get("category");
+                if (category != null) {
+                    log.info("✅ ML Classifier returned category: {} for: {}", category, description);
+                    return category.toString();
+                }
+            }
+
+            log.warn("ML Classifier returned unexpected response, falling back to rules");
             return classifyByRules(description, merchant);
+
         } catch (Exception e) {
-            log.warn("ML Classifier failed, falling back to rules: {}", e.getMessage());
+            log.warn("ML Classifier failed ({}), falling back to rules: {}", mlClassifierUrl, e.getMessage());
             return classifyByRules(description, merchant);
         }
     }

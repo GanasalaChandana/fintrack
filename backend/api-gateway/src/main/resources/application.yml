@@ -5,6 +5,11 @@ spring:
   application:
     name: api-gateway
 
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+
   cloud:
     gateway:
       # ✅ DedupeResponseHeader — prevents duplicate CORS headers from downstream services
@@ -26,6 +31,10 @@ spring:
               args:
                 regexp: /api/auth/(?<segment>.*)
                 replacement: /api/auth/${segment}
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter: "#{@authRateLimiter}"
+                key-resolver: "#{@ipKeyResolver}"
 
         - id: oauth2-login
           uri: ${USERS_SERVICE_URL:http://localhost:8081}
@@ -89,6 +98,10 @@ spring:
               args:
                 regexp: /api/transactions/(?<segment>.*)
                 replacement: /api/transactions/${segment}
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter: "#{@apiRateLimiter}"
+                key-resolver: "#{@ipKeyResolver}"
             - name: CircuitBreaker
               args:
                 name: transactionsCircuitBreaker
@@ -161,6 +174,57 @@ spring:
                 name: reportsCircuitBreaker
                 fallbackUri: forward:/fallback/reports
 
+        # ── Swagger / OpenAPI proxy routes (no auth required) ──────────────
+        - id: swagger-users
+          uri: ${USERS_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/swagger/users/**
+          filters:
+            - name: RewritePath
+              args:
+                regexp: /swagger/users/(?<segment>.*)
+                replacement: /${segment}
+
+        - id: swagger-transactions
+          uri: ${TRANSACTIONS_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/swagger/transactions/**
+          filters:
+            - name: RewritePath
+              args:
+                regexp: /swagger/transactions/(?<segment>.*)
+                replacement: /${segment}
+
+        - id: swagger-budgets
+          uri: ${BUDGETS_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/swagger/budgets/**
+          filters:
+            - name: RewritePath
+              args:
+                regexp: /swagger/budgets/(?<segment>.*)
+                replacement: /${segment}
+
+        - id: swagger-alerts
+          uri: ${ALERTS_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/swagger/alerts/**
+          filters:
+            - name: RewritePath
+              args:
+                regexp: /swagger/alerts/(?<segment>.*)
+                replacement: /${segment}
+
+        - id: swagger-reports
+          uri: ${REPORTS_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/swagger/reports/**
+          filters:
+            - name: RewritePath
+              args:
+                regexp: /swagger/reports/(?<segment>.*)
+                replacement: /${segment}
+
 app:
   environment: ${APP_ENVIRONMENT:production}
   dev:
@@ -211,6 +275,23 @@ management:
       show-components: always
     gateway:
       enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: users-service
+        url: /swagger/users/v3/api-docs
+      - name: transactions-service
+        url: /swagger/transactions/v3/api-docs
+      - name: budgets-service
+        url: /swagger/budgets/v3/api-docs
+      - name: alerts-service
+        url: /swagger/alerts/v3/api-docs
+      - name: reports-service
+        url: /swagger/reports/v3/api-docs
 
 logging:
   level:

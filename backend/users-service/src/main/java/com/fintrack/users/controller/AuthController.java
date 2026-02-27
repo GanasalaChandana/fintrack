@@ -151,6 +151,34 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(@RequestBody Map<String, String> body) {
+        try {
+            String refreshToken = body.get("refreshToken");
+            if (refreshToken == null || refreshToken.isBlank()) {
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "Missing refreshToken", "message", "refreshToken is required"));
+            }
+
+            log.info("🔄 Token refresh request received");
+            AuthResponse response = authService.refreshToken(refreshToken);
+            log.info("✅ Token refreshed successfully");
+            return ResponseEntity.ok(response);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("⚠️ Invalid refresh token: {}", e.getMessage());
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", e.getMessage(), "message", "Invalid or expired refresh token"));
+        } catch (Exception e) {
+            log.error("❌ Token refresh failed: {}", e.getMessage());
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage(), "message", "Token refresh failed"));
+        }
+    }
+
     @GetMapping("/health")
     public ResponseEntity<?> health() {
         return ResponseEntity.ok(Map.of(

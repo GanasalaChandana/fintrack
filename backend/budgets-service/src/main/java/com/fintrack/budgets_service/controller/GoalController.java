@@ -15,6 +15,15 @@ import java.util.Map;
 @RestController
 @RequestMapping("/goals")
 @RequiredArgsConstructor
+@CrossOrigin(
+    origins = {
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://fintrack-liart.vercel.app"
+    },
+    allowCredentials = "true",
+    maxAge = 3600
+)
 public class GoalController {
 
     private final GoalService goalService;

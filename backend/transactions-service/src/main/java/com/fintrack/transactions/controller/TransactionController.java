@@ -18,7 +18,16 @@ import java.util.Map;
 @RequestMapping("/api/transactions")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = { "http://localhost:3000", "http://localhost:3001" })
+@CrossOrigin(
+    origins = {
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:5173",
+        "https://fintrack-liart.vercel.app"
+    },
+    allowCredentials = "true",
+    maxAge = 3600
+)
 public class TransactionController {
 
     private final TransactionService transactionService;

@@ -107,20 +107,25 @@ async def health_check():
 @app.post("/classify", response_model=TransactionOutput)
 async def classify_transaction(transaction: TransactionInput):
     """Classify a transaction using rule-based logic"""
-    
+
     try:
         category, confidence = classify_by_rules(
             transaction.description,
             transaction.merchant or ""
         )
-        
+
         return TransactionOutput(
             category=category,
             confidence=confidence
         )
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Classification error: {str(e)}")
+
+@app.post("/predict", response_model=TransactionOutput)
+async def predict_transaction(transaction: TransactionInput):
+    """Predict category for a transaction (ML-compatible endpoint alias for /classify)"""
+    return await classify_transaction(transaction)
 
 @app.post("/batch-classify")
 async def batch_classify(transactions: list[TransactionInput]):
