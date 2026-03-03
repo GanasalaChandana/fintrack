@@ -1,19 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, AlertCircle, Sparkles } from "lucide-react";
 import { transactionsAPI, type Transaction as ApiTransaction } from "@/lib/api";
 import { RecurringTransactionsDashboard } from "@/components/RecurringTransactionsDashboard";
 
-// Transform API transaction to match detector interface
 function transformTransaction(apiTxn: ApiTransaction) {
   return {
     id: apiTxn.id || `txn-${Date.now()}-${Math.random()}`,
     date: apiTxn.date,
-    amount: Math.abs(apiTxn.amount), // Always positive
+    amount: Math.abs(apiTxn.amount),
     category: apiTxn.category,
     description: apiTxn.description,
-    type: apiTxn.type.toUpperCase() as 'INCOME' | 'EXPENSE', // Fix case
+    type: apiTxn.type.toUpperCase() as "INCOME" | "EXPENSE",
   };
 }
 
@@ -22,75 +21,53 @@ export default function RecurringPage() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadTransactions();
-  }, []);
+  useEffect(() => { void loadTransactions(); }, []);
 
-  const loadTransactions = async () => {
+  async function loadTransactions() {
+    setIsLoading(true);
+    setError(null);
     try {
-      setIsLoading(true);
-      setError(null);
-
-      console.log('🔍 Fetching transactions for recurring detection...');
       const data = await transactionsAPI.getAll();
-
-      console.log('📊 Raw transactions:', data.length);
-
-      if (!Array.isArray(data)) {
-        throw new Error('Invalid response format');
-      }
-
-      // Transform transactions to match detector interface
-      const transformed = data.map(transformTransaction);
-      
-      console.log('✅ Transformed transactions:', transformed.length);
-      console.log('📝 Sample transaction:', transformed[0]);
-      
-      setTransactions(transformed);
-    } catch (error: any) {
-      console.error("❌ Failed to load transactions:", error);
-      setError(error?.message || "Failed to load transactions");
+      if (!Array.isArray(data)) throw new Error("Invalid response format");
+      setTransactions(data.map(transformTransaction));
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to load transactions");
       setTransactions([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
   const handleCreateRule = (rule: any) => {
-    console.log('📋 Create rule:', rule);
     alert(`Would create recurring rule for: ${rule.pattern}\nAmount: $${rule.amount}\nFrequency: ${rule.frequency}`);
   };
 
   const handleDeleteRecurring = (id: string) => {
-    console.log('🗑️ Delete recurring:', id);
-    alert('Delete functionality not implemented yet');
+    alert("Delete functionality not implemented yet");
   };
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="mx-auto mb-4 h-16 w-16 animate-spin text-purple-600" />
-          <p className="text-gray-600">Loading recurring transactions...</p>
+          <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-400 font-medium">Loading recurring transactions…</p>
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error && transactions.length === 0) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-        <div className="text-center max-w-md mx-auto p-6">
-          <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 mb-4">
-            <p className="text-red-600 font-semibold mb-2">
-              ⚠️ Error Loading Transactions
-            </p>
-            <p className="text-red-700 text-sm">{error}</p>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-10 text-center max-w-sm w-full">
+          <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-7 h-7 text-red-500" />
           </div>
-          <button
-            onClick={loadTransactions}
-            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-semibold"
-          >
+          <h2 className="text-lg font-bold text-gray-900 mb-2">Couldn't Load Transactions</h2>
+          <p className="text-sm text-gray-500 mb-6">{error}</p>
+          <button onClick={loadTransactions}
+            className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 transition">
             Try Again
           </button>
         </div>
@@ -99,42 +76,33 @@ export default function RecurringPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <RefreshCw className="h-8 w-8 text-purple-600" />
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">
-                  Recurring Transactions
-                </h1>
-                <p className="text-gray-600">
-                  Automatically detect and manage your recurring payments
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={loadTransactions}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Refresh
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-7">
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="w-4 h-4 text-indigo-500" />
+              <span className="text-xs font-bold text-indigo-500 uppercase tracking-widest">Auto-detected</span>
+            </div>
+            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Recurring Transactions</h1>
+            <p className="text-gray-400 text-sm mt-1">Automatically detect and manage your recurring payments.</p>
+          </div>
+          <button onClick={loadTransactions}
+            className="inline-flex items-center gap-2 rounded-2xl bg-white border border-gray-100 shadow-sm px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-slate-50 hover:shadow-md transition-all self-start flex-shrink-0">
+            <RefreshCw className="w-4 h-4" /> Refresh
+          </button>
+        </div>
+
+        {/* Empty state */}
         {transactions.length === 0 ? (
-          <div className="bg-white rounded-2xl p-12 border border-gray-200 text-center">
-            <RefreshCw className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-            <h3 className="text-xl font-bold text-gray-900 mb-2">
-              No Transactions Available
-            </h3>
-            <p className="text-gray-600">
-              Add transactions to detect recurring patterns
-            </p>
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-12 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+              <RefreshCw className="w-7 h-7 text-slate-400" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-800 mb-2">No Transactions Available</h3>
+            <p className="text-sm text-gray-400">Add transactions to detect recurring patterns.</p>
           </div>
         ) : (
           <RecurringTransactionsDashboard
@@ -143,7 +111,7 @@ export default function RecurringPage() {
             onDeleteRecurring={handleDeleteRecurring}
           />
         )}
-      </main>
+      </div>
     </div>
   );
 }

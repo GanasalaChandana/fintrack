@@ -8,15 +8,11 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface BudgetRepository extends JpaRepository<Budget, String> {
-    
-    // Your existing methods...
+public interface BudgetRepository extends JpaRepository<Budget, Long> { // ← Long, not String
+
     List<Budget> findByUserId(String userId);
+
     List<Budget> findByUserIdAndMonth(String userId, String month);
 
-    // ========== NEW METHOD FOR REPORTS ==========
-    
-    /**
-     * Find budget by user and category
-     */
-Optional<Budget> findByUserIdAndCategory(String userId, String category);}
+    Optional<Budget> findByUserIdAndCategory(String userId, String category);
+}

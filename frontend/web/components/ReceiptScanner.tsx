@@ -2,15 +2,8 @@
 
 import React, { useState, useRef } from "react";
 import {
-  Camera,
-  Upload,
-  X,
-  Check,
-  AlertCircle,
-  Loader2,
-  Image as ImageIcon,
-  Edit2,
-  Save,
+  Camera, Upload, X, Check, AlertCircle, Loader2,
+  Edit2, Save, ScanLine, RotateCcw,
 } from "lucide-react";
 import { parseReceiptImage, type ParsedReceipt } from "@/lib/utils/ocrParser";
 
@@ -18,6 +11,12 @@ interface ReceiptScannerProps {
   onReceiptParsed?: (receipt: ParsedReceipt) => void;
   onSaveTransaction?: (transaction: any) => void;
 }
+
+const CATEGORIES = [
+  "Food & Dining", "Transportation", "Shopping", "Healthcare",
+  "Entertainment", "Bills & Utilities", "Groceries", "Education",
+  "Travel", "Personal Care", "Other",
+];
 
 export function ReceiptScanner({ onReceiptParsed, onSaveTransaction }: ReceiptScannerProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -31,26 +30,16 @@ export function ReceiptScanner({ onReceiptParsed, onSaveTransaction }: ReceiptSc
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
-
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      setError("Please select a valid image file");
-      return;
-    }
-
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      setError("Image size must be less than 10MB");
-      return;
-    }
+    if (!file.type.startsWith("image/")) { setError("Please select a valid image file"); return; }
+    if (file.size > 10 * 1024 * 1024) { setError("Image must be less than 10MB"); return; }
 
     setImageFile(file);
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setSelectedImage(e.target?.result as string);
+    reader.onload = (ev) => {
+      setSelectedImage(ev.target?.result as string);
       setError(null);
       setParsedData(null);
     };
@@ -58,14 +47,9 @@ export function ReceiptScanner({ onReceiptParsed, onSaveTransaction }: ReceiptSc
   };
 
   const handleScan = async () => {
-    if (!imageFile) {
-      setError("Please select an image first");
-      return;
-    }
-
+    if (!imageFile) { setError("Please select an image first"); return; }
     setIsProcessing(true);
     setError(null);
-
     try {
       const result = await parseReceiptImage(imageFile);
       setParsedData(result);
@@ -77,13 +61,9 @@ export function ReceiptScanner({ onReceiptParsed, onSaveTransaction }: ReceiptSc
         description: `Receipt from ${result.merchant}`,
         type: "expense",
       });
-      
-      if (onReceiptParsed) {
-        onReceiptParsed(result);
-      }
+      onReceiptParsed?.(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to parse receipt");
-      console.error("Receipt parsing error:", err);
     } finally {
       setIsProcessing(false);
     }
@@ -96,312 +76,231 @@ export function ReceiptScanner({ onReceiptParsed, onSaveTransaction }: ReceiptSc
   };
 
   const handleReset = () => {
-    setSelectedImage(null);
-    setImageFile(null);
-    setParsedData(null);
-    setError(null);
-    setIsEditing(false);
-    setEditedData(null);
+    setSelectedImage(null); setImageFile(null);
+    setParsedData(null); setError(null);
+    setIsEditing(false); setEditedData(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
 
-  const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 0.7) return "text-green-600 bg-green-50 border-green-200";
-    if (confidence >= 0.4) return "text-yellow-600 bg-yellow-50 border-yellow-200";
-    return "text-red-600 bg-red-50 border-red-200";
-  };
+  const confidence = parsedData?.confidence ?? 0;
+  const confidencePct = Math.round(confidence * 100);
+  const confidenceStyle =
+    confidence >= 0.7 ? { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", bar: "bg-emerald-500", label: "High Confidence" } :
+    confidence >= 0.4 ? { bg: "bg-amber-50",   text: "text-amber-700",   border: "border-amber-200",   bar: "bg-amber-400",   label: "Medium Confidence" } :
+                        { bg: "bg-red-50",     text: "text-red-700",     border: "border-red-200",     bar: "bg-red-500",     label: "Low Confidence" };
 
-  const getConfidenceLabel = (confidence: number) => {
-    if (confidence >= 0.7) return "High";
-    if (confidence >= 0.4) return "Medium";
-    return "Low";
-  };
+  const inputCls = "w-full rounded-xl border-2 border-gray-100 px-4 py-2.5 text-sm focus:border-indigo-500 outline-none bg-slate-50 focus:bg-white transition";
 
   return (
-    <div className="space-y-6">
-      {/* Upload Section */}
+    <div className="space-y-5">
+
+      {/* ── Step 1: Upload ───────────────────────────────────────────────── */}
       {!selectedImage && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Camera Upload */}
-          <button
-            onClick={() => cameraInputRef.current?.click()}
-            className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-8 text-center hover:border-indigo-500 hover:bg-indigo-50 transition-all"
-          >
-            <Camera className="mx-auto mb-4 h-12 w-12 text-indigo-600" />
-            <h3 className="font-semibold text-gray-900 mb-2">Take Photo</h3>
-            <p className="text-sm text-gray-600">
-              Use your device camera to capture a receipt
-            </p>
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-          </button>
-
-          {/* File Upload */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-8 text-center hover:border-indigo-500 hover:bg-indigo-50 transition-all"
-          >
-            <Upload className="mx-auto mb-4 h-12 w-12 text-indigo-600" />
-            <h3 className="font-semibold text-gray-900 mb-2">Upload Image</h3>
-            <p className="text-sm text-gray-600">
-              Select a receipt image from your device
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-          </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[
+            {
+              ref: cameraInputRef,
+              capture: "environment" as const,
+              icon: Camera,
+              label: "Take Photo",
+              sub: "Use your device camera to capture a receipt",
+              color: "#6366f1",
+              bg: "hover:bg-indigo-50 hover:border-indigo-400",
+            },
+            {
+              ref: fileInputRef,
+              capture: undefined,
+              icon: Upload,
+              label: "Upload Image",
+              sub: "Select a receipt image from your device",
+              color: "#8b5cf6",
+              bg: "hover:bg-violet-50 hover:border-violet-400",
+            },
+          ].map((item) => (
+            <button key={item.label}
+              onClick={() => item.ref.current?.click()}
+              className={`group rounded-3xl border-2 border-dashed border-gray-200 bg-white p-8 text-center transition-all duration-200 ${item.bg} hover:shadow-md`}>
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+                style={{ backgroundColor: `${item.color}12`, border: `1.5px solid ${item.color}25` }}>
+                <item.icon className="w-7 h-7" style={{ color: item.color }} />
+              </div>
+              <h3 className="font-bold text-gray-800 mb-1">{item.label}</h3>
+              <p className="text-sm text-gray-400">{item.sub}</p>
+              <input ref={item.ref} type="file" accept="image/*"
+                capture={item.capture} onChange={handleFileSelect} className="hidden" />
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Error Message */}
+      {/* ── Error ────────────────────────────────────────────────────────── */}
       {error && (
-        <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
-            <div>
-              <p className="font-semibold text-red-900">Error</p>
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-bold text-red-700">Error</p>
+            <p className="text-xs text-red-600 mt-0.5">{error}</p>
           </div>
+          <button onClick={() => setError(null)} className="ml-auto text-red-300 hover:text-red-500">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
-      {/* Image Preview & Scan */}
+      {/* ── Step 2: Preview ──────────────────────────────────────────────── */}
       {selectedImage && !parsedData && (
-        <div className="rounded-xl bg-white p-6 shadow-lg">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-bold text-gray-900">Preview</h3>
-            <button
-              onClick={handleReset}
-              className="rounded-lg p-2 text-gray-600 hover:bg-gray-100"
-            >
-              <X className="h-5 w-5" />
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-bold text-gray-600 uppercase tracking-wider">Preview</p>
+            <button onClick={handleReset}
+              className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-gray-600 transition px-3 py-1.5 rounded-xl hover:bg-slate-100">
+              <RotateCcw className="w-3.5 h-3.5" /> Clear
             </button>
           </div>
 
-          <div className="mb-6">
-            <img
-              src={selectedImage}
-              alt="Receipt preview"
-              className="mx-auto max-h-96 rounded-lg border-2 border-gray-200 object-contain"
-            />
+          <div className="rounded-2xl overflow-hidden bg-slate-100 border border-gray-100 flex items-center justify-center" style={{ minHeight: 220 }}>
+            <img src={selectedImage} alt="Receipt preview"
+              className="max-h-80 w-auto object-contain rounded-xl" />
           </div>
 
-          <button
-            onClick={handleScan}
-            disabled={isProcessing}
-            className="w-full rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isProcessing ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                Processing...
-              </span>
-            ) : (
-              <span className="flex items-center justify-center gap-2">
-                <Camera className="h-5 w-5" />
-                Scan Receipt
-              </span>
-            )}
+          <button onClick={handleScan} disabled={isProcessing}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:opacity-90 transition disabled:opacity-60">
+            {isProcessing
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing receipt…</>
+              : <><ScanLine className="w-4 h-4" /> Scan Receipt</>
+            }
           </button>
         </div>
       )}
 
-      {/* Parsed Results */}
+      {/* ── Step 3: Results ──────────────────────────────────────────────── */}
       {parsedData && (
         <div className="space-y-4">
-          {/* Confidence Badge */}
-          <div className={`rounded-lg border-2 p-4 ${getConfidenceColor(parsedData.confidence)}`}>
-            <div className="flex items-center justify-between">
+
+          {/* Confidence bar */}
+          <div className={`rounded-2xl border px-4 py-3 ${confidenceStyle.bg} ${confidenceStyle.border}`}>
+            <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <Check className="h-5 w-5" />
-                <span className="font-semibold">
-                  Scan Complete - {getConfidenceLabel(parsedData.confidence)} Confidence
+                <Check className={`w-4 h-4 ${confidenceStyle.text}`} />
+                <span className={`text-sm font-bold ${confidenceStyle.text}`}>
+                  Scan Complete — {confidenceStyle.label}
                 </span>
               </div>
-              <span className="text-sm font-mono">
-                {(parsedData.confidence * 100).toFixed(0)}%
+              <span className={`text-sm font-extrabold font-mono ${confidenceStyle.text}`}>
+                {confidencePct}%
               </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/60 overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${confidenceStyle.bar}`}
+                style={{ width: `${confidencePct}%` }} />
             </div>
           </div>
 
-          {/* Extracted Data */}
-          <div className="rounded-xl bg-white p-6 shadow-lg">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">Extracted Data</h3>
-              <button
-                onClick={() => setIsEditing(!isEditing)}
-                className="flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
-              >
-                <Edit2 className="h-4 w-4" />
+          {/* Extracted data card */}
+          <div className="bg-slate-50 rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-white">
+              <p className="text-sm font-bold text-gray-700">Extracted Data</p>
+              <button onClick={() => setIsEditing(!isEditing)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  isEditing
+                    ? "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                }`}>
+                <Edit2 className="w-3 h-3" />
                 {isEditing ? "Cancel" : "Edit"}
               </button>
             </div>
 
-            {isEditing ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Merchant
-                  </label>
-                  <input
-                    type="text"
-                    value={editedData?.merchant || ""}
-                    onChange={(e) =>
-                      setEditedData({ ...editedData, merchant: e.target.value })
-                    }
-                    className="w-full rounded-lg border-2 border-gray-300 px-4 py-2 focus:border-indigo-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={editedData?.date || ""}
-                    onChange={(e) =>
-                      setEditedData({ ...editedData, date: e.target.value })
-                    }
-                    className="w-full rounded-lg border-2 border-gray-300 px-4 py-2 focus:border-indigo-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Amount
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editedData?.amount || ""}
-                    onChange={(e) =>
-                      setEditedData({ ...editedData, amount: parseFloat(e.target.value) })
-                    }
-                    className="w-full rounded-lg border-2 border-gray-300 px-4 py-2 focus:border-indigo-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Category
-                  </label>
-                  <select
-                    value={editedData?.category || ""}
-                    onChange={(e) =>
-                      setEditedData({ ...editedData, category: e.target.value })
-                    }
-                    className="w-full rounded-lg border-2 border-gray-300 px-4 py-2 focus:border-indigo-500 focus:outline-none"
-                  >
-                    <option value="Food & Dining">Food & Dining</option>
-                    <option value="Transportation">Transportation</option>
-                    <option value="Shopping">Shopping</option>
-                    <option value="Healthcare">Healthcare</option>
-                    <option value="Entertainment">Entertainment</option>
-                    <option value="Bills & Utilities">Bills & Utilities</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description
-                  </label>
-                  <input
-                    type="text"
-                    value={editedData?.description || ""}
-                    onChange={(e) =>
-                      setEditedData({ ...editedData, description: e.target.value })
-                    }
-                    className="w-full rounded-lg border-2 border-gray-300 px-4 py-2 focus:border-indigo-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex justify-between border-b border-gray-200 pb-2">
-                  <span className="font-medium text-gray-700">Merchant:</span>
-                  <span className="text-gray-900">{parsedData.merchant}</span>
-                </div>
-                <div className="flex justify-between border-b border-gray-200 pb-2">
-                  <span className="font-medium text-gray-700">Date:</span>
-                  <span className="text-gray-900">{parsedData.date}</span>
-                </div>
-                <div className="flex justify-between border-b border-gray-200 pb-2">
-                  <span className="font-medium text-gray-700">Total:</span>
-                  <span className="text-lg font-bold text-gray-900">
-                    ${parsedData.total.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-gray-200 pb-2">
-                  <span className="font-medium text-gray-700">Category:</span>
-                  <span className="rounded-full bg-indigo-100 px-3 py-1 text-sm font-semibold text-indigo-700">
-                    {parsedData.category}
-                  </span>
-                </div>
-                {parsedData.items.length > 0 && (
-                  <div className="pt-2">
-                    <span className="font-medium text-gray-700 mb-2 block">
-                      Items ({parsedData.items.length}):
-                    </span>
-                    <ul className="space-y-1 text-sm text-gray-600 max-h-40 overflow-y-auto">
-                      {parsedData.items.map((item, idx) => (
-                        <li key={idx} className="flex justify-between">
-                          <span>
-                            {item.quantity}x {item.name}
-                          </span>
-                          <span>${item.price.toFixed(2)}</span>
-                        </li>
-                      ))}
-                    </ul>
+            <div className="p-5">
+              {isEditing ? (
+                <div className="space-y-3">
+                  {[
+                    { label: "Merchant", key: "merchant", type: "text" },
+                    { label: "Date", key: "date", type: "date" },
+                    { label: "Amount", key: "amount", type: "number" },
+                    { label: "Description", key: "description", type: "text" },
+                  ].map(field => (
+                    <div key={field.key}>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                        {field.label}
+                      </label>
+                      <input type={field.type} value={editedData?.[field.key] || ""}
+                        step={field.type === "number" ? "0.01" : undefined}
+                        onChange={(e) => setEditedData({ ...editedData, [field.key]: field.type === "number" ? parseFloat(e.target.value) : e.target.value })}
+                        className={inputCls} />
+                    </div>
+                  ))}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Category</label>
+                    <select value={editedData?.category || ""} onChange={(e) => setEditedData({ ...editedData, category: e.target.value })} className={inputCls}>
+                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {[
+                    { label: "Merchant", value: parsedData.merchant },
+                    { label: "Date", value: parsedData.date },
+                    { label: "Category", value: parsedData.category, pill: true },
+                  ].map(row => (
+                    <div key={row.label} className="flex items-center justify-between py-2 border-b border-gray-100">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">{row.label}</span>
+                      {row.pill
+                        ? <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold">{row.value}</span>
+                        : <span className="text-sm font-semibold text-gray-800">{row.value}</span>
+                      }
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">Total</span>
+                    <span className="text-xl font-extrabold text-gray-900">${parsedData.total.toFixed(2)}</span>
+                  </div>
 
-            {/* Action Buttons */}
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={handleSaveTransaction}
-                className="flex-1 rounded-lg bg-gradient-to-r from-green-600 to-green-700 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-green-700 hover:to-green-800"
-              >
-                <span className="flex items-center justify-center gap-2">
-                  <Save className="h-5 w-5" />
-                  Save Transaction
-                </span>
-              </button>
-              <button
-                onClick={handleReset}
-                className="rounded-lg border-2 border-gray-300 bg-white px-6 py-3 font-semibold text-gray-700 transition-all hover:bg-gray-50"
-              >
-                Scan Another
-              </button>
+                  {parsedData.items.length > 0 && (
+                    <div className="pt-1">
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">
+                        Items ({parsedData.items.length})
+                      </p>
+                      <div className="space-y-1 max-h-36 overflow-y-auto">
+                        {parsedData.items.map((item, i) => (
+                          <div key={i} className="flex justify-between text-sm text-gray-600 bg-white rounded-xl px-3 py-2">
+                            <span>{item.quantity}× {item.name}</span>
+                            <span className="font-semibold text-gray-800">${item.price.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Preview Image */}
+          {/* Thumbnail + actions */}
           {selectedImage && (
-            <div className="rounded-xl bg-white p-4 shadow-lg">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Original Image</h4>
-              <img
-                src={selectedImage}
-                alt="Receipt"
-                className="mx-auto max-h-48 rounded-lg border border-gray-200 object-contain"
-              />
+            <div className="flex items-center gap-4 bg-white rounded-2xl border border-gray-100 p-3">
+              <img src={selectedImage} alt="Receipt thumbnail"
+                className="w-16 h-16 rounded-xl object-cover flex-shrink-0 border border-gray-100" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Original Image</p>
+                <p className="text-sm text-gray-500 mt-0.5 truncate">{imageFile?.name ?? "receipt.jpg"}</p>
+              </div>
             </div>
           )}
+
+          {/* Action buttons */}
+          <div className="flex gap-3">
+            <button onClick={handleSaveTransaction}
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-200 hover:opacity-90 transition">
+              <Save className="w-4 h-4" /> Save Transaction
+            </button>
+            <button onClick={handleReset}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-gray-200 px-5 py-3 text-sm font-bold text-gray-500 hover:bg-slate-50 transition">
+              <RotateCcw className="w-4 h-4" /> Scan Another
+            </button>
+          </div>
         </div>
       )}
     </div>

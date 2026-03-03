@@ -33,7 +33,14 @@ public class BudgetsService {
     }
 
     public Budget getBudgetById(String id, String userId) {
-        Budget budget = budgetRepository.findById(id)
+        Long budgetId;
+        try {
+            budgetId = Long.parseLong(id);
+        } catch (NumberFormatException e) {
+            throw new ResourceNotFoundException("Invalid budget ID: " + id);
+        }
+
+        Budget budget = budgetRepository.findById(budgetId)
                 .orElseThrow(() -> new ResourceNotFoundException("Budget not found"));
 
         if (!budget.getUserId().equals(userId)) {

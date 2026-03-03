@@ -5,15 +5,15 @@ import { LucideIcon } from 'lucide-react';
 interface StatCardProps {
   title: string;
   value: string;
-  change?: number;
+  change?: number | null; // ✅ null = no previous data, hide badge entirely
   icon: LucideIcon;
   color: string;
   description?: string;
 }
 
 export function StatCard({ title, value, change, icon: Icon, color, description }: StatCardProps) {
-  const isPositive = change !== undefined && change > 0;
-  const isNegative = change !== undefined && change < 0;
+  const isPositive = change !== null && change !== undefined && change > 0;
+  const isNegative = change !== null && change !== undefined && change < 0;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-6 hover:shadow-lg transition-all duration-300">
@@ -21,11 +21,13 @@ export function StatCard({ title, value, change, icon: Icon, color, description 
         <div className={`w-12 h-12 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center shadow-lg`}>
           <Icon className="w-6 h-6 text-white" />
         </div>
-        {change !== undefined && (
+
+        {/* ✅ Only render badge when change is a real number (not null/undefined) */}
+        {change != null && (
           <div className={`px-2 py-1 rounded-lg text-xs font-bold ${
-            isPositive ? 'bg-green-50 text-green-700' : 
-            isNegative ? 'bg-red-50 text-red-700' : 
-            'bg-gray-50 text-gray-700'
+            isPositive ? 'bg-green-50 text-green-700' :
+            isNegative ? 'bg-red-50 text-red-700' :
+            'bg-gray-50 text-gray-500'
           }`}>
             {isPositive && '+'}{change.toFixed(1)}%
           </div>
