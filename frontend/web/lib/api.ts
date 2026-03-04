@@ -1,6 +1,4 @@
-// lib/api.ts - Complete fixed version with retry + request queuing
-
-import { queuedFetch, fetchWithRetry } from "@/lib/fetchWithRetry"; // ← ADDED
+// lib/api.ts - Complete fixed version with proper port routing
 
 // =====================
 // Types
@@ -100,9 +98,12 @@ function getBaseUrl(): string {
 }
 
 function getTransactionsUrl(): string {
-  const envUrl = process.env.NEXT_PUBLIC_TRANSACTIONS_API_URL;
-  const url = envUrl || "http://localhost:8082";
-  const cleanUrl = url.replace(/\/$/, "");
+  // ← ONLY CHANGE: falls back to NEXT_PUBLIC_API_URL (gateway) instead of
+  //   localhost:8082, so transactions always go through the gateway
+  const envUrl = process.env.NEXT_PUBLIC_TRANSACTIONS_API_URL
+    || process.env.NEXT_PUBLIC_API_URL
+    || "http://localhost:8080";
+  const cleanUrl = envUrl.replace(/\/$/, "");
   console.log('💰 Using Transactions Service URL:', cleanUrl);
   return cleanUrl;
 }
@@ -122,53 +123,65 @@ const LEGACY_TOKEN_KEY = "ft_token";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-
-  const token =
-    localStorage.getItem(PRIMARY_TOKEN_KEY) ||
+  
+  const token = 
+    localStorage.getItem(PRIMARY_TOKEN_KEY) || 
     localStorage.getItem(LEGACY_TOKEN_KEY) ||
     sessionStorage.getItem(PRIMARY_TOKEN_KEY) ||
     getCookieToken();
-
+  
   if (!token) {
     console.warn('⚠️ No token found in any storage location');
   } else {
     console.log('✅ Token found:', token.substring(0, 20) + '...');
   }
-
+  
   return token || null;
 }
 
 function getCookieToken(): string | null {
   if (typeof document === "undefined") return null;
+  
   const cookies = document.cookie.split('; ');
   const tokenCookie = cookies.find(row => row.startsWith(`${PRIMARY_TOKEN_KEY}=`));
+  
   return tokenCookie ? tokenCookie.split('=')[1] : null;
 }
 
 export function setToken(token: string): void {
   if (typeof window === "undefined") return;
+  
   console.log('🔐 Setting token in all storage locations');
+  
   localStorage.setItem(PRIMARY_TOKEN_KEY, token);
   localStorage.setItem(LEGACY_TOKEN_KEY, token);
   sessionStorage.setItem(PRIMARY_TOKEN_KEY, token);
+  
   document.cookie = `${PRIMARY_TOKEN_KEY}=${token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+  
   console.log('✅ Token stored successfully');
 }
 
 export function removeToken(): void {
   if (typeof window === "undefined") return;
+  
   console.log('🗑️ Removing all tokens and user data');
+  
   localStorage.removeItem(PRIMARY_TOKEN_KEY);
   localStorage.removeItem(LEGACY_TOKEN_KEY);
   localStorage.removeItem("user");
   localStorage.removeItem("userId");
+  
   sessionStorage.removeItem(PRIMARY_TOKEN_KEY);
+  
   document.cookie = `${PRIMARY_TOKEN_KEY}=; path=/; max-age=0`;
+  
   console.log('✅ All tokens removed');
 }
 
 export function getUser(): User | null {
   if (typeof window === "undefined") return null;
+  
   const userStr = localStorage.getItem("user");
   try {
     return userStr ? JSON.parse(userStr) : null;
@@ -181,7 +194,11 @@ export function getUser(): User | null {
 export function setUser(user: User): void {
   if (typeof window === "undefined") return;
   localStorage.setItem("user", JSON.stringify(user));
-  if (user.id) localStorage.setItem("userId", user.id.toString());
+  
+  if (user.id) {
+    localStorage.setItem("userId", user.id.toString());
+  }
+  
   console.log('✅ User saved to localStorage:', user.email);
 }
 
@@ -212,7 +229,7 @@ export async function apiRequest<T = any>(
 │ Method:   ${options.method || 'GET'}
 │ Endpoint: ${endpoint}
 │ URL:      ${url}
-│ Service:  ${useTransactionsService ? 'Transactions (8082)' : 'Gateway (8080)'}
+│ Service:  ${useTransactionsService ? 'Transactions' : 'Gateway'}
 │ Token:    ${token ? '✅ Present' : '❌ Missing'}
 └─────────────────────────────────────────
   `);
@@ -249,11 +266,7 @@ export async function apiRequest<T = any>(
 
   const requestPromise = (async () => {
     try {
-      // ── CHANGED: was `fetch(url, config)` ────────────────────────────────
-      // queuedFetch caps concurrent requests at 3 (prevents 429 on Render
-      // cold start) and retries up to 4x with exponential backoff on 429s.
-      const response = await queuedFetch(url, config);
-      // ─────────────────────────────────────────────────────────────────────
+      const response = await fetch(url, config);
 
       console.log(`
 ┌─────────────────────────────────────────
@@ -290,6 +303,7 @@ export async function apiRequest<T = any>(
       if (!response.ok) {
         if (response.status === 401) {
           removeToken();
+          
           if (typeof window !== 'undefined') {
             setTimeout(() => {
               window.location.href = '/register?mode=signin&reason=session_expired';
@@ -306,7 +320,7 @@ export async function apiRequest<T = any>(
       }
 
       return data as T;
-
+      
     } catch (error: any) {
       console.error(`❌ API ERROR: ${error.message}`);
       throw error;
@@ -336,6 +350,7 @@ export const authAPI = {
 
     if (response.token) setToken(response.token);
     if (response.user) setUser(response.user);
+
     return response;
   },
 
@@ -350,6 +365,7 @@ export const authAPI = {
 
     if (response.token) setToken(response.token);
     if (response.user) setUser(response.user);
+
     return response;
   },
 
@@ -363,13 +379,15 @@ export const authAPI = {
     }
   },
 
-  getCurrentUser: (): Promise<User> =>
-    apiRequest<User>("/api/auth/me", { method: "GET" }, false),
+  getCurrentUser: (): Promise<User> => {
+    return apiRequest<User>("/api/auth/me", { method: "GET" }, false);
+  },
 
   refreshToken: async (): Promise<AuthResponse> => {
     const response = await apiRequest<AuthResponse>("/api/auth/refresh", {
       method: "POST",
     }, false);
+
     if (response.token) setToken(response.token);
     return response;
   },
@@ -379,6 +397,7 @@ export const authAPI = {
       method: "PUT",
       body: JSON.stringify(userData),
     }, false);
+
     if (response) setUser(response);
     return response;
   },
@@ -386,11 +405,12 @@ export const authAPI = {
   changePassword: async (data: {
     currentPassword: string;
     newPassword: string;
-  }): Promise<{ message: string }> =>
-    apiRequest("/api/auth/change-password", {
+  }): Promise<{ message: string }> => {
+    return apiRequest("/api/auth/change-password", {
       method: "POST",
       body: JSON.stringify(data),
-    }, false),
+    }, false);
+  },
 };
 
 // =====================
@@ -413,60 +433,79 @@ export const transactionsAPI = {
       : "/api/transactions";
 
     try {
-      console.log('🔍 Fetching transactions from service on port 8082...');
-      const data = await apiRequest<Transaction[] | any>(endpoint, { method: "GET" }, true);
+      const data = await apiRequest<Transaction[] | any>(endpoint, {
+        method: "GET",
+      }, true);
 
       let transactions: Transaction[];
-
+      
       if (Array.isArray(data)) {
         transactions = data;
       } else if (data && typeof data === 'object') {
-        if (Array.isArray(data.transactions)) transactions = data.transactions;
-        else if (Array.isArray(data.data)) transactions = data.data;
-        else if (Array.isArray(data.content)) transactions = data.content;
-        else { console.error("Unexpected response format:", data); return []; }
+        if (Array.isArray(data.transactions)) {
+          transactions = data.transactions;
+        } else if (Array.isArray(data.data)) {
+          transactions = data.data;
+        } else if (Array.isArray(data.content)) {
+          transactions = data.content;
+        } else {
+          console.error("Unexpected response format:", data);
+          return [];
+        }
       } else {
         return [];
       }
 
       console.log(`✅ Fetched ${transactions.length} transactions from API`);
       return transactions;
+      
     } catch (error: any) {
       console.error("❌ Error fetching transactions:", error);
       return [];
     }
   },
 
-  getById: (id: string): Promise<Transaction> =>
-    apiRequest<Transaction>(`/api/transactions/${id}`, { method: "GET" }, true),
+  getById: async (id: string): Promise<Transaction> => {
+    return apiRequest<Transaction>(`/api/transactions/${id}`, {
+      method: "GET",
+    }, true);
+  },
 
-  create: (transaction: Omit<Transaction, "id">): Promise<Transaction> =>
-    apiRequest<Transaction>("/api/transactions", {
+  create: async (transaction: Omit<Transaction, "id">): Promise<Transaction> => {
+    return apiRequest<Transaction>("/api/transactions", {
       method: "POST",
       body: JSON.stringify(transaction),
-    }, true),
+    }, true);
+  },
 
-  update: (id: string, transaction: Partial<Transaction>): Promise<Transaction> =>
-    apiRequest<Transaction>(`/api/transactions/${id}`, {
+  update: async (id: string, transaction: Partial<Transaction>): Promise<Transaction> => {
+    return apiRequest<Transaction>(`/api/transactions/${id}`, {
       method: "PUT",
       body: JSON.stringify(transaction),
-    }, true),
+    }, true);
+  },
 
-  delete: (id: string): Promise<{ message: string }> =>
-    apiRequest<{ message: string }>(`/api/transactions/${id}`, { method: "DELETE" }, true),
+  delete: async (id: string): Promise<{ message: string }> => {
+    return apiRequest<{ message: string }>(`/api/transactions/${id}`, {
+      method: "DELETE",
+    }, true);
+  },
 
   exportCsv: async (): Promise<Blob> => {
     const url = buildApiUrl("/api/transactions/export", true);
     const token = getToken();
-
-    // ── CHANGED: was `fetch(url, ...)` ─────────────────────────────────────
-    const response = await fetchWithRetry(url, {
+    
+    const response = await fetch(url, {
       method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     });
-    // ───────────────────────────────────────────────────────────────────────
 
-    if (!response.ok) throw new Error("Failed to export transactions");
+    if (!response.ok) {
+      throw new Error("Failed to export transactions");
+    }
+
     return response.blob();
   },
 };
@@ -478,15 +517,21 @@ export const transactionsAPI = {
 export const budgetsAPI = {
   getAll: async (month?: string): Promise<Budget[]> => {
     const params = month ? `?month=${month}` : "";
+    
     try {
-      const data = await apiRequest<Budget[] | any>(`/api/budgets${params}`, { method: "GET" }, false);
+      const data = await apiRequest<Budget[] | any>(`/api/budgets${params}`, { 
+        method: "GET" 
+      }, false);
 
-      if (Array.isArray(data)) { console.log(`✅ Fetched ${data.length} budgets`); return data; }
-      if (data && typeof data === 'object') {
+      if (Array.isArray(data)) {
+        console.log(`✅ Fetched ${data.length} budgets`);
+        return data;
+      } else if (data && typeof data === 'object') {
         if (Array.isArray(data.budgets)) return data.budgets;
         if (Array.isArray(data.data)) return data.data;
         if (Array.isArray(data.content)) return data.content;
       }
+      
       console.warn("⚠️ Unexpected budgets response format, returning empty array");
       return [];
     } catch (error: any) {
@@ -499,10 +544,16 @@ export const budgetsAPI = {
     apiRequest<Budget>(`/api/budgets/${id}`, { method: "GET" }, false),
 
   create: (budget: Omit<Budget, "id">): Promise<Budget> =>
-    apiRequest<Budget>("/api/budgets", { method: "POST", body: JSON.stringify(budget) }, false),
+    apiRequest<Budget>("/api/budgets", {
+      method: "POST",
+      body: JSON.stringify(budget),
+    }, false),
 
   update: (id: string, budget: Partial<Budget>): Promise<Budget> =>
-    apiRequest<Budget>(`/api/budgets/${id}`, { method: "PUT", body: JSON.stringify(budget) }, false),
+    apiRequest<Budget>(`/api/budgets/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(budget),
+    }, false),
 
   delete: (id: string): Promise<{ message: string }> =>
     apiRequest(`/api/budgets/${id}`, { method: "DELETE" }, false),
@@ -515,7 +566,9 @@ export const budgetsAPI = {
 
   getSummary: (month?: string): Promise<BudgetSummary> => {
     const params = month ? `?month=${month}` : "";
-    return apiRequest<BudgetSummary>(`/api/budgets/summary${params}`, { method: "GET" }, false);
+    return apiRequest<BudgetSummary>(`/api/budgets/summary${params}`, {
+      method: "GET",
+    }, false);
   },
 };
 
@@ -526,13 +579,17 @@ export const budgetsAPI = {
 export const alertsAPI = {
   getAll: async (): Promise<Alert[]> => {
     try {
-      const data = await apiRequest<Alert[] | any>("/api/alerts", { method: "GET" }, false);
+      const data = await apiRequest<Alert[] | any>("/api/alerts", {
+        method: "GET",
+      }, false);
+
       if (Array.isArray(data)) return data;
       if (data && typeof data === 'object') {
         if (Array.isArray(data.alerts)) return data.alerts;
         if (Array.isArray(data.data)) return data.data;
         if (Array.isArray(data.content)) return data.content;
       }
+      
       return [];
     } catch (error: any) {
       console.error("❌ Error fetching alerts:", error);
@@ -542,9 +599,13 @@ export const alertsAPI = {
 
   getUnread: async (): Promise<Alert[]> => {
     try {
-      const data = await apiRequest<Alert[] | any>("/api/alerts/unread", { method: "GET" }, false);
+      const data = await apiRequest<Alert[] | any>("/api/alerts/unread", {
+        method: "GET",
+      }, false);
+
       if (Array.isArray(data)) return data;
       if (data && typeof data === 'object' && Array.isArray(data.alerts)) return data.alerts;
+      
       return [];
     } catch (error) {
       console.error("❌ Error fetching unread alerts:", error);
@@ -556,13 +617,20 @@ export const alertsAPI = {
     apiRequest<Alert>(`/api/alerts/${id}`, { method: "GET" }, false),
 
   create: (alert: Omit<Alert, "id">): Promise<Alert> =>
-    apiRequest<Alert>("/api/alerts", { method: "POST", body: JSON.stringify(alert) }, false),
+    apiRequest<Alert>("/api/alerts", {
+      method: "POST",
+      body: JSON.stringify(alert),
+    }, false),
 
   markAsRead: (id: string): Promise<Alert> =>
-    apiRequest<Alert>(`/api/alerts/${id}/read`, { method: "PATCH" }, false),
+    apiRequest<Alert>(`/api/alerts/${id}/read`, {
+      method: "PATCH",
+    }, false),
 
   markAllAsRead: (): Promise<{ message: string; count: number }> =>
-    apiRequest("/api/alerts/mark-all-read", { method: "PATCH" }, false),
+    apiRequest("/api/alerts/mark-all-read", {
+      method: "PATCH",
+    }, false),
 
   delete: (id: string): Promise<{ message: string }> =>
     apiRequest(`/api/alerts/${id}`, { method: "DELETE" }, false),
@@ -591,6 +659,7 @@ export const notificationsAPI = {
         console.log(`✅ Fetched ${data.notifications.length} notifications`);
         return data.notifications;
       }
+      
       console.warn("⚠️ Unexpected notifications response format, returning empty array");
       return [];
     } catch (error: any) {
@@ -605,10 +674,14 @@ export const notificationsAPI = {
     }, false),
 
   markAllAsRead: (userId: string): Promise<{ message: string }> =>
-    apiRequest(`/api/notifications/user/${userId}/read-all`, { method: "PATCH" }, false),
+    apiRequest(`/api/notifications/user/${userId}/read-all`, {
+      method: "PATCH",
+    }, false),
 
   delete: (id: string, userId: string): Promise<{ message: string }> =>
-    apiRequest(`/api/notifications/${id}?userId=${userId}`, { method: "DELETE" }, false),
+    apiRequest(`/api/notifications/${id}?userId=${userId}`, {
+      method: "DELETE",
+    }, false),
 };
 
 // =====================
@@ -620,7 +693,9 @@ export const reportsAPI = {
     const params = new URLSearchParams();
     if (startDate) params.append("startDate", startDate);
     if (endDate) params.append("endDate", endDate);
-    const endpoint = params.toString() ? `/api/reports/overview?${params}` : "/api/reports/overview";
+    const endpoint = params.toString()
+      ? `/api/reports/overview?${params}`
+      : "/api/reports/overview";
     return apiRequest(endpoint, { method: "GET" }, false);
   },
 
@@ -628,11 +703,15 @@ export const reportsAPI = {
     const params = new URLSearchParams();
     if (startDate) params.append("startDate", startDate);
     if (endDate) params.append("endDate", endDate);
-    const endpoint = params.toString() ? `/api/reports/category?${params}` : "/api/reports/category";
+    const endpoint = params.toString()
+      ? `/api/reports/category?${params}`
+      : "/api/reports/category";
     return apiRequest(endpoint, { method: "GET" }, false);
   },
 
-  getTrends: (period: "daily" | "weekly" | "monthly" | "yearly" = "monthly"): Promise<any> =>
+  getTrends: (
+    period: "daily" | "weekly" | "monthly" | "yearly" = "monthly"
+  ): Promise<any> =>
     apiRequest(`/api/reports/trends?period=${period}`, { method: "GET" }, false),
 };
 
@@ -656,14 +735,29 @@ const api = {
   get: <T = any>(endpoint: string, options?: RequestInit, useTransactionsService?: boolean): Promise<T> =>
     apiRequest<T>(endpoint, { ...options, method: "GET" }, useTransactionsService),
 
-  post: <T = any>(endpoint: string, body?: any, options?: RequestInit, useTransactionsService?: boolean): Promise<T> =>
+  post: <T = any>(
+    endpoint: string,
+    body?: any,
+    options?: RequestInit,
+    useTransactionsService?: boolean
+  ): Promise<T> =>
     apiRequest<T>(endpoint, {
       ...options,
       method: "POST",
-      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
+      body:
+        body instanceof FormData
+          ? body
+          : body
+          ? JSON.stringify(body)
+          : undefined,
     }, useTransactionsService),
 
-  put: <T = any>(endpoint: string, body?: any, options?: RequestInit, useTransactionsService?: boolean): Promise<T> =>
+  put: <T = any>(
+    endpoint: string,
+    body?: any,
+    options?: RequestInit,
+    useTransactionsService?: boolean
+  ): Promise<T> =>
     apiRequest<T>(endpoint, {
       ...options,
       method: "PUT",
@@ -673,7 +767,12 @@ const api = {
   delete: <T = any>(endpoint: string, options?: RequestInit, useTransactionsService?: boolean): Promise<T> =>
     apiRequest<T>(endpoint, { ...options, method: "DELETE" }, useTransactionsService),
 
-  patch: <T = any>(endpoint: string, body?: any, options?: RequestInit, useTransactionsService?: boolean): Promise<T> =>
+  patch: <T = any>(
+    endpoint: string,
+    body?: any,
+    options?: RequestInit,
+    useTransactionsService?: boolean
+  ): Promise<T> =>
     apiRequest<T>(endpoint, {
       ...options,
       method: "PATCH",
