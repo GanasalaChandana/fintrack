@@ -7,8 +7,29 @@ spring:
 
   cloud:
     gateway:
+      # ── CORS ────────────────────────────────────────────────────────────────
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+              - "http://localhost:3001"
+              - "https://fintrack-liart.vercel.app"
+              - "https://*.vercel.app"          # covers preview deployments
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+            maxAge: 3600                        # cache preflight 1hr → reduces 429s
+
       default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin, RETAIN_UNIQUE
 
       httpclient:
         connect-timeout: 10000
@@ -111,7 +132,7 @@ spring:
             - AuthenticationFilter
             - name: RewritePath
               args:
-                regexp: /api/budgets(?<segment>/.*)?   # ← FIX: keeps /api/budgets prefix, handles both base and sub-paths
+                regexp: /api/budgets(?<segment>/.*)?
                 replacement: /api/budgets${segment}
             - name: CircuitBreaker
               args:
@@ -126,7 +147,7 @@ spring:
             - AuthenticationFilter
             - name: RewritePath
               args:
-                regexp: /api/goals(?<segment>/.*)?     # ← FIX: same pattern for goals
+                regexp: /api/goals(?<segment>/.*)?
                 replacement: /api/goals${segment}
             - name: CircuitBreaker
               args:
