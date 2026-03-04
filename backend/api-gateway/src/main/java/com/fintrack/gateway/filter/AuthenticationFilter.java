@@ -42,9 +42,7 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
 
             log.debug("🔍 Processing request: {} {}", request.getMethod(), request.getURI().getPath());
 
-            // ✅ CRITICAL FIX: Short-circuit ALL OPTIONS preflight requests
-            // Without this, the filter intercepts CORS preflights and returns 401
-            // before CORS headers can be written, causing browser CORS errors
+            // Short-circuit ALL OPTIONS preflight requests
             if (HttpMethod.OPTIONS.equals(request.getMethod())) {
                 log.debug("✅ OPTIONS preflight request - bypassing auth");
                 return chain.filter(exchange);
@@ -76,13 +74,11 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
             log.debug("🔑 Extracted token (first 20 chars): {}...", token.substring(0, Math.min(20, token.length())));
 
             try {
-                // Validate token
                 if (!jwtUtil.validateToken(token)) {
                     log.warn("❌ Invalid or expired token");
                     return onError(exchange, "Invalid or expired token", HttpStatus.UNAUTHORIZED);
                 }
 
-                // Extract user ID from token
                 String userId = jwtUtil.extractUserId(token);
 
                 if (userId == null || userId.isEmpty()) {
@@ -90,7 +86,6 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
                     return onError(exchange, "Invalid token payload", HttpStatus.UNAUTHORIZED);
                 }
 
-                // Forward both the Authorization header AND add X-User-Id
                 ServerHttpRequest modifiedRequest = request.mutate()
                         .header(HttpHeaders.AUTHORIZATION, authHeader)
                         .header("X-User-Id", userId)
@@ -115,14 +110,37 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
         return isDev;
     }
 
+    /**
+     * ── KEY FIX ──────────────────────────────────────────────────────────────
+     * Always write CORS headers on error responses.
+     *
+     * Without this, when a 401 is returned (missing/expired token), the response
+     * has no Access-Control-Allow-Origin header. The browser sees this and reports
+     * a "CORS error" — masking the real 401, and making CORS look broken when it
+     * is actually an auth problem.
+     *
+     * CorsWebFilter runs before GatewayFilters and sets headers on the exchange,
+     * but calling response.setComplete() in a GatewayFilter can bypass those
+     * headers on some Spring Cloud Gateway versions. Writing them explicitly here
+     * guarantees they are always present.
+     */
     private Mono<Void> onError(ServerWebExchange exchange, String message, HttpStatus status) {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(status);
+
+        // Write CORS headers explicitly on every error response
+        String origin = exchange.getRequest().getHeaders().getFirst(HttpHeaders.ORIGIN);
+        if (origin != null) {
+            response.getHeaders().add("Access-Control-Allow-Origin", origin);
+            response.getHeaders().add("Access-Control-Allow-Credentials", "true");
+            response.getHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+            response.getHeaders().add("Access-Control-Allow-Headers", "*");
+        }
+
         log.error("🚫 Authentication error: {} - Status: {}", message, status);
         return response.setComplete();
     }
 
     public static class Config {
-        // Configuration properties if needed in the future
     }
 }
