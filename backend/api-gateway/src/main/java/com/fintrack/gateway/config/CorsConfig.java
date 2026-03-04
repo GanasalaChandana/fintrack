@@ -2,6 +2,8 @@ package com.fintrack.gateway.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.CorsWebFilter;
@@ -12,10 +14,9 @@ import java.util.Arrays;
 @Configuration
 public class CorsConfig {
 
-        // ✅ CorsWebFilter applies CORS at the WebFlux filter level —
-        // this ensures CORS headers are present on ALL responses,
-        // including 4xx/5xx errors from downstream or Render's rate limiter (429)
         @Bean
+        @Order(Ordered.HIGHEST_PRECEDENCE) // ← ONLY CHANGE: guarantees this filter runs
+                                           // before Spring Security intercepts the request
         public CorsWebFilter corsWebFilter() {
                 return new CorsWebFilter(corsConfigurationSource());
         }
