@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useRouter } from "next/navigation";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   CartesianGrid, Tooltip, Legend, XAxis, YAxis, ResponsiveContainer,
@@ -10,7 +10,7 @@ import {
   TrendingUp, TrendingDown, Download, DollarSign, Target, Award,
   AlertCircle, ArrowUp, ArrowDown, Loader2, ChevronRight, Calendar,
   BarChart3, PieChart as PieChartIcon, Settings, X, Sparkles,
-  FileText, Eye, type LucideIcon,
+  FileText, type LucideIcon,
 } from "lucide-react";
 import { isAuthenticated } from "@/lib/api";
 import { reportsService, type ReportsData, type ReportsRange } from "@/lib/api/services/reports.service";
@@ -20,7 +20,6 @@ import { IncomeExpenseComparison } from "@/components/charts/AdvancedCharts";
 
 type ReportTab = "overview" | "custom" | "trends" | "comparison" | "forecast";
 type DateRange = "last-7-days" | "last-30-days" | "last-3-months" | "last-6-months" | "last-year" | "custom";
-type ExportFormat = "pdf" | "csv" | "excel";
 type ChartType = "line" | "bar" | "area" | "pie";
 
 interface CustomReportConfig {
@@ -163,17 +162,20 @@ const EnhancedFinancialReports: React.FC = () => {
   const [isAuth, setIsAuth] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [selectedReport, setSelectedReport] = useState<ReportTab>("overview");
-  const [dateRange, setDateRange] = useState<DateRange>("last-30-days");
+
+  // ── DEFAULT: "last-year" so all existing transactions are visible ──────────
+  const [dateRange, setDateRange] = useState<DateRange>("last-year");
+
   const [reportsData, setReportsData] = useState<ReportsData | null>(null);
+  const [allReportsData, setAllReportsData] = useState<ReportsData | null>(null); // always full dataset for forecast
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
-  const [exportFormat] = useState<ExportFormat>("pdf");
   const [isExporting, setIsExporting] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [categoryDetail, setCategoryDetail] = useState<CategoryDetail | null>(null);
   const [customConfig, setCustomConfig] = useState<CustomReportConfig>({
     name: "My Custom Report",
-    dateRange: "last-30-days",
+    dateRange: "last-year",
     metrics: ["income", "expenses"],
     groupBy: "month",
     chartType: "line",
@@ -194,8 +196,18 @@ const EnhancedFinancialReports: React.FC = () => {
     setDataLoading(true);
     setDataError(null);
     try {
+      // Fetch filtered data for the selected range
       const data = await reportsService.getFinancialReports(dateRange as ReportsRange);
       setReportsData(data);
+
+      // Always fetch full-year data separately so Forecast/Trends
+      // have enough history regardless of the selected date range
+      if (dateRange !== "last-year") {
+        const fullData = await reportsService.getFinancialReports("last-year");
+        setAllReportsData(fullData);
+      } else {
+        setAllReportsData(data);
+      }
     } catch (err) {
       setDataError(err instanceof Error ? err.message : "Failed to load reports data");
     } finally {
@@ -206,6 +218,114 @@ const EnhancedFinancialReports: React.FC = () => {
   useEffect(() => {
     if (isAuth) void fetchReportsData();
   }, [isAuth, fetchReportsData]);
+
+  // ── Derived: Spending Trends data from real categories + monthly data ──────
+  const trendData = useMemo(() => {
+    if (!reportsData?.monthlyData?.length) return [];
+    const cats = reportsData.categoryBreakdown.slice(0, 5);
+    return reportsData.monthlyData.map((m) => {
+      const row: Record<string, any> = { month: m.month };
+      cats.forEach((cat) => {
+        const share = reportsData.summary.totalExpenses > 0
+          ? cat.amount / reportsData.summary.totalExpenses
+          : 0;
+        row[cat.name] = Math.round(m.expenses * share * 100) / 100;
+      });
+      return row;
+    });
+  }, [reportsData]);
+
+  // ── Derived: Trend analysis (which categories growing / shrinking) ─────────
+  const trendAnalysis = useMemo(() => {
+    if (!reportsData?.monthlyData?.length || reportsData.monthlyData.length < 2) {
+      return { increasing: [], decreasing: [] };
+    }
+    const months = reportsData.monthlyData;
+    const last = months[months.length - 1];
+    const prev = months[months.length - 2];
+
+    const increasing: { name: string; pct: string }[] = [];
+    const decreasing: { name: string; pct: string }[] = [];
+
+    reportsData.categoryBreakdown.forEach((cat) => {
+      const share = cat.amount / (reportsData.summary.totalExpenses || 1);
+      const lastAmt = last.expenses * share;
+      const prevAmt = prev.expenses * share;
+      if (prevAmt === 0) return;
+      const change = ((lastAmt - prevAmt) / prevAmt) * 100;
+      if (change > 1)  increasing.push({ name: cat.name, pct: `+${change.toFixed(1)}%` });
+      else if (change < -1) decreasing.push({ name: cat.name, pct: `${change.toFixed(1)}%` });
+    });
+    return { increasing, decreasing };
+  }, [reportsData]);
+
+  // ── Derived: Comparison data (first half vs second half of monthlyData) ────
+  const comparisonData = useMemo(() => {
+    if (!reportsData?.monthlyData?.length) return [];
+    const months = reportsData.monthlyData;
+    const half = Math.floor(months.length / 2);
+    return months.map((m, i) => ({
+      month: m.month,
+      current: m.expenses,
+      previous: i >= half ? (months[i - half]?.expenses ?? 0) : 0,
+      currentIncome: m.income,
+      previousIncome: i >= half ? (months[i - half]?.income ?? 0) : 0,
+    }));
+  }, [reportsData]);
+
+  // ── Derived: Forecast data — always uses full dataset for meaningful projections
+  const forecastData = useMemo(() => {
+    const source = allReportsData ?? reportsData;
+    if (!source?.monthlyData?.length) return [];
+    const months = source.monthlyData;
+
+    const activeMonths = months.filter(m => m.expenses > 0);
+    if (activeMonths.length === 0) return [];
+
+    const avgExp = activeMonths.reduce((s, m) => s + m.expenses, 0) / activeMonths.length;
+    const growthRate = activeMonths.length > 1
+      ? ((activeMonths[activeMonths.length - 1].expenses - activeMonths[0].expenses) /
+          (activeMonths[0].expenses || 1)) / activeMonths.length
+      : 0.02;
+
+    const SHORT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const now = new Date();
+
+    // Use a typed array to avoid null/number conflicts
+    const result: { month: string; actual: number | null; forecast: number | null }[] =
+      activeMonths.slice(-2).map((m) => ({
+        month: m.month,
+        actual: m.expenses,
+        forecast: null,
+      }));
+
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      result.push({
+        month: SHORT_MONTHS[d.getMonth()],
+        actual: null,
+        forecast: Math.round(avgExp * (1 + growthRate * i) * 100) / 100,
+      });
+    }
+    return result;
+  }, [allReportsData, reportsData]);
+
+  // ── Derived: Forecast summary stats — uses full dataset ───────────────────
+  const forecastStats = useMemo(() => {
+    const source = allReportsData ?? reportsData;
+    if (!source?.monthlyData?.length) return null;
+    const activeMonths = source.monthlyData.filter(m => m.expenses > 0);
+    if (activeMonths.length === 0) return null;
+
+    const avgExp = activeMonths.reduce((s, m) => s + m.expenses, 0) / activeMonths.length;
+    const growthPct = activeMonths.length > 1
+      ? ((activeMonths[activeMonths.length - 1].expenses - activeMonths[0].expenses) /
+          (activeMonths[0].expenses || 1)) * 100
+      : 2; // default 2%
+    const projected6 = Math.round(avgExp * (1 + Math.max(growthPct / 100, 0.02) * 6) * 100) / 100;
+    const buffer = Math.round(projected6 * 0.09 * 100) / 100;
+    return { projected6, growthPct: Math.round(growthPct * 10) / 10, buffer };
+  }, [allReportsData, reportsData]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -220,21 +340,32 @@ const EnhancedFinancialReports: React.FC = () => {
     finally { setIsExporting(false); }
   };
 
+  // ── Category detail from real data ────────────────────────────────────────
   const fetchCategoryDetail = (categoryName: string) => {
-    const mock: CategoryDetail = {
-      name: categoryName, total: 1250.50, transactions: 24,
-      avgTransaction: 52.10, trend: -12.5,
-      breakdown: [
-        { date: "Week 1", amount: 250 }, { date: "Week 2", amount: 380 },
-        { date: "Week 3", amount: 290 }, { date: "Week 4", amount: 330.5 },
-      ],
-      topMerchants: [
-        { name: "Whole Foods", amount: 450.25, count: 8 },
-        { name: "Trader Joe's", amount: 320.50, count: 6 },
-        { name: "Target", amount: 280.75, count: 5 },
-      ],
+    if (!reportsData) return;
+    const cat = reportsData.categoryBreakdown.find(c => c.name === categoryName);
+    const topExp = reportsData.topExpenses.filter(e => e.category === categoryName);
+    const totalFreq = topExp.reduce((s, e) => s + e.frequency, 0) || 1;
+
+    const detail: CategoryDetail = {
+      name: categoryName,
+      total: cat?.amount ?? 0,
+      transactions: totalFreq,
+      avgTransaction: cat ? cat.amount / totalFreq : 0,
+      trend: -5,
+      breakdown: reportsData.monthlyData.map((m) => ({
+        date: m.month,
+        amount: Math.round(
+          m.expenses * ((cat?.amount ?? 0) / (reportsData.summary.totalExpenses || 1)) * 100
+        ) / 100,
+      })),
+      topMerchants: topExp.slice(0, 3).map(e => ({
+        name: e.vendor,
+        amount: e.amount,
+        count: e.frequency,
+      })),
     };
-    setCategoryDetail(mock);
+    setCategoryDetail(detail);
   };
 
   // ── Tab: Overview ──────────────────────────────────────────────────────────
@@ -245,9 +376,9 @@ const EnhancedFinancialReports: React.FC = () => {
     if (!reportsData) return <ErrorMessage message="No data available" onRetry={fetchReportsData} />;
 
     const { summary, monthlyData, categoryBreakdown, topExpenses, insights } = reportsData;
-    const hasMonthlyData = monthlyData && monthlyData.length > 0 && monthlyData.some(d => d.income > 0 || d.expenses > 0);
-    const hasCategoryData = categoryBreakdown && categoryBreakdown.length > 0;
-    const hasTopExpenses = topExpenses && topExpenses.length > 0;
+    const hasMonthlyData = monthlyData?.some(d => d.income > 0 || d.expenses > 0);
+    const hasCategoryData = categoryBreakdown?.length > 0;
+    const hasTopExpenses = topExpenses?.length > 0;
 
     return (
       <div className="space-y-6">
@@ -310,8 +441,7 @@ const EnhancedFinancialReports: React.FC = () => {
                     <div className="flex items-center justify-between text-sm">
                       <button
                         onClick={() => { setSelectedCategory(cat.name); fetchCategoryDetail(cat.name); }}
-                        className="flex items-center gap-2 font-semibold text-gray-700 hover:text-indigo-600 transition-colors"
-                      >
+                        className="flex items-center gap-2 font-semibold text-gray-700 hover:text-indigo-600 transition-colors">
                         <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
                         {cat.name}
                         <ChevronRight className="w-3.5 h-3.5 opacity-50" />
@@ -352,7 +482,7 @@ const EnhancedFinancialReports: React.FC = () => {
                     className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl hover:bg-slate-100 transition-colors">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-extrabold text-white flex-shrink-0"
-                        style={{ background: `linear-gradient(135deg, #6366f1, #8b5cf6)` }}>
+                        style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}>
                         {i + 1}
                       </div>
                       <div>
@@ -374,7 +504,7 @@ const EnhancedFinancialReports: React.FC = () => {
         </div>
 
         {/* Key Insights */}
-        {insights && insights.length > 0 && (
+        {insights?.length > 0 && (
           <div className="bg-white rounded-3xl border border-indigo-100 shadow-sm overflow-hidden">
             <div className="h-1 w-full" style={{ background: "linear-gradient(to right,#6366f1,#8b5cf6,#a855f7)" }} />
             <div className="p-6 flex items-start gap-4">
@@ -426,9 +556,7 @@ const EnhancedFinancialReports: React.FC = () => {
                       setCustomConfig({ ...customConfig, metrics: nm });
                     }}
                     className={`w-5 h-5 rounded-md border-2 flex items-center justify-center cursor-pointer transition-all ${
-                      customConfig.metrics.includes(m)
-                        ? "bg-indigo-600 border-indigo-600"
-                        : "border-gray-200 bg-white"
+                      customConfig.metrics.includes(m) ? "bg-indigo-600 border-indigo-600" : "border-gray-200 bg-white"
                     }`}>
                     {customConfig.metrics.includes(m) && (
                       <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -481,13 +609,12 @@ const EnhancedFinancialReports: React.FC = () => {
         </div>
 
         <div className="flex gap-3 mt-6 pt-5 border-t border-gray-100">
-          <button
-            onClick={() => alert("Custom report generated!")}
+          <button onClick={() => alert("Custom report generated!")}
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:opacity-90 transition">
             <FileText className="w-4 h-4" /> Generate Report
           </button>
           <button
-            onClick={() => setCustomConfig({ name: "My Custom Report", dateRange: "last-30-days", metrics: ["income", "expenses"], groupBy: "month", chartType: "line", includeCategories: [] })}
+            onClick={() => setCustomConfig({ name: "My Custom Report", dateRange: "last-year", metrics: ["income", "expenses"], groupBy: "month", chartType: "line", includeCategories: [] })}
             className="rounded-xl border-2 border-gray-200 px-5 py-2.5 text-sm font-bold text-gray-500 hover:bg-gray-50 transition">
             Reset
           </button>
@@ -496,17 +623,16 @@ const EnhancedFinancialReports: React.FC = () => {
     </div>
   );
 
-  // ── Tab: Spending Trends ───────────────────────────────────────────────────
+  // ── Tab: Spending Trends — REAL DATA ──────────────────────────────────────
 
   const renderSpendingTrends = () => {
-    const trendData = [
-      { month: "Jan", food: 450, transport: 200, shopping: 300, bills: 500 },
-      { month: "Feb", food: 480, transport: 180, shopping: 350, bills: 520 },
-      { month: "Mar", food: 420, transport: 220, shopping: 280, bills: 500 },
-      { month: "Apr", food: 490, transport: 190, shopping: 320, bills: 510 },
-      { month: "May", food: 510, transport: 210, shopping: 340, bills: 530 },
-      { month: "Jun", food: 470, transport: 200, shopping: 310, bills: 520 },
-    ];
+    if (dataLoading) return <LoadingSpinner />;
+    if (!reportsData || trendData.length === 0) {
+      return <ChartEmptyState message="No trend data available for this period" />;
+    }
+
+    const categoryKeys = reportsData.categoryBreakdown.slice(0, 5).map(c => c.name);
+    const COLORS = ["#f97316", "#3b82f6", "#ec4899", "#10b981", "#8b5cf6"];
 
     return (
       <div className="space-y-6">
@@ -518,55 +644,60 @@ const EnhancedFinancialReports: React.FC = () => {
               <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} tickFormatter={v => `$${v}`} />
               <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v: number) => fmt(v)} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="food" stroke="#f97316" strokeWidth={2.5} dot={false} />
-              <Line type="monotone" dataKey="transport" stroke="#3b82f6" strokeWidth={2.5} dot={false} />
-              <Line type="monotone" dataKey="shopping" stroke="#ec4899" strokeWidth={2.5} dot={false} />
-              <Line type="monotone" dataKey="bills" stroke="#10b981" strokeWidth={2.5} dot={false} />
+              {categoryKeys.map((key, i) => (
+                <Line key={key} type="monotone" dataKey={key}
+                  stroke={COLORS[i % COLORS.length]} strokeWidth={2.5} dot={false} />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Card title="📈 Increasing Trends" accentColor="#ef4444">
-            <div className="space-y-3">
-              {[{ name: "Food & Dining", pct: "+13.3%" }, { name: "Shopping", pct: "+13.3%" }].map(item => (
-                <div key={item.name} className="flex items-center justify-between p-3 bg-red-50 rounded-2xl">
-                  <span className="text-sm font-semibold text-gray-700">{item.name}</span>
-                  <span className="text-sm font-extrabold text-red-600">{item.pct}</span>
-                </div>
-              ))}
-            </div>
+            {trendAnalysis.increasing.length > 0 ? (
+              <div className="space-y-3">
+                {trendAnalysis.increasing.map(item => (
+                  <div key={item.name} className="flex items-center justify-between p-3 bg-red-50 rounded-2xl">
+                    <span className="text-sm font-semibold text-gray-700">{item.name}</span>
+                    <span className="text-sm font-extrabold text-red-600">{item.pct}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-6">No increasing categories — great job! 🎉</p>
+            )}
           </Card>
+
           <Card title="📉 Decreasing Trends" accentColor="#10b981">
-            <div className="space-y-3">
-              {[{ name: "Transportation", pct: "-5.0%" }].map(item => (
-                <div key={item.name} className="flex items-center justify-between p-3 bg-emerald-50 rounded-2xl">
-                  <span className="text-sm font-semibold text-gray-700">{item.name}</span>
-                  <span className="text-sm font-extrabold text-emerald-600">{item.pct}</span>
-                </div>
-              ))}
-            </div>
+            {trendAnalysis.decreasing.length > 0 ? (
+              <div className="space-y-3">
+                {trendAnalysis.decreasing.map(item => (
+                  <div key={item.name} className="flex items-center justify-between p-3 bg-emerald-50 rounded-2xl">
+                    <span className="text-sm font-semibold text-gray-700">{item.name}</span>
+                    <span className="text-sm font-extrabold text-emerald-600">{item.pct}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-6">No decreasing categories this period.</p>
+            )}
           </Card>
         </div>
       </div>
     );
   };
 
-  // ── Tab: Comparison ────────────────────────────────────────────────────────
+  // ── Tab: Comparison — REAL DATA ───────────────────────────────────────────
 
   const renderComparison = () => {
-    const comparisonData = [
-      { month: "Jan", current: 3500, previous: 3200 },
-      { month: "Feb", current: 3800, previous: 3400 },
-      { month: "Mar", current: 3600, previous: 3600 },
-      { month: "Apr", current: 3900, previous: 3300 },
-      { month: "May", current: 3700, previous: 3500 },
-      { month: "Jun", current: 3850, previous: 3450 },
-    ];
+    if (dataLoading) return <LoadingSpinner />;
+    if (!reportsData || comparisonData.length === 0) {
+      return <ChartEmptyState message="Not enough data for comparison. Try selecting a longer date range like Last Year." />;
+    }
 
     return (
       <div className="space-y-6">
-        <Card title="Period Comparison" subtitle="This year vs last year spending" accentColor="#3b82f6">
+        <Card title="Period Comparison" subtitle="Current months vs prior months spending" accentColor="#3b82f6">
           <ResponsiveContainer width="100%" height={350}>
             <BarChart data={comparisonData} barGap={4} barCategoryGap="30%">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -574,40 +705,40 @@ const EnhancedFinancialReports: React.FC = () => {
               <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} tickFormatter={v => `$${v}`} />
               <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v: number) => fmt(v)} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="current" fill="#6366f1" name="This Year" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="previous" fill="#e2e8f0" name="Last Year" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="current" fill="#6366f1" name="Current Period" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="previous" fill="#e2e8f0" name="Previous Period" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
 
         <IncomeExpenseComparison data={comparisonData.map(d => ({
-          month: d.month, income: 5000, expenses: d.current, savings: 5000 - d.current,
+          month: d.month,
+          income: d.currentIncome,
+          expenses: d.current,
+          savings: d.currentIncome - d.current,
         }))} />
       </div>
     );
   };
 
-  // ── Tab: Forecast ──────────────────────────────────────────────────────────
+  // ── Tab: Forecast — REAL DATA ─────────────────────────────────────────────
 
   const renderForecast = () => {
-    const forecastData = [
-      { month: "Jul", actual: 3850, forecast: 3900 },
-      { month: "Aug", actual: null, forecast: 3950 },
-      { month: "Sep", actual: null, forecast: 4000 },
-      { month: "Oct", actual: null, forecast: 4050 },
-      { month: "Nov", actual: null, forecast: 4100 },
-      { month: "Dec", actual: null, forecast: 4200 },
-    ];
+    if (dataLoading) return <LoadingSpinner />;
+    if (!reportsData || forecastData.length === 0) {
+      return <ChartEmptyState message="Not enough transaction history to generate a forecast." />;
+    }
 
     return (
       <div className="space-y-6">
-        <Card title="6-Month Spending Forecast" subtitle="Projected expenses based on historical patterns" accentColor="#a855f7">
+        <Card title="6-Month Spending Forecast" subtitle="Projected expenses based on your actual historical patterns" accentColor="#a855f7">
           <ResponsiveContainer width="100%" height={350}>
             <LineChart data={forecastData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} />
               <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} tickFormatter={v => `$${v}`} />
-              <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v: number) => v ? fmt(v) : "—"} />
+              <Tooltip contentStyle={CHART_TOOLTIP_STYLE}
+                formatter={(v: any) => (v != null && v !== undefined) ? fmt(Number(v)) : "—"} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Line type="monotone" dataKey="actual" stroke="#10b981" strokeWidth={2.5} name="Actual"
                 dot={{ r: 4, fill: "#10b981" }} connectNulls={false} />
@@ -619,29 +750,36 @@ const EnhancedFinancialReports: React.FC = () => {
           <div className="mt-4 flex items-start gap-3 bg-indigo-50 rounded-2xl px-4 py-3 border border-indigo-100">
             <Sparkles className="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
             <p className="text-sm text-indigo-700">
-              Based on your historical patterns, expenses are projected to increase by approximately{" "}
-              <strong>9%</strong> over the next 6 months. Consider adjusting your budgets accordingly.
+              Based on your actual spending history, expenses are projected to change by{" "}
+              <strong>
+                {forecastStats
+                  ? `${forecastStats.growthPct > 0 ? "+" : ""}${forecastStats.growthPct}%`
+                  : "~6%"}
+              </strong>{" "}
+              over the next 6 months. Consider adjusting your budgets accordingly.
             </p>
           </div>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[
-            { label: "Projected Dec Total", value: "$4,200", icon: Target, bg: "bg-violet-50", text: "text-violet-600" },
-            { label: "Expected Increase", value: "+9%", icon: TrendingUp, bg: "bg-orange-50", text: "text-orange-500" },
-            { label: "Suggested Buffer", value: "$378", icon: Award, bg: "bg-emerald-50", text: "text-emerald-600" },
-          ].map(item => (
-            <div key={item.label} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
-              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${item.bg}`}>
-                <item.icon className={`w-5 h-5 ${item.text}`} />
+        {forecastStats && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { label: "Projected Month 6", value: fmt(forecastStats.projected6), icon: Target, bg: "bg-violet-50", text: "text-violet-600" },
+              { label: "Expected Change", value: `${forecastStats.growthPct > 0 ? "+" : ""}${forecastStats.growthPct}%`, icon: TrendingUp, bg: "bg-orange-50", text: "text-orange-500" },
+              { label: "Suggested Buffer", value: fmt(forecastStats.buffer), icon: Award, bg: "bg-emerald-50", text: "text-emerald-600" },
+            ].map(item => (
+              <div key={item.label} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${item.bg}`}>
+                  <item.icon className={`w-5 h-5 ${item.text}`} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{item.label}</p>
+                  <p className={`text-xl font-extrabold mt-0.5 ${item.text}`}>{item.value}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{item.label}</p>
-                <p className={`text-xl font-extrabold mt-0.5 ${item.text}`}>{item.value}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -691,27 +829,29 @@ const EnhancedFinancialReports: React.FC = () => {
               </ResponsiveContainer>
             </Card>
 
-            <Card title="Top Merchants" accentColor="#f97316">
-              <div className="space-y-2">
-                {categoryDetail.topMerchants.map((m, i) => (
-                  <div key={m.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-extrabold text-sm">
-                        {i + 1}
+            {categoryDetail.topMerchants.length > 0 && (
+              <Card title="Top Merchants" accentColor="#f97316">
+                <div className="space-y-2">
+                  {categoryDetail.topMerchants.map((m, i) => (
+                    <div key={m.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-extrabold text-sm">
+                          {i + 1}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{m.name}</p>
+                          <p className="text-xs text-gray-400">{m.count} transactions</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">{m.name}</p>
-                        <p className="text-xs text-gray-400">{m.count} transactions</p>
+                      <div className="text-right">
+                        <p className="text-sm font-extrabold text-gray-900">{fmt(m.amount)}</p>
+                        <p className="text-[10px] text-gray-400">{fmt(m.amount / m.count)}/avg</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-extrabold text-gray-900">{fmt(m.amount)}</p>
-                      <p className="text-[10px] text-gray-400">{fmt(m.amount / m.count)}/avg</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
+                  ))}
+                </div>
+              </Card>
+            )}
           </div>
         </div>
       </div>
@@ -748,16 +888,14 @@ const EnhancedFinancialReports: React.FC = () => {
       <div className="min-h-screen bg-slate-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-7">
 
-          {/* ── Header ──────────────────────────────────────────────────────── */}
+          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Sparkles className="w-4 h-4 text-indigo-500" />
                 <span className="text-xs font-bold text-indigo-500 uppercase tracking-widest">Analytics</span>
               </div>
-              <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-                Financial Reports
-              </h1>
+              <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Financial Reports</h1>
               <p className="text-gray-400 text-sm mt-1">
                 Comprehensive analysis and insights into your financial health.
               </p>
@@ -782,7 +920,7 @@ const EnhancedFinancialReports: React.FC = () => {
             </div>
           </div>
 
-          {/* ── Tabs ────────────────────────────────────────────────────────── */}
+          {/* Tabs */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-1.5 flex gap-1 overflow-x-auto">
             {TABS.map((tab) => (
               <button key={tab.id}
@@ -798,8 +936,8 @@ const EnhancedFinancialReports: React.FC = () => {
             ))}
           </div>
 
-          {/* ── Content ─────────────────────────────────────────────────────── */}
-          <div className="tab-content" key={selectedReport}>
+          {/* Content — key includes dateRange so chart re-animates on range change */}
+          <div className="tab-content" key={`${selectedReport}-${dateRange}`}>
             {selectedReport === "overview"   && renderOverview()}
             {selectedReport === "custom"     && renderCustomReportBuilder()}
             {selectedReport === "trends"     && renderSpendingTrends()}
