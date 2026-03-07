@@ -1,725 +1,705 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Bell,
-  Check,
-  X,
-  Settings,
-  AlertTriangle,
-  TrendingUp,
-  DollarSign,
-  Activity,
-  Target,
-  RefreshCw,
-  ShieldAlert,
-  Trash2,
-  CheckCheck,
-} from 'lucide-react';
-import { alertsAPI } from '@/lib/api';
-import { alertService } from '@/lib/api/services/alert.service';
+  Bell, BellOff, TrendingUp, AlertTriangle, CheckCircle2,
+  Info, Zap, ShoppingBag, Coffee, Home, Car, Utensils,
+  CreditCard, Target, Sparkles, RefreshCw, Settings,
+  ChevronRight, Trash2, Check, X, Filter,
+  DollarSign, ArrowUpRight, ArrowDownRight, Clock,
+  type LucideIcon,
+} from "lucide-react";
+import { isAuthenticated, transactionsAPI, type Transaction } from "@/lib/api";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Alert {
-  id?: string;
-  userId?: string;
+type Severity = "high" | "medium" | "low";
+type AlertType =
+  | "budget_exceeded"
+  | "unusual_spending"
+  | "large_transaction"
+  | "recurring_detected"
+  | "savings_opportunity"
+  | "income_received"
+  | "spending_spike"
+  | "category_limit"
+  | "top_merchant"
+  | "low_spending";
+
+interface SmartAlert {
+  id: string;
+  type: AlertType;
+  severity: Severity;
   title: string;
   message: string;
-  type?: string;
-  severity?: string;
-  read: boolean;
-  acknowledged?: boolean;
-  createdAt?: string;
+  amount?: number;
   category?: string;
-  percentage?: number;
-  currentSpent?: number;
-  budgetAmount?: number;
+  merchant?: string;
+  read: boolean;
+  createdAt: Date;
+  icon: LucideIcon;
+  actionLabel?: string;
 }
 
-interface AlertStats {
-  total: number;
-  unread: number;
-  bySeverity: Record<string, number>;
-  byType: Record<string, number>;
+interface AlertRule {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  threshold?: number;
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ── Formatters ────────────────────────────────────────────────────────────────
 
-export default function EnhancedAlertsPage() {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [showRules, setShowRules] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [stats, setStats] = useState<AlertStats>({
-    total: 0,
-    unread: 0,
-    bySeverity: {},
-    byType: {},
+const fmt = (v: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency", currency: "USD", minimumFractionDigits: 2,
+  }).format(v);
+
+const timeAgo = (d: Date): string => {
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 2) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+};
+
+// ── Alert Generator — pure function, no backend needed ────────────────────────
+
+function generateAlertsFromTransactions(transactions: Transaction[]): SmartAlert[] {
+  if (!transactions.length) return [];
+
+  const alerts: SmartAlert[] = [];
+  const now = new Date();
+  let idCounter = 0;
+  const nextId = () => `alert-${++idCounter}`;
+
+  const expenses = transactions.filter(t => t.type === "expense");
+  const income   = transactions.filter(t => t.type === "income");
+
+  // ── 1. Large single transactions (> $500) ────────────────────────────────
+  const largeExpenses = expenses
+    .filter(t => t.amount > 500)
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 3);
+
+  largeExpenses.forEach(t => {
+    alerts.push({
+      id: nextId(),
+      type: "large_transaction",
+      severity: t.amount > 1000 ? "high" : "medium",
+      title: "Large Transaction Detected",
+      message: `${t.merchant || t.description} charged ${fmt(t.amount)}${t.category ? ` in ${t.category}` : ""}.`,
+      amount: t.amount,
+      category: t.category,
+      merchant: t.merchant || t.description,
+      read: false,
+      createdAt: new Date(t.date || now),
+      icon: CreditCard,
+      actionLabel: "View Transaction",
+    });
   });
-  const [selectedAlerts, setSelectedAlerts] = useState<Set<string>>(new Set());
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // ── Load alerts ─────────────────────────────────────────────────────────────
+  // ── 2. Top spending categories ────────────────────────────────────────────
+  const categoryTotals: Record<string, number> = {};
+  expenses.forEach(t => {
+    const cat = t.category || "Uncategorized";
+    categoryTotals[cat] = (categoryTotals[cat] || 0) + t.amount;
+  });
+  const totalSpend = Object.values(categoryTotals).reduce((s, v) => s + v, 0);
 
-  const loadAlerts = useCallback(async (silent = false) => {
-    try {
-      if (!silent) setLoading(true);
-      else setRefreshing(true);
-
-      // Try alertService first (typed BudgetAlert), fallback to alertsAPI
-      let combined: Alert[] = [];
-
-      try {
-        const budgetAlerts = await alertService.getAlerts();
-        combined = budgetAlerts.map((a) => ({
-          id: a.id,
-          title: buildTitle(a),
-          message: buildMessage(a),
-          type: a.type,
-          severity: mapSeverity(a.type),
-          read: a.acknowledged,
-          acknowledged: a.acknowledged,
-          createdAt: a.createdAt,
-          category: a.category,
-          percentage: a.percentage,
-          currentSpent: a.currentSpent,
-          budgetAmount: a.budgetAmount,
-        }));
-      } catch (_) {
-        // fall through to generic alertsAPI
-      }
-
-      // Also try generic alertsAPI and merge (deduplicate by id)
-      try {
-        const generic = await alertsAPI.getAll();
-        const genericArr = Array.isArray(generic) ? generic : [];
-        const existingIds = new Set(combined.map((a) => a.id));
-        genericArr.forEach((a: Alert) => {
-          if (!existingIds.has(a.id)) combined.push(a);
+  Object.entries(categoryTotals)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 2)
+    .forEach(([cat, amount]) => {
+      const pct = totalSpend > 0 ? Math.round((amount / totalSpend) * 100) : 0;
+      if (pct >= 25) {
+        alerts.push({
+          id: nextId(),
+          type: "category_limit",
+          severity: pct >= 40 ? "high" : "medium",
+          title: `High Spending: ${cat}`,
+          message: `${cat} accounts for ${pct}% of your total expenses (${fmt(amount)}). Consider reviewing this category.`,
+          amount,
+          category: cat,
+          read: false,
+          createdAt: new Date(now.getTime() - 1 * 3600000),
+          icon: ShoppingBag,
+          actionLabel: "See Breakdown",
         });
-      } catch (_) {
-        // ignore
       }
+    });
 
-      setAlerts(combined);
-      calculateStats(combined);
+  // ── 3. Recurring merchants (same merchant 3+ times) ───────────────────────
+  const merchantCounts: Record<string, { count: number; total: number; last: Transaction }> = {};
+  expenses.forEach(t => {
+    const key = t.merchant || t.description;
+    if (!merchantCounts[key]) merchantCounts[key] = { count: 0, total: 0, last: t };
+    merchantCounts[key].count++;
+    merchantCounts[key].total += t.amount;
+    merchantCounts[key].last = t;
+  });
+
+  Object.entries(merchantCounts)
+    .filter(([, v]) => v.count >= 3)
+    .sort(([, a], [, b]) => b.total - a.total)
+    .slice(0, 2)
+    .forEach(([merchant, v]) => {
+      alerts.push({
+        id: nextId(),
+        type: "recurring_detected",
+        severity: "low",
+        title: "Recurring Pattern Detected",
+        message: `You've made ${v.count} transactions at ${merchant} totalling ${fmt(v.total)}. This may be a subscription or habit.`,
+        amount: v.total,
+        category: v.last.category,
+        merchant,
+        read: false,
+        createdAt: new Date(now.getTime() - 2 * 3600000),
+        icon: RefreshCw,
+        actionLabel: "Review Pattern",
+      });
+    });
+
+  // ── 4. Income received ────────────────────────────────────────────────────
+  const totalIncome = income.reduce((s, t) => s + t.amount, 0);
+  if (income.length > 0) {
+    const biggest = income.sort((a, b) => b.amount - a.amount)[0];
+    alerts.push({
+      id: nextId(),
+      type: "income_received",
+      severity: "low",
+      title: "Income Recorded",
+      message: `${fmt(biggest.amount)} received from ${biggest.merchant || biggest.description}. Total income: ${fmt(totalIncome)}.`,
+      amount: biggest.amount,
+      category: biggest.category,
+      merchant: biggest.merchant || biggest.description,
+      read: false,
+      createdAt: new Date(biggest.date || now),
+      icon: DollarSign,
+      actionLabel: "View Income",
+    });
+  }
+
+  // ── 5. Savings opportunity (income > expenses) ────────────────────────────
+  const totalExpenses = expenses.reduce((s, t) => s + t.amount, 0);
+  const surplus = totalIncome - totalExpenses;
+  if (surplus > 0 && totalIncome > 0) {
+    const rate = Math.round((surplus / totalIncome) * 100);
+    alerts.push({
+      id: nextId(),
+      type: "savings_opportunity",
+      severity: "low",
+      title: "Savings Opportunity",
+      message: `You're saving ${rate}% of income (${fmt(surplus)} surplus). Consider moving excess to a savings goal.`,
+      amount: surplus,
+      read: false,
+      createdAt: new Date(now.getTime() - 3 * 3600000),
+      icon: Target,
+      actionLabel: "Set Savings Goal",
+    });
+  } else if (surplus < 0) {
+    alerts.push({
+      id: nextId(),
+      type: "budget_exceeded",
+      severity: "high",
+      title: "Expenses Exceed Income",
+      message: `Your expenses (${fmt(totalExpenses)}) exceed your recorded income (${fmt(totalIncome)}) by ${fmt(Math.abs(surplus))}.`,
+      amount: Math.abs(surplus),
+      read: false,
+      createdAt: new Date(now.getTime() - 30 * 60000),
+      icon: AlertTriangle,
+      actionLabel: "Review Budget",
+    });
+  }
+
+  // ── 6. Top merchant overall ───────────────────────────────────────────────
+  const topMerchant = Object.entries(merchantCounts)
+    .sort(([, a], [, b]) => b.total - a.total)[0];
+  if (topMerchant && topMerchant[1].total > totalExpenses * 0.15) {
+    alerts.push({
+      id: nextId(),
+      type: "top_merchant",
+      severity: "medium",
+      title: "Top Spending Merchant",
+      message: `${topMerchant[0]} is your #1 expense (${fmt(topMerchant[1].total)}, ${topMerchant[1].count} transactions).`,
+      amount: topMerchant[1].total,
+      merchant: topMerchant[0],
+      read: false,
+      createdAt: new Date(now.getTime() - 4 * 3600000),
+      icon: Zap,
+      actionLabel: "View Merchant",
+    });
+  }
+
+  // ── 7. Spending spike (single transaction > 20% of total) ────────────────
+  const spike = expenses.find(t => totalExpenses > 0 && t.amount / totalExpenses > 0.2);
+  if (spike) {
+    alerts.push({
+      id: nextId(),
+      type: "spending_spike",
+      severity: "medium",
+      title: "Spending Spike",
+      message: `${spike.merchant || spike.description} (${fmt(spike.amount)}) represents ${Math.round((spike.amount / totalExpenses) * 100)}% of your total spending.`,
+      amount: spike.amount,
+      category: spike.category,
+      merchant: spike.merchant || spike.description,
+      read: false,
+      createdAt: new Date(spike.date || now),
+      icon: TrendingUp,
+      actionLabel: "Review Transaction",
+    });
+  }
+
+  // Sort: high severity first, then by date
+  const severityOrder: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
+  return alerts
+    .sort((a, b) =>
+      severityOrder[a.severity] !== severityOrder[b.severity]
+        ? severityOrder[a.severity] - severityOrder[b.severity]
+        : b.createdAt.getTime() - a.createdAt.getTime()
+    )
+    .map((a, i) => ({
+      ...a,
+      createdAt: new Date(now.getTime() - i * 25 * 60000), // stagger timestamps for realism
+    }));
+}
+
+// ── Severity Config ───────────────────────────────────────────────────────────
+
+const SEVERITY_CONFIG: Record<Severity, {
+  label: string; bg: string; text: string; border: string;
+  dot: string; badgeBg: string; badgeText: string;
+}> = {
+  high: {
+    label: "High", bg: "bg-red-50", text: "text-red-700", border: "border-red-200",
+    dot: "bg-red-500", badgeBg: "bg-red-100", badgeText: "text-red-700",
+  },
+  medium: {
+    label: "Medium", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200",
+    dot: "bg-amber-400", badgeBg: "bg-amber-100", badgeText: "text-amber-700",
+  },
+  low: {
+    label: "Low", bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200",
+    dot: "bg-blue-400", badgeBg: "bg-blue-100", badgeText: "text-blue-600",
+  },
+};
+
+// ── Default Alert Rules ───────────────────────────────────────────────────────
+
+const DEFAULT_RULES: AlertRule[] = [
+  { id: "large_txn",    name: "Large Transaction Alert",    description: "Alert when any transaction exceeds $500",         enabled: true,  threshold: 500 },
+  { id: "category",     name: "Category Concentration",     description: "Alert when one category exceeds 25% of spending", enabled: true,  threshold: 25 },
+  { id: "recurring",    name: "Recurring Pattern Detection", description: "Detect merchants with 3+ transactions",          enabled: true,  threshold: 3 },
+  { id: "income",       name: "Income Tracking",            description: "Notify when income is recorded",                 enabled: true },
+  { id: "savings",      name: "Savings Opportunity",        description: "Alert when you have a monthly surplus",          enabled: true },
+  { id: "spike",        name: "Spending Spike Detection",   description: "Alert when a single expense is >20% of total",  enabled: true,  threshold: 20 },
+  { id: "budget_over",  name: "Over-Budget Warning",        description: "Alert when expenses exceed income",              enabled: true },
+  { id: "top_merchant", name: "Top Merchant Insight",       description: "Highlight your #1 spending merchant",           enabled: true },
+];
+
+// ── Main Component ─────────────────────────────────────────────────────────────
+
+export default function AlertsPage() {
+  const router = useRouter();
+  const [isAuth, setIsAuth] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [alerts, setAlerts] = useState<SmartAlert[]>([]);
+  const [filter, setFilter] = useState<"all" | "unread" | "read">("all");
+  const [severityFilter, setSeverityFilter] = useState<"all" | Severity>("all");
+  const [showRules, setShowRules] = useState(false);
+  const [rules, setRules] = useState<AlertRule[]>(DEFAULT_RULES);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.replace("/register?mode=signin");
+    } else {
+      setIsAuth(true);
+      setIsCheckingAuth(false);
+    }
+  }, [router]);
+
+  // ── Fetch + generate ───────────────────────────────────────────────────────
+  const fetchAndGenerate = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const txns = await transactionsAPI.getAll();
+      setTransactions(txns);
+      const generated = generateAlertsFromTransactions(txns);
+      setAlerts(generated);
       setLastUpdated(new Date());
-    } catch (error) {
-      console.error('Failed to load alerts:', error);
-      setAlerts([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load transactions");
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
-  // Auto-refresh every 5 minutes
   useEffect(() => {
-    loadAlerts();
-    const interval = setInterval(() => loadAlerts(true), 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [loadAlerts]);
+    if (isAuth) void fetchAndGenerate();
+  }, [isAuth, fetchAndGenerate]);
 
-  // Reload when filter changes (silent)
-  useEffect(() => {
-    if (!loading) loadAlerts(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  // ── Derived counts ─────────────────────────────────────────────────────────
+  const counts = useMemo(() => ({
+    all:    alerts.length,
+    unread: alerts.filter(a => !a.read).length,
+    high:   alerts.filter(a => a.severity === "high").length,
+    medium: alerts.filter(a => a.severity === "medium").length,
+    low:    alerts.filter(a => a.severity === "low").length,
+  }), [alerts]);
 
-  // ── Stats ────────────────────────────────────────────────────────────────────
-
-  const calculateStats = (data: Alert[]) => {
-    const s: AlertStats = { total: data.length, unread: 0, bySeverity: {}, byType: {} };
-    data.forEach((a) => {
-      if (!a.read) s.unread++;
-      const sev = (a.severity || 'low').toLowerCase();
-      s.bySeverity[sev] = (s.bySeverity[sev] || 0) + 1;
-      const type = a.type || 'other';
-      s.byType[type] = (s.byType[type] || 0) + 1;
+  // ── Filtered alerts ────────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    return alerts.filter(a => {
+      const readMatch = filter === "all" || (filter === "unread" ? !a.read : a.read);
+      const sevMatch  = severityFilter === "all" || a.severity === severityFilter;
+      return readMatch && sevMatch;
     });
-    setStats(s);
-  };
+  }, [alerts, filter, severityFilter]);
 
-  // ── Actions ──────────────────────────────────────────────────────────────────
+  // ── Actions ────────────────────────────────────────────────────────────────
+  const markRead = (id: string) =>
+    setAlerts(prev => prev.map(a => a.id === id ? { ...a, read: true } : a));
 
-  const handleMarkAsRead = async (id: string) => {
-    setActionLoading(id);
-    try {
-      // Call real acknowledge endpoint
-      await alertService.acknowledgeAlert(id);
-      const updated = alerts.map((a) => (a.id === id ? { ...a, read: true, acknowledged: true } : a));
-      setAlerts(updated);
-      calculateStats(updated);
-    } catch (err) {
-      console.error('Failed to mark as read:', err);
-      // Optimistic update anyway
-      const updated = alerts.map((a) => (a.id === id ? { ...a, read: true } : a));
-      setAlerts(updated);
-      calculateStats(updated);
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  const markAllRead = () =>
+    setAlerts(prev => prev.map(a => ({ ...a, read: true })));
 
-  const handleDismiss = async (id: string) => {
-    setActionLoading(id);
-    try {
-      // Try to acknowledge first, then remove from UI
-      await alertService.acknowledgeAlert(id).catch(() => {});
-      const updated = alerts.filter((a) => a.id !== id);
-      setAlerts(updated);
-      calculateStats(updated);
-    } catch (err) {
-      console.error('Failed to dismiss alert:', err);
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  const dismiss = (id: string) =>
+    setAlerts(prev => prev.filter(a => a.id !== id));
 
-  const handleMarkAllRead = async () => {
-    setActionLoading('all');
-    try {
-      await alertService.acknowledgeAll();
-      const updated = alerts.map((a) => ({ ...a, read: true, acknowledged: true }));
-      setAlerts(updated);
-      calculateStats(updated);
-    } catch (err) {
-      console.error('Failed to mark all as read:', err);
-      // Optimistic update
-      const updated = alerts.map((a) => ({ ...a, read: true }));
-      setAlerts(updated);
-      calculateStats(updated);
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  const dismissAll = () => setAlerts([]);
 
-  const handleBulkMarkRead = async () => {
-    if (selectedAlerts.size === 0) return;
-    setActionLoading('bulk-read');
-    try {
-      await Promise.allSettled(
-        Array.from(selectedAlerts).map((id) => alertService.acknowledgeAlert(id))
-      );
-      const updated = alerts.map((a) =>
-        a.id && selectedAlerts.has(a.id) ? { ...a, read: true, acknowledged: true } : a
-      );
-      setAlerts(updated);
-      calculateStats(updated);
-      setSelectedAlerts(new Set());
-    } catch (err) {
-      console.error('Bulk mark read failed:', err);
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  const toggleRule = (id: string) =>
+    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
 
-  const handleBulkDelete = async () => {
-    if (selectedAlerts.size === 0) return;
-    if (!confirm(`Dismiss ${selectedAlerts.size} alert${selectedAlerts.size > 1 ? 's' : ''}?`)) return;
-    setActionLoading('bulk-delete');
-    try {
-      await Promise.allSettled(
-        Array.from(selectedAlerts).map((id) => alertService.acknowledgeAlert(id))
-      );
-      const updated = alerts.filter((a) => !a.id || !selectedAlerts.has(a.id));
-      setAlerts(updated);
-      calculateStats(updated);
-      setSelectedAlerts(new Set());
-    } catch (err) {
-      console.error('Bulk delete failed:', err);
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  // ── Loading / Auth ─────────────────────────────────────────────────────────
+  if (isCheckingAuth || !isAuth) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-  // ── Selection ────────────────────────────────────────────────────────────────
-
-  const toggleSelect = (id: string | undefined) => {
-    if (!id) return;
-    const s = new Set(selectedAlerts);
-    s.has(id) ? s.delete(id) : s.add(id);
-    setSelectedAlerts(s);
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedAlerts.size === filteredAlerts.length) {
-      setSelectedAlerts(new Set());
-    } else {
-      setSelectedAlerts(
-        new Set(filteredAlerts.map((a) => a.id).filter((id): id is string => !!id))
-      );
-    }
-  };
-
-  // ── Helpers ──────────────────────────────────────────────────────────────────
-
-  const filteredAlerts = alerts.filter((a) => {
-    if (filter === 'unread') return !a.read;
-    if (filter === 'read') return a.read;
-    return true;
-  });
-
-  const highCount = (stats.bySeverity['high'] || 0) + (stats.bySeverity['urgent'] || 0);
-  const mediumCount = stats.bySeverity['medium'] || 0;
-  const lowCount = stats.bySeverity['low'] || 0;
-
-  // ── Render ───────────────────────────────────────────────────────────────────
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
-        {/* ── Header Card ──────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <Bell className="w-8 h-8 text-red-500" />
-                Financial Alerts
-              </h1>
-              <p className="text-gray-500 mt-1 text-sm">
-                {stats.unread > 0
-                  ? `${stats.unread} unread alert${stats.unread > 1 ? 's' : ''} · ${stats.total} total`
-                  : 'All caught up! 🎉'}
-                {lastUpdated && (
-                  <span className="ml-2 text-gray-400">
-                    · Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                )}
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Bell className="w-4 h-4 text-indigo-500" />
+              <span className="text-xs font-bold text-indigo-500 uppercase tracking-widest">Smart Alerts</span>
+            </div>
+            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Financial Alerts</h1>
+            <p className="text-sm text-gray-400 mt-1">
+              {loading
+                ? "Analysing your transactions..."
+                : counts.unread > 0
+                  ? `${counts.unread} unread alert${counts.unread !== 1 ? "s" : ""} · Updated ${lastUpdated ? timeAgo(lastUpdated) : "—"}`
+                  : `All caught up! 🎉 · Updated ${lastUpdated ? timeAgo(lastUpdated) : "—"}`
+              }
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => void fetchAndGenerate()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 shadow-sm hover:bg-gray-50 transition disabled:opacity-50">
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+            <button
+              onClick={() => setShowRules(r => !r)}
+              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold shadow-sm transition ${
+                showRules ? "bg-indigo-600 text-white" : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              }`}>
+              <Settings className="w-4 h-4" />
+              Alert Rules
+            </button>
+          </div>
+        </div>
+
+        {/* ── Severity Summary Cards ───────────────────────────────────────── */}
+        <div className="grid grid-cols-3 gap-3">
+          {(["high", "medium", "low"] as Severity[]).map(sev => {
+            const cfg = SEVERITY_CONFIG[sev];
+            const count = counts[sev];
+            return (
+              <button key={sev}
+                onClick={() => setSeverityFilter(severityFilter === sev ? "all" : sev)}
+                className={`rounded-3xl border p-4 text-left transition-all ${
+                  severityFilter === sev
+                    ? `${cfg.bg} ${cfg.border} ring-2 ring-offset-1 ${
+                        sev === "high" ? "ring-red-400" : sev === "medium" ? "ring-amber-400" : "ring-blue-400"
+                      }`
+                    : "bg-white border-gray-100 hover:border-gray-200"
+                }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
+                  {severityFilter === sev && (
+                    <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${cfg.badgeBg} ${cfg.badgeText}`}>
+                      Filtered
+                    </div>
+                  )}
+                </div>
+                <p className={`text-2xl font-extrabold ${count > 0 ? cfg.text : "text-gray-300"}`}>{count}</p>
+                <p className="text-xs font-semibold text-gray-400 mt-0.5">{cfg.label} Severity</p>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Alert Rules Panel ────────────────────────────────────────────── */}
+        {showRules && (
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="h-1 w-full bg-gradient-to-r from-indigo-500 to-violet-500" />
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Alert Rules</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Toggle which patterns generate alerts</p>
+                </div>
+                <button onClick={() => setShowRules(false)}
+                  className="p-2 rounded-xl hover:bg-gray-100 transition">
+                  <X className="w-4 h-4 text-gray-400" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                {rules.map(rule => (
+                  <div key={rule.id}
+                    className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{rule.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{rule.description}
+                        {rule.threshold && <span className="text-indigo-500 ml-1">
+                          (threshold: {rule.id === "category" || rule.id === "spike" ? `${rule.threshold}%` : rule.id === "large_txn" ? fmt(rule.threshold) : `${rule.threshold}x`})
+                        </span>}
+                      </p>
+                    </div>
+                    <button onClick={() => toggleRule(rule.id)}
+                      className={`relative inline-flex w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
+                        rule.enabled ? "bg-indigo-600" : "bg-gray-200"
+                      }`}>
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                        rule.enabled ? "translate-x-5" : "translate-x-0"
+                      }`} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-4 text-center">
+                Rule changes apply on next Refresh — alerts are generated from your live transaction data.
               </p>
             </div>
+          </div>
+        )}
 
+        {/* ── Filter Bar ───────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-1">
+            {(["all", "unread", "read"] as const).map(f => (
+              <button key={f}
+                onClick={() => setFilter(f)}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold capitalize transition-all ${
+                  filter === f ? "bg-indigo-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-800 hover:bg-slate-50"
+                }`}>
+                {f}
+                {f === "unread" && counts.unread > 0 && (
+                  <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    filter === "unread" ? "bg-white/20 text-white" : "bg-red-100 text-red-600"
+                  }`}>{counts.unread}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {alerts.length > 0 && (
             <div className="flex items-center gap-2">
-              {/* Refresh */}
-              <button
-                onClick={() => loadAlerts(true)}
-                disabled={refreshing || loading}
-                className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
-              >
-                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-              {/* Alert Rules */}
-              <button
-                onClick={() => setShowRules(!showRules)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
-                  showRules
-                    ? 'bg-red-600 text-white'
-                    : 'bg-red-50 text-red-700 hover:bg-red-100'
-                }`}
-              >
-                <Settings className="w-4 h-4" />
-                Alert Rules
-              </button>
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <StatCard label="High Severity" value={highCount} color="red" icon={<ShieldAlert className="w-5 h-5" />} />
-            <StatCard label="Medium Severity" value={mediumCount} color="yellow" icon={<Activity className="w-5 h-5" />} />
-            <StatCard label="Low Severity" value={lowCount} color="blue" icon={<Target className="w-5 h-5" />} />
-          </div>
-
-          {/* Filter + bulk actions */}
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              {(['all', 'unread', 'read'] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-4 py-1.5 rounded-md text-sm transition capitalize font-medium ${
-                    filter === f
-                      ? 'bg-white shadow-sm text-red-600'
-                      : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  {f}
-                  {f === 'unread' && stats.unread > 0 && (
-                    <span className="ml-1.5 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                      {stats.unread}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-3">
-              {stats.unread > 0 && (
-                <button
-                  onClick={handleMarkAllRead}
-                  disabled={actionLoading === 'all'}
-                  className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
-                >
-                  <CheckCheck className="w-4 h-4" />
-                  {actionLoading === 'all' ? 'Marking…' : 'Mark all read'}
+              {counts.unread > 0 && (
+                <button onClick={markAllRead}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition">
+                  <Check className="w-3.5 h-3.5" /> Mark all read
                 </button>
               )}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Alert Rules Panel ─────────────────────────────────────────────── */}
-        {showRules && (
-          <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6 mb-6">
-            <h2 className="text-lg font-semibold mb-1 flex items-center gap-2 text-gray-900">
-              <Settings className="w-5 h-5 text-red-500" />
-              Alert Rules
-            </h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Alerts are automatically generated when your spending hits these thresholds.
-            </p>
-            <div className="space-y-3">
-              <AlertRuleCard title="Budget Warning at 80%" description="Medium alert when you've used 80% of a budget category" color="yellow" enabled />
-              <AlertRuleCard title="Budget Exceeded (100%+)" description="High-priority alert when you exceed any budget category" color="red" enabled />
-              <AlertRuleCard title="Unusual Spending" description="Detects transactions significantly above your average" color="purple" enabled />
-              <AlertRuleCard title="Goal Achievements" description="Celebrate when you hit savings milestones" color="green" enabled />
-            </div>
-            <p className="text-xs text-gray-400 mt-4">
-              ℹ️ Rules run automatically every hour on the server. You can trigger a manual refresh above.
-            </p>
-          </div>
-        )}
-
-        {/* ── Bulk Actions Bar ──────────────────────────────────────────────── */}
-        {selectedAlerts.size > 0 && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white border border-gray-200 shadow-xl rounded-2xl px-5 py-3 flex items-center gap-4 animate-fade-in">
-            <span className="text-sm font-medium text-gray-700">
-              {selectedAlerts.size} selected
-            </span>
-            <div className="flex gap-2">
-              <button
-                onClick={handleBulkMarkRead}
-                disabled={!!actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-50 text-green-700 rounded-lg hover:bg-green-100 disabled:opacity-50 transition"
-              >
-                <Check className="w-3.5 h-3.5" />
-                Mark Read
-              </button>
-              <button
-                onClick={handleBulkDelete}
-                disabled={!!actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded-lg hover:bg-red-100 disabled:opacity-50 transition"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Dismiss
-              </button>
-              <button
-                onClick={() => setSelectedAlerts(new Set())}
-                className="px-3 py-1.5 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
-              >
-                Cancel
+              <button onClick={dismissAll}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-gray-600 transition">
+                <Trash2 className="w-3.5 h-3.5" /> Clear all
               </button>
             </div>
-          </div>
-        )}
-
-        {/* ── Alerts List ───────────────────────────────────────────────────── */}
-        <div className="space-y-2">
-          {loading ? (
-            <LoadingSkeleton />
-          ) : filteredAlerts.length === 0 ? (
-            <EmptyState filter={filter} />
-          ) : (
-            <>
-              {/* Select all row */}
-              <div className="bg-white rounded-xl border border-gray-100 px-4 py-2.5 flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  checked={selectedAlerts.size === filteredAlerts.length && filteredAlerts.length > 0}
-                  onChange={toggleSelectAll}
-                  className="w-4 h-4 rounded border-gray-300 accent-red-600"
-                />
-                <span className="text-sm text-gray-500">
-                  Select all ({filteredAlerts.length})
-                </span>
-              </div>
-
-              {filteredAlerts.map((alert) => {
-                if (!alert.id) return null;
-                const isLoading = actionLoading === alert.id;
-                return (
-                  <AlertCard
-                    key={alert.id}
-                    alert={alert}
-                    selected={selectedAlerts.has(alert.id)}
-                    isLoading={isLoading}
-                    onToggleSelect={() => toggleSelect(alert.id)}
-                    onMarkAsRead={() => handleMarkAsRead(alert.id!)}
-                    onDismiss={() => handleDismiss(alert.id!)}
-                  />
-                );
-              })}
-            </>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
 
-// ─── Alert Card ───────────────────────────────────────────────────────────────
-
-function AlertCard({
-  alert,
-  selected,
-  isLoading,
-  onToggleSelect,
-  onMarkAsRead,
-  onDismiss,
-}: {
-  alert: Alert;
-  selected: boolean;
-  isLoading: boolean;
-  onToggleSelect: () => void;
-  onMarkAsRead: () => void;
-  onDismiss: () => void;
-}) {
-  const borderColor = getSeverityBorder(alert.severity);
-  const icon = getTypeIcon(alert.type);
-
-  return (
-    <div
-      className={`bg-white rounded-xl border-l-4 border border-gray-100 p-4 transition-all ${borderColor} ${
-        !alert.read ? 'shadow-sm' : 'opacity-70'
-      } ${selected ? 'ring-2 ring-red-400 ring-offset-1' : ''} ${isLoading ? 'animate-pulse' : ''}`}
-    >
-      <div className="flex items-start gap-3">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onToggleSelect}
-          className="mt-1 w-4 h-4 rounded border-gray-300 accent-red-600"
-        />
-
-        <div className="mt-0.5 shrink-0">{icon}</div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <h3 className="font-semibold text-gray-900 text-sm">{alert.title}</h3>
-            <SeverityBadge severity={alert.severity} />
-            {!alert.read && (
-              <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full font-semibold tracking-wide">
-                NEW
-              </span>
-            )}
+        {/* ── Alert List ───────────────────────────────────────────────────── */}
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
+            <p className="text-sm text-gray-400 font-semibold">Analysing transactions…</p>
           </div>
-          <p className="text-gray-600 text-sm mb-1.5 leading-relaxed">{alert.message}</p>
-
-          {/* Progress bar for budget alerts */}
-          {alert.percentage !== undefined && alert.percentage > 0 && (
-            <div className="mb-2">
-              <div className="flex justify-between text-xs text-gray-500 mb-1">
-                <span>Spent ${alert.currentSpent?.toFixed(2) ?? '0'}</span>
-                <span>Budget ${alert.budgetAmount?.toFixed(2) ?? '0'}</span>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-1.5">
-                <div
-                  className={`h-1.5 rounded-full transition-all ${
-                    alert.percentage >= 100 ? 'bg-red-500' : 'bg-yellow-400'
-                  }`}
-                  style={{ width: `${Math.min(alert.percentage, 100)}%` }}
-                />
-              </div>
-              <p className="text-xs text-gray-400 mt-0.5">{alert.percentage.toFixed(0)}% of budget used</p>
-            </div>
-          )}
-
-          <p className="text-xs text-gray-400">
-            {alert.createdAt ? new Date(alert.createdAt).toLocaleString() : ''}
-          </p>
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-1 shrink-0">
-          {!alert.read && (
-            <button
-              onClick={onMarkAsRead}
-              disabled={isLoading}
-              title="Mark as read"
-              className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition disabled:opacity-50"
-            >
-              <Check className="w-4 h-4" />
+        ) : error ? (
+          <div className="bg-red-50 border border-red-200 rounded-3xl p-8 text-center">
+            <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-3" />
+            <p className="text-sm font-bold text-red-700 mb-1">Failed to load alerts</p>
+            <p className="text-xs text-red-500 mb-4">{error}</p>
+            <button onClick={() => void fetchAndGenerate()}
+              className="px-5 py-2 bg-red-500 text-white rounded-xl text-sm font-semibold hover:bg-red-600 transition">
+              Try Again
             </button>
-          )}
-          <button
-            onClick={onDismiss}
-            disabled={isLoading}
-            title="Dismiss"
-            className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-12 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center mx-auto mb-4">
+              <BellOff className="w-8 h-8 text-indigo-300" />
+            </div>
+            <h3 className="text-base font-bold text-gray-700 mb-1">No Transactions Found</h3>
+            <p className="text-sm text-gray-400">Add transactions first — alerts are generated automatically from your spending data.</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-12 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+            </div>
+            <h3 className="text-base font-bold text-gray-700 mb-1">
+              {filter === "unread" ? "No unread alerts" : filter === "read" ? "No read alerts" : "No alerts"}
+            </h3>
+            <p className="text-sm text-gray-400">
+              {severityFilter !== "all"
+                ? `No ${severityFilter} severity alerts match your filter.`
+                : "You're all caught up! 🎉"}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map(alert => {
+              const cfg = SEVERITY_CONFIG[alert.severity];
+              const Icon = alert.icon;
+              return (
+                <div key={alert.id}
+                  className={`group relative bg-white rounded-3xl border shadow-sm overflow-hidden transition-all hover:shadow-md ${
+                    !alert.read ? `border-l-4 ${
+                      alert.severity === "high" ? "border-l-red-400 border-gray-100"
+                      : alert.severity === "medium" ? "border-l-amber-400 border-gray-100"
+                      : "border-l-blue-400 border-gray-100"
+                    }` : "border-gray-100"
+                  }`}>
+                  <div className="p-5">
+                    <div className="flex items-start gap-4">
+                      {/* Icon */}
+                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${cfg.bg}`}>
+                        <Icon className={`w-5 h-5 ${cfg.text}`} />
+                      </div>
 
-// ─── Helper Components ────────────────────────────────────────────────────────
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className={`text-sm font-bold ${alert.read ? "text-gray-600" : "text-gray-900"}`}>
+                              {alert.title}
+                            </h4>
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.badgeBg} ${cfg.badgeText}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                              {cfg.label}
+                            </span>
+                            {!alert.read && (
+                              <span className="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0 mt-0.5" />
+                            )}
+                          </div>
 
-function StatCard({
-  label,
-  value,
-  color,
-  icon,
-}: {
-  label: string;
-  value: number;
-  color: 'red' | 'yellow' | 'blue';
-  icon: React.ReactNode;
-}) {
-  const cls = {
-    red: 'bg-red-50 text-red-700 border-red-100',
-    yellow: 'bg-yellow-50 text-yellow-700 border-yellow-100',
-    blue: 'bg-blue-50 text-blue-700 border-blue-100',
-  };
-  return (
-    <div className={`p-4 rounded-xl border ${cls[color]}`}>
-      <div className="flex items-center justify-between mb-1">
-        {icon}
-        <span className="text-2xl font-bold">{value}</span>
-      </div>
-      <p className="text-xs font-medium opacity-80">{label}</p>
-    </div>
-  );
-}
+                          {/* Actions */}
+                          <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {!alert.read && (
+                              <button onClick={() => markRead(alert.id)}
+                                title="Mark as read"
+                                className="p-1.5 rounded-lg hover:bg-gray-100 transition">
+                                <Check className="w-3.5 h-3.5 text-gray-400" />
+                              </button>
+                            )}
+                            <button onClick={() => dismiss(alert.id)}
+                              title="Dismiss"
+                              className="p-1.5 rounded-lg hover:bg-red-50 transition">
+                              <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-400" />
+                            </button>
+                          </div>
+                        </div>
 
-function SeverityBadge({ severity }: { severity?: string }) {
-  const sev = (severity || 'low').toLowerCase();
-  const cls =
-    sev === 'high' || sev === 'urgent'
-      ? 'bg-red-100 border-red-300 text-red-800'
-      : sev === 'medium'
-      ? 'bg-yellow-100 border-yellow-300 text-yellow-800'
-      : 'bg-blue-100 border-blue-300 text-blue-800';
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${cls}`}>
-      {sev.toUpperCase()}
-    </span>
-  );
-}
+                        <p className={`text-sm mt-1 ${alert.read ? "text-gray-400" : "text-gray-600"}`}>
+                          {alert.message}
+                        </p>
 
-function AlertRuleCard({
-  title,
-  description,
-  color,
-  enabled,
-}: {
-  title: string;
-  description: string;
-  color: 'red' | 'yellow' | 'green' | 'purple';
-  enabled: boolean;
-}) {
-  const bg = { red: 'bg-red-50 border-red-100', yellow: 'bg-yellow-50 border-yellow-100', green: 'bg-green-50 border-green-100', purple: 'bg-purple-50 border-purple-100' };
-  const text = { red: 'text-red-900', yellow: 'text-yellow-900', green: 'text-green-900', purple: 'text-purple-900' };
-  const sub = { red: 'text-red-600', yellow: 'text-yellow-600', green: 'text-green-600', purple: 'text-purple-600' };
-  return (
-    <div className={`flex items-center justify-between p-3.5 rounded-xl border ${bg[color]}`}>
-      <div>
-        <p className={`font-medium text-sm ${text[color]}`}>{title}</p>
-        <p className={`text-xs mt-0.5 ${sub[color]}`}>{description}</p>
-      </div>
-      <input type="checkbox" defaultChecked={enabled} className="w-4 h-4 accent-red-600" />
-    </div>
-  );
-}
+                        <div className="flex items-center justify-between mt-3">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            {alert.amount && (
+                              <span className={`text-xs font-bold ${cfg.text}`}>
+                                {fmt(alert.amount)}
+                              </span>
+                            )}
+                            {alert.category && (
+                              <span className="text-xs text-gray-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                                {alert.category}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1 text-[11px] text-gray-300">
+                              <Clock className="w-3 h-3" />
+                              {timeAgo(alert.createdAt)}
+                            </span>
+                          </div>
 
-function LoadingSkeleton() {
-  return (
-    <>
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-white rounded-xl border border-gray-100 p-4 animate-pulse">
-          <div className="flex gap-3">
-            <div className="w-4 h-4 bg-gray-200 rounded mt-1" />
-            <div className="w-6 h-6 bg-gray-200 rounded-full mt-0.5" />
-            <div className="flex-1 space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-1/3" />
-              <div className="h-3 bg-gray-200 rounded w-2/3" />
-              <div className="h-3 bg-gray-200 rounded w-1/4" />
+                          {alert.actionLabel && (
+                            <button
+                              onClick={() => markRead(alert.id)}
+                              className={`inline-flex items-center gap-1 text-xs font-bold transition ${cfg.text} hover:opacity-80`}>
+                              {alert.actionLabel}
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Summary Footer ───────────────────────────────────────────────── */}
+        {!loading && transactions.length > 0 && alerts.length > 0 && (
+          <div className="bg-white rounded-3xl border border-indigo-100 shadow-sm overflow-hidden">
+            <div className="h-1 w-full" style={{ background: "linear-gradient(to right,#6366f1,#8b5cf6,#a855f7)" }} />
+            <div className="p-5 flex items-start gap-4">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="w-5 h-5 text-indigo-500" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 mb-1">Alert Summary</h3>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Generated <strong>{alerts.length} alerts</strong> from{" "}
+                  <strong>{transactions.length} transactions</strong>.{" "}
+                  {counts.high > 0 && (
+                    <span className="text-red-600 font-semibold">{counts.high} high-severity item{counts.high !== 1 ? "s" : ""} need your attention. </span>
+                  )}
+                  Alerts are recalculated each time you refresh.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
-    </>
-  );
-}
-
-function EmptyState({ filter }: { filter: string }) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-      <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-        <Bell className="w-8 h-8 text-gray-300" />
+        )}
       </div>
-      <p className="text-gray-700 font-medium">
-        {filter === 'unread' ? 'No unread alerts' : filter === 'read' ? 'No read alerts' : 'No alerts yet'}
-      </p>
-      <p className="text-sm text-gray-400 mt-1">
-        {filter === 'all'
-          ? "Alerts appear here when your spending approaches or exceeds a budget limit."
-          : 'Try switching the filter above.'}
-      </p>
     </div>
   );
-}
-
-// ─── Pure helpers ─────────────────────────────────────────────────────────────
-
-function buildTitle(a: { type: string; category: string }): string {
-  switch (a.type) {
-    case 'EXCEEDED_100': return `Budget Exceeded: ${a.category}`;
-    case 'WARNING_90': return `Near Limit: ${a.category}`;
-    case 'WARNING_80': return `Budget Warning: ${a.category}`;
-    default: return `Alert: ${a.category}`;
-  }
-}
-
-function buildMessage(a: {
-  type: string;
-  category: string;
-  percentage: number;
-  currentSpent: number;
-  budgetAmount: number;
-}): string {
-  const pct = a.percentage.toFixed(0);
-  const spent = a.currentSpent.toFixed(2);
-  const budget = a.budgetAmount.toFixed(2);
-  const over = (a.currentSpent - a.budgetAmount).toFixed(2);
-  switch (a.type) {
-    case 'EXCEEDED_100':
-      return `You've exceeded your ${a.category} budget by $${over} (spent $${spent} of $${budget}).`;
-    case 'WARNING_90':
-      return `You've used ${pct}% of your ${a.category} budget ($${spent} of $${budget}).`;
-    case 'WARNING_80':
-      return `You've used ${pct}% of your ${a.category} budget ($${spent} of $${budget}).`;
-    default:
-      return `Spending update for ${a.category}: $${spent} of $${budget} used.`;
-  }
-}
-
-function mapSeverity(type: string): string {
-  if (type === 'EXCEEDED_100') return 'HIGH';
-  if (type === 'WARNING_90') return 'MEDIUM';
-  if (type === 'WARNING_80') return 'MEDIUM';
-  return 'LOW';
-}
-
-function getSeverityBorder(severity?: string): string {
-  const s = (severity || '').toLowerCase();
-  if (s === 'high' || s === 'urgent') return 'border-l-red-500';
-  if (s === 'medium') return 'border-l-yellow-400';
-  return 'border-l-blue-400';
-}
-
-function getTypeIcon(type?: string): React.ReactNode {
-  const t = (type || '').toLowerCase();
-  if (t.includes('exceeded')) return <DollarSign className="w-5 h-5 text-red-500" />;
-  if (t.includes('warning')) return <TrendingUp className="w-5 h-5 text-yellow-500" />;
-  if (t.includes('goal') || t.includes('achievement')) return <Target className="w-5 h-5 text-green-500" />;
-  if (t.includes('unusual') || t.includes('activity')) return <Activity className="w-5 h-5 text-purple-500" />;
-  return <AlertTriangle className="w-5 h-5 text-gray-400" />;
 }

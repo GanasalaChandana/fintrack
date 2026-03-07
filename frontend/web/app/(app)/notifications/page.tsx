@@ -1,452 +1,547 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Mail,
-  Check,
-  X,
-  Inbox,
-  AlertCircle,
-  RefreshCw,
-  CheckCheck,
-  Bell,
-  Trash2,
-} from 'lucide-react';
-import { notificationService, type Notification } from '@/lib/api/services/notification.service';
+  Mail, Bell, BellOff, Check, X, RefreshCw, CheckCheck,
+  Trash2, Info, AlertTriangle, CheckCircle2, Sparkles,
+  TrendingUp, TrendingDown, DollarSign, ShoppingBag,
+  CreditCard, Target, Gift, Repeat, Clock, Filter,
+  type LucideIcon,
+} from "lucide-react";
+import { isAuthenticated, transactionsAPI, type Transaction } from "@/lib/api";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type NotifType = "INFO" | "WARNING" | "SUCCESS" | "ERROR";
+
+interface SmartNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: NotifType;
+  read: boolean;
+  createdAt: Date;
+  icon: LucideIcon;
+  category?: string;
+  amount?: number;
+  tag: string; // human-readable tag shown in filter chips
+}
+
+// ── Formatters ────────────────────────────────────────────────────────────────
+
+const fmt = (v: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(v);
+
+const timeAgo = (d: Date): string => {
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 2) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+};
+
+// ── Notification Generator ────────────────────────────────────────────────────
+
+function generateNotifications(transactions: Transaction[]): SmartNotification[] {
+  if (!transactions.length) return [];
+
+  const now = new Date();
+  let id = 0;
+  const mk = () => `notif-${++id}`;
+
+  const notifs: SmartNotification[] = [];
+  const expenses = transactions.filter(t => t.type === "expense");
+  const income   = transactions.filter(t => t.type === "income");
+
+  const totalIncome   = income.reduce((s, t) => s + t.amount, 0);
+  const totalExpenses = expenses.reduce((s, t) => s + t.amount, 0);
+
+  // ── 1. Welcome / account summary ─────────────────────────────────────────
+  notifs.push({
+    id: mk(), type: "INFO", read: false,
+    title: "Account Summary Ready",
+    message: `You have ${transactions.length} transactions recorded. Income: ${fmt(totalIncome)} · Expenses: ${fmt(totalExpenses)}.`,
+    icon: Sparkles, tag: "Summary",
+    createdAt: new Date(now.getTime() - 0),
+  });
+
+  // ── 2. Net savings / deficit ──────────────────────────────────────────────
+  const net = totalIncome - totalExpenses;
+  if (net > 0) {
+    notifs.push({
+      id: mk(), type: "SUCCESS", read: false,
+      title: "Positive Net Balance",
+      message: `Great news! You have a net surplus of ${fmt(net)} this period. Keep it up!`,
+      icon: TrendingUp, tag: "Savings", amount: net,
+      createdAt: new Date(now.getTime() - 10 * 60000),
+    });
+  } else if (net < 0) {
+    notifs.push({
+      id: mk(), type: "WARNING", read: false,
+      title: "Spending Exceeds Income",
+      message: `Your expenses exceed income by ${fmt(Math.abs(net))}. Review your spending to get back on track.`,
+      icon: TrendingDown, tag: "Budget", amount: Math.abs(net),
+      createdAt: new Date(now.getTime() - 10 * 60000),
+    });
+  }
+
+  // ── 3. Income notifications ───────────────────────────────────────────────
+  income.slice(0, 2).forEach((t, i) => {
+    notifs.push({
+      id: mk(), type: "SUCCESS", read: false,
+      title: "Income Received",
+      message: `${fmt(t.amount)} credited from ${t.merchant || t.description}${t.category ? ` (${t.category})` : ""}.`,
+      icon: DollarSign, tag: "Income", amount: t.amount,
+      category: t.category,
+      createdAt: new Date(now.getTime() - (20 + i * 15) * 60000),
+    });
+  });
+
+  // ── 4. Large expense notifications ───────────────────────────────────────
+  expenses
+    .filter(t => t.amount > 500)
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 3)
+    .forEach((t, i) => {
+      notifs.push({
+        id: mk(), type: "WARNING", read: false,
+        title: "Large Expense Recorded",
+        message: `${fmt(t.amount)} charged at ${t.merchant || t.description}${t.category ? ` in ${t.category}` : ""}.`,
+        icon: CreditCard, tag: "Expenses", amount: t.amount,
+        category: t.category,
+        createdAt: new Date(now.getTime() - (45 + i * 20) * 60000),
+      });
+    });
+
+  // ── 5. Top spending category ──────────────────────────────────────────────
+  const catMap: Record<string, number> = {};
+  expenses.forEach(t => {
+    const c = t.category || "Uncategorized";
+    catMap[c] = (catMap[c] || 0) + t.amount;
+  });
+  const topCats = Object.entries(catMap).sort(([, a], [, b]) => b - a);
+  if (topCats.length > 0) {
+    const [cat, amt] = topCats[0];
+    const pct = totalExpenses > 0 ? Math.round((amt / totalExpenses) * 100) : 0;
+    notifs.push({
+      id: mk(), type: pct > 40 ? "WARNING" : "INFO", read: false,
+      title: "Top Spending Category",
+      message: `${cat} is your highest expense category at ${fmt(amt)} (${pct}% of total spending).`,
+      icon: ShoppingBag, tag: "Categories", amount: amt,
+      category: cat,
+      createdAt: new Date(now.getTime() - 2 * 3600000),
+    });
+  }
+
+  // ── 6. Monthly spending milestone ────────────────────────────────────────
+  if (totalExpenses > 1000) {
+    notifs.push({
+      id: mk(), type: "INFO", read: false,
+      title: "Spending Milestone",
+      message: `Your total expenses have reached ${fmt(totalExpenses)}. You've made ${expenses.length} expense transactions.`,
+      icon: Target, tag: "Milestones", amount: totalExpenses,
+      createdAt: new Date(now.getTime() - 2.5 * 3600000),
+    });
+  }
+
+  // ── 7. Recurring merchant detected ───────────────────────────────────────
+  const merchantMap: Record<string, number> = {};
+  expenses.forEach(t => {
+    const key = t.merchant || t.description;
+    merchantMap[key] = (merchantMap[key] || 0) + 1;
+  });
+  Object.entries(merchantMap)
+    .filter(([, c]) => c >= 3)
+    .slice(0, 2)
+    .forEach(([merchant, count], i) => {
+      notifs.push({
+        id: mk(), type: "INFO", read: false,
+        title: "Recurring Transaction Detected",
+        message: `You've transacted ${count}× at ${merchant}. This looks like a subscription or regular habit.`,
+        icon: Repeat, tag: "Recurring",
+        createdAt: new Date(now.getTime() - (3 + i * 0.5) * 3600000),
+      });
+    });
+
+  // ── 8. Category count summary ─────────────────────────────────────────────
+  const uniqueCats = Object.keys(catMap).length;
+  if (uniqueCats >= 3) {
+    notifs.push({
+      id: mk(), type: "INFO", read: false,
+      title: "Spending Diversified Across Categories",
+      message: `Your expenses are spread across ${uniqueCats} categories. Top 3: ${topCats.slice(0, 3).map(([c]) => c).join(", ")}.`,
+      icon: Filter, tag: "Summary",
+      createdAt: new Date(now.getTime() - 4 * 3600000),
+    });
+  }
+
+  // ── 9. Savings rate if positive ───────────────────────────────────────────
+  if (totalIncome > 0 && net > 0) {
+    const rate = Math.round((net / totalIncome) * 100);
+    notifs.push({
+      id: mk(), type: "SUCCESS", read: false,
+      title: rate >= 20 ? "Excellent Savings Rate! 🎉" : "Good Savings Progress",
+      message: `You're saving ${rate}% of income (${fmt(net)}). ${rate >= 20 ? "You're well above the recommended 20% savings benchmark!" : "Aim for 20% to build a strong financial cushion."}`,
+      icon: Gift, tag: "Savings", amount: net,
+      createdAt: new Date(now.getTime() - 5 * 3600000),
+    });
+  }
+
+  // ── Sort by date desc (newest first), then stagger slightly ──────────────
+  return notifs
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map((n, i) => ({ ...n, read: i > 3 })); // first 4 start as unread
+}
+
+// ── Type config ───────────────────────────────────────────────────────────────
+
+const TYPE_CONFIG: Record<NotifType, {
+  border: string; iconBg: string; iconColor: string;
+  badgeBg: string; badgeText: string; label: string;
+}> = {
+  SUCCESS: {
+    border: "border-l-emerald-400", iconBg: "bg-emerald-50", iconColor: "text-emerald-600",
+    badgeBg: "bg-emerald-100", badgeText: "text-emerald-700", label: "Success",
+  },
+  WARNING: {
+    border: "border-l-amber-400", iconBg: "bg-amber-50", iconColor: "text-amber-600",
+    badgeBg: "bg-amber-100", badgeText: "text-amber-700", label: "Warning",
+  },
+  ERROR: {
+    border: "border-l-red-400", iconBg: "bg-red-50", iconColor: "text-red-600",
+    badgeBg: "bg-red-100", badgeText: "text-red-700", label: "Error",
+  },
+  INFO: {
+    border: "border-l-blue-400", iconBg: "bg-blue-50", iconColor: "text-blue-600",
+    badgeBg: "bg-blue-100", badgeText: "text-blue-600", label: "Info",
+  },
+};
+
+// ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const router = useRouter();
+  const [isAuth, setIsAuth]             = useState(false);
+  const [isCheckingAuth, setChecking]   = useState(true);
+  const [notifications, setNotifications] = useState<SmartNotification[]>([]);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState<string | null>(null);
+  const [filter, setFilter]             = useState<"all" | "unread" | "read">("all");
+  const [typeFilter, setTypeFilter]     = useState<"all" | NotifType>("all");
+  const [tagFilter, setTagFilter]       = useState<string>("all");
+  const [lastUpdated, setLastUpdated]   = useState<Date | null>(null);
 
-  // ── Load ──────────────────────────────────────────────────────────────────
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.replace("/register?mode=signin");
+    } else {
+      setIsAuth(true);
+      setChecking(false);
+    }
+  }, [router]);
 
-  const loadNotifications = useCallback(async (silent = false) => {
+  // ── Fetch & generate ──────────────────────────────────────────────────────
+  const fetchAndGenerate = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      if (!silent) setLoading(true);
-      else setRefreshing(true);
-      setError(null);
-
-      const data = await notificationService.getAll();
-      setNotifications(Array.isArray(data) ? data : []);
+      const txns = await transactionsAPI.getAll();
+      setNotifications(generateNotifications(txns));
       setLastUpdated(new Date());
-    } catch (err: any) {
-      console.error('Failed to load notifications:', err);
-      // Only show error if it's not just an empty service
-      if (!err?.message?.includes('404')) {
-        setError(err.message || 'Failed to load notifications');
-      }
-      setNotifications([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load transactions");
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    loadNotifications();
-    // Auto-refresh every 5 minutes
-    const interval = setInterval(() => loadNotifications(true), 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [loadNotifications]);
+    if (isAuth) void fetchAndGenerate();
+  }, [isAuth, fetchAndGenerate]);
 
-  // ── Actions ───────────────────────────────────────────────────────────────
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
+  const allTags     = useMemo(() => ["all", ...new Set(notifications.map(n => n.tag))], [notifications]);
 
-  const handleMarkAsRead = async (id: string) => {
-    setActionLoading(id);
-    try {
-      await notificationService.markAsRead(id);
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-    } catch (err) {
-      console.error('Failed to mark as read:', err);
-      // Optimistic update anyway
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  const filtered = useMemo(() => notifications.filter(n => {
+    const readOk = filter === "all" || (filter === "unread" ? !n.read : n.read);
+    const typeOk = typeFilter === "all" || n.type === typeFilter;
+    const tagOk  = tagFilter === "all" || n.tag === tagFilter;
+    return readOk && typeOk && tagOk;
+  }), [notifications, filter, typeFilter, tagFilter]);
 
-  const handleDismiss = async (id: string) => {
-    setActionLoading(id);
-    try {
-      await notificationService.delete(id);
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-    } catch (err) {
-      console.error('Failed to dismiss notification:', err);
-      // Remove from UI anyway (optimistic)
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  // ── Actions ────────────────────────────────────────────────────────────────
+  const markRead    = (id: string) => setNotifications(p => p.map(n => n.id === id ? { ...n, read: true } : n));
+  const dismiss     = (id: string) => setNotifications(p => p.filter(n => n.id !== id));
+  const markAllRead = () => setNotifications(p => p.map(n => ({ ...n, read: true })));
+  const clearAll    = () => { if (confirm("Clear all notifications?")) setNotifications([]); };
 
-  const handleMarkAllRead = async () => {
-    setActionLoading('all');
-    try {
-      await notificationService.markAllAsRead();
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    } catch (err) {
-      console.error('Failed to mark all as read:', err);
-      // Optimistic
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  // ── Loading / Auth ─────────────────────────────────────────────────────────
+  if (isCheckingAuth || !isAuth) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-  const handleDeleteAll = async () => {
-    if (!confirm('Delete all notifications?')) return;
-    setActionLoading('delete-all');
-    try {
-      await notificationService.deleteAll();
-      setNotifications([]);
-    } catch (err) {
-      console.error('Failed to delete all:', err);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // ── Filtered data ─────────────────────────────────────────────────────────
-
-  const filteredNotifications = notifications.filter((n) => {
-    const matchesRead =
-      filter === 'all' ? true : filter === 'unread' ? !n.read : n.read;
-    const matchesType =
-      typeFilter === 'all' ? true : n.type?.toLowerCase() === typeFilter.toLowerCase();
-    return matchesRead && matchesType;
-  });
-
-  const unreadCount = notifications.filter((n) => !n.read).length;
-  const availableTypes = [...new Set(notifications.map((n) => n.type).filter(Boolean))];
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
-        {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <Mail className="w-8 h-8 text-blue-500" />
-                Notifications
-              </h1>
-              <p className="text-gray-500 mt-1 text-sm">
-                {unreadCount > 0
-                  ? `${unreadCount} unread · ${notifications.length} total`
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Mail className="w-4 h-4 text-blue-500" />
+              <span className="text-xs font-bold text-blue-500 uppercase tracking-widest">Inbox</span>
+            </div>
+            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Notifications</h1>
+            <p className="text-sm text-gray-400 mt-1">
+              {loading
+                ? "Loading your notifications…"
+                : unreadCount > 0
+                  ? `${unreadCount} unread · ${notifications.length} total · Updated ${lastUpdated ? timeAgo(lastUpdated) : "—"}`
                   : notifications.length > 0
-                  ? 'All caught up!'
-                  : 'No notifications yet'}
-                {lastUpdated && (
-                  <span className="ml-2 text-gray-400">
-                    · Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                )}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              <button
-                onClick={() => loadNotifications(true)}
-                disabled={refreshing || loading}
-                className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
-              >
-                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-              {unreadCount > 0 && (
-                <button
-                  onClick={handleMarkAllRead}
-                  disabled={actionLoading === 'all'}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition disabled:opacity-50"
-                >
-                  <CheckCheck className="w-4 h-4" />
-                  {actionLoading === 'all' ? 'Marking…' : 'Mark All Read'}
-                </button>
-              )}
-              {notifications.length > 0 && (
-                <button
-                  onClick={handleDeleteAll}
-                  disabled={actionLoading === 'delete-all'}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100 transition disabled:opacity-50"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Clear All
-                </button>
-              )}
-            </div>
+                    ? `All caught up 🎉 · Updated ${lastUpdated ? timeAgo(lastUpdated) : "—"}`
+                    : "No notifications yet"}
+            </p>
           </div>
 
-          {/* Read/Unread filter */}
-          <div className="flex items-center gap-3 mb-3 flex-wrap">
-            <span className="text-sm font-medium text-gray-600">Status:</span>
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              {(['all', 'unread', 'read'] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-3 py-1.5 rounded-md text-sm transition capitalize font-medium ${
-                    filter === f
-                      ? 'bg-white shadow-sm text-blue-600'
-                      : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  {f}
-                  {f === 'unread' && unreadCount > 0 && (
-                    <span className="ml-1.5 px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                      {unreadCount}
-                    </span>
-                  )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={() => void fetchAndGenerate()} disabled={loading}
+              className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 shadow-sm hover:bg-gray-50 transition disabled:opacity-50">
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+            {unreadCount > 0 && (
+              <button onClick={markAllRead}
+                className="inline-flex items-center gap-2 rounded-2xl bg-blue-50 border border-blue-100 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition">
+                <CheckCheck className="w-4 h-4" />
+                Mark All Read
+              </button>
+            )}
+            {notifications.length > 0 && (
+              <button onClick={clearAll}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-100 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition">
+                <Trash2 className="w-4 h-4" />
+                Clear All
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Stats row ───────────────────────────────────────────────────── */}
+        {notifications.length > 0 && (
+          <div className="grid grid-cols-4 gap-3">
+            {([
+              { label: "Total",   value: notifications.length,                        color: "text-gray-900", bg: "bg-white" },
+              { label: "Unread",  value: unreadCount,                                 color: "text-blue-600",  bg: "bg-blue-50" },
+              { label: "Success", value: notifications.filter(n=>n.type==="SUCCESS").length, color: "text-emerald-600", bg: "bg-emerald-50" },
+              { label: "Warning", value: notifications.filter(n=>n.type==="WARNING").length, color: "text-amber-600",   bg: "bg-amber-50" },
+            ] as const).map(s => (
+              <div key={s.label} className={`rounded-3xl border border-gray-100 ${s.bg} p-4 text-center shadow-sm`}>
+                <p className={`text-2xl font-extrabold ${s.color}`}>{s.value}</p>
+                <p className="text-xs font-semibold text-gray-400 mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Filter bar ──────────────────────────────────────────────────── */}
+        <div className="space-y-3">
+          {/* Read filter */}
+          <div className="flex items-center gap-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-1 w-fit">
+            {(["all", "unread", "read"] as const).map(f => (
+              <button key={f} onClick={() => setFilter(f)}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold capitalize transition-all ${
+                  filter === f ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-800 hover:bg-slate-50"
+                }`}>
+                {f}
+                {f === "unread" && unreadCount > 0 && (
+                  <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    filter === "unread" ? "bg-white/20 text-white" : "bg-blue-100 text-blue-600"
+                  }`}>{unreadCount}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Tag chips */}
+          {allTags.length > 2 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {allTags.map(tag => (
+                <button key={tag} onClick={() => setTagFilter(tag)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    tagFilter === tag
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-white border border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                  }`}>
+                  {tag === "all" ? "All Topics" : tag}
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Type filter */}
-          {availableTypes.length > 1 && (
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-sm font-medium text-gray-600">Type:</span>
-              <div className="flex flex-wrap gap-2">
-                <TypeChip label="All" active={typeFilter === 'all'} onClick={() => setTypeFilter('all')} />
-                {availableTypes.map((type) => (
-                  <TypeChip
-                    key={type}
-                    label={type}
-                    active={typeFilter === type}
-                    onClick={() => setTypeFilter(type!)}
-                  />
-                ))}
-              </div>
-            </div>
           )}
-        </div>
 
-        {/* ── Info banner ──────────────────────────────────────────────────── */}
-        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 flex items-start gap-3">
-          <Inbox className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
-          <div>
-            <p className="font-medium text-blue-900 text-sm">About Notifications</p>
-            <p className="text-sm text-blue-700 mt-0.5">
-              System notifications, announcements, and account updates appear here.
-              For budget alerts and spending warnings, visit{' '}
-              <a href="/alerts" className="underline font-medium">Financial Alerts</a>.
-            </p>
+          {/* Type chips */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {(["all", "SUCCESS", "WARNING", "INFO", "ERROR"] as const).map(t => (
+              <button key={t} onClick={() => setTypeFilter(t)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  typeFilter === t
+                    ? "bg-gray-900 text-white shadow-sm"
+                    : "bg-white border border-gray-200 text-gray-500 hover:border-gray-300"
+                }`}>
+                {t === "all" ? "All Types" : t.charAt(0) + t.slice(1).toLowerCase()}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* ── Error ────────────────────────────────────────────────────────── */}
-        {error && (
-          <div className="bg-red-50 border border-red-100 rounded-xl p-4 mb-6">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-              <div className="flex-1">
-                <p className="font-medium text-red-900 text-sm">Failed to load notifications</p>
-                <p className="text-sm text-red-700 mt-0.5">{error}</p>
-                <button
-                  onClick={() => loadNotifications()}
-                  className="mt-2 text-sm text-red-600 hover:text-red-800 font-medium underline"
-                >
-                  Try again
-                </button>
-              </div>
-            </div>
+        {/* ── Notification list ────────────────────────────────────────────── */}
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
+            <p className="text-sm text-gray-400 font-semibold">Generating notifications…</p>
           </div>
-        )}
-
-        {/* ── List ─────────────────────────────────────────────────────────── */}
-        <div className="space-y-2">
-          {loading ? (
-            <NotificationSkeleton />
-          ) : filteredNotifications.length === 0 ? (
-            <NotificationEmptyState filter={filter} typeFilter={typeFilter} />
-          ) : (
-            filteredNotifications.map((n) => (
-              <NotificationCard
-                key={n.id}
-                notification={n}
-                isLoading={actionLoading === n.id}
-                onMarkAsRead={() => handleMarkAsRead(n.id)}
-                onDismiss={() => handleDismiss(n.id)}
-              />
-            ))
-          )}
-        </div>
-
-        {/* ── Summary ──────────────────────────────────────────────────────── */}
-        {!loading && notifications.length > 0 && (
-          <div className="mt-6 bg-white rounded-2xl border border-gray-100 p-4">
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <SummaryItem value={notifications.length} label="Total" color="text-gray-900" />
-              <SummaryItem value={unreadCount} label="Unread" color="text-blue-600" />
-              <SummaryItem value={notifications.length - unreadCount} label="Read" color="text-green-600" />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Notification Card ────────────────────────────────────────────────────────
-
-function NotificationCard({
-  notification,
-  isLoading,
-  onMarkAsRead,
-  onDismiss,
-}: {
-  notification: Notification;
-  isLoading: boolean;
-  onMarkAsRead: () => void;
-  onDismiss: () => void;
-}) {
-  return (
-    <div
-      className={`bg-white rounded-xl border-l-4 border border-gray-100 p-4 transition-all ${getTypeBorder(
-        notification.type
-      )} ${!notification.read ? 'shadow-sm' : 'opacity-70'} ${isLoading ? 'animate-pulse' : ''}`}
-    >
-      <div className="flex items-start gap-4">
-        <div className="text-2xl shrink-0 mt-0.5">{getTypeEmoji(notification.type)}</div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <h3 className="font-semibold text-gray-900 text-sm">{notification.title}</h3>
-            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize ${getTypeColor(notification.type)}`}>
-              {notification.type?.toLowerCase()}
-            </span>
-            {!notification.read && (
-              <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full font-semibold">
-                NEW
-              </span>
-            )}
-          </div>
-          <p className="text-gray-600 text-sm mb-1.5 leading-relaxed">{notification.message}</p>
-          <p className="text-xs text-gray-400">
-            {new Date(notification.createdAt).toLocaleString()}
-          </p>
-        </div>
-        <div className="flex gap-1 shrink-0">
-          {!notification.read && (
-            <button
-              onClick={onMarkAsRead}
-              disabled={isLoading}
-              title="Mark as read"
-              className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition disabled:opacity-50"
-            >
-              <Check className="w-4 h-4" />
+        ) : error ? (
+          <div className="bg-red-50 border border-red-200 rounded-3xl p-8 text-center">
+            <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-3" />
+            <p className="text-sm font-bold text-red-700 mb-1">Failed to load</p>
+            <p className="text-xs text-red-500 mb-4">{error}</p>
+            <button onClick={() => void fetchAndGenerate()}
+              className="px-5 py-2 bg-red-500 text-white rounded-xl text-sm font-semibold hover:bg-red-600 transition">
+              Retry
             </button>
-          )}
-          <button
-            onClick={onDismiss}
-            disabled={isLoading}
-            title="Dismiss"
-            className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-12 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
+              <BellOff className="w-8 h-8 text-blue-300" />
+            </div>
+            <h3 className="text-base font-bold text-gray-700 mb-1">No Transactions Found</h3>
+            <p className="text-sm text-gray-400">Add transactions first — notifications are generated from your spending data.</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-12 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+            </div>
+            <h3 className="text-base font-bold text-gray-700 mb-1">No matches</h3>
+            <p className="text-sm text-gray-400">Try clearing your filters.</p>
+            <button onClick={() => { setFilter("all"); setTypeFilter("all"); setTagFilter("all"); }}
+              className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition">
+              Clear Filters
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map(notif => {
+              const cfg = TYPE_CONFIG[notif.type];
+              const Icon = notif.icon;
+              return (
+                <div key={notif.id}
+                  className={`group bg-white rounded-3xl border border-l-4 border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md ${cfg.border} ${
+                    notif.read ? "opacity-70" : ""
+                  }`}>
+                  <div className="p-5">
+                    <div className="flex items-start gap-4">
+                      {/* Icon */}
+                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${cfg.iconBg}`}>
+                        <Icon className={`w-5 h-5 ${cfg.iconColor}`} />
+                      </div>
 
-// ─── Small components ─────────────────────────────────────────────────────────
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className={`text-sm font-bold ${notif.read ? "text-gray-500" : "text-gray-900"}`}>
+                              {notif.title}
+                            </h4>
+                            {/* Type badge */}
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.badgeBg} ${cfg.badgeText}`}>
+                              {cfg.label}
+                            </span>
+                            {/* Tag */}
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                              {notif.tag}
+                            </span>
+                            {/* Unread dot */}
+                            {!notif.read && (
+                              <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                            )}
+                          </div>
 
-function TypeChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1 rounded-full text-sm transition capitalize font-medium ${
-        active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
+                          {/* Actions — visible on hover */}
+                          <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {!notif.read && (
+                              <button onClick={() => markRead(notif.id)} title="Mark as read"
+                                className="p-1.5 rounded-lg hover:bg-gray-100 transition">
+                                <Check className="w-3.5 h-3.5 text-gray-400" />
+                              </button>
+                            )}
+                            <button onClick={() => dismiss(notif.id)} title="Dismiss"
+                              className="p-1.5 rounded-lg hover:bg-red-50 transition">
+                              <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-400" />
+                            </button>
+                          </div>
+                        </div>
 
-function SummaryItem({ value, label, color }: { value: number; label: string; color: string }) {
-  return (
-    <div>
-      <p className={`text-2xl font-bold ${color}`}>{value}</p>
-      <p className="text-xs text-gray-500 mt-0.5">{label}</p>
-    </div>
-  );
-}
+                        <p className={`text-sm mt-1 leading-relaxed ${notif.read ? "text-gray-400" : "text-gray-600"}`}>
+                          {notif.message}
+                        </p>
 
-function NotificationSkeleton() {
-  return (
-    <>
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-white rounded-xl border border-gray-100 p-4 animate-pulse">
-          <div className="flex gap-4">
-            <div className="w-8 h-8 bg-gray-200 rounded-full" />
-            <div className="flex-1 space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-1/3" />
-              <div className="h-3 bg-gray-200 rounded w-2/3" />
-              <div className="h-3 bg-gray-200 rounded w-1/4" />
+                        <div className="flex items-center gap-3 mt-2 flex-wrap">
+                          {notif.amount && (
+                            <span className={`text-xs font-bold ${cfg.iconColor}`}>{fmt(notif.amount)}</span>
+                          )}
+                          {notif.category && (
+                            <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                              {notif.category}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1 text-[11px] text-gray-300">
+                            <Clock className="w-3 h-3" />
+                            {timeAgo(notif.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Footer summary ───────────────────────────────────────────────── */}
+        {!loading && notifications.length > 0 && (
+          <div className="bg-white rounded-3xl border border-blue-100 shadow-sm overflow-hidden">
+            <div className="h-1 w-full" style={{ background: "linear-gradient(to right,#3b82f6,#6366f1,#8b5cf6)" }} />
+            <div className="p-5 flex items-start gap-4">
+              <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="w-5 h-5 text-blue-500" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 mb-1">Notification Summary</h3>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  <strong>{notifications.length} notifications</strong> generated from your transaction history.{" "}
+                  {unreadCount > 0
+                    ? <span className="text-blue-600 font-semibold">{unreadCount} unread. </span>
+                    : <span className="text-emerald-600 font-semibold">All caught up! </span>}
+                  Notifications refresh automatically with each new transaction.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
-    </>
-  );
-}
-
-function NotificationEmptyState({ filter, typeFilter }: { filter: string; typeFilter: string }) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-      <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-        <Bell className="w-8 h-8 text-gray-300" />
+        )}
       </div>
-      <p className="text-gray-700 font-medium">No notifications found</p>
-      <p className="text-sm text-gray-400 mt-1">
-        {filter !== 'all' || typeFilter !== 'all'
-          ? 'Try adjusting your filters above.'
-          : 'New notifications will appear here when they arrive.'}
-      </p>
     </div>
   );
-}
-
-// ─── Pure helpers ─────────────────────────────────────────────────────────────
-
-function getTypeEmoji(type?: string): string {
-  switch ((type || '').toLowerCase()) {
-    case 'welcome': return '👋';
-    case 'alert': return '⚠️';
-    case 'success': return '✅';
-    case 'warning': return '🔔';
-    case 'info': return 'ℹ️';
-    default: return '📬';
-  }
-}
-
-function getTypeColor(type?: string): string {
-  switch ((type || '').toLowerCase()) {
-    case 'welcome': return 'bg-green-100 border-green-300 text-green-800';
-    case 'alert': return 'bg-red-100 border-red-300 text-red-800';
-    case 'success': return 'bg-emerald-100 border-emerald-300 text-emerald-800';
-    case 'warning': return 'bg-yellow-100 border-yellow-300 text-yellow-800';
-    case 'info': return 'bg-blue-100 border-blue-300 text-blue-800';
-    default: return 'bg-gray-100 border-gray-300 text-gray-800';
-  }
-}
-
-function getTypeBorder(type?: string): string {
-  switch ((type || '').toLowerCase()) {
-    case 'alert': return 'border-l-red-400';
-    case 'warning': return 'border-l-yellow-400';
-    case 'success': return 'border-l-green-400';
-    case 'welcome': return 'border-l-blue-400';
-    default: return 'border-l-gray-300';
-  }
 }
