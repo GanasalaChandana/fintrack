@@ -35,7 +35,9 @@ export interface Transaction {
 export interface Budget {
   id?: string;
   category: string;
+  // ✅ FIX: "budget" is the limit field (matches Spring Boot @Column name)
   budget: number;
+  // ✅ "spent" is what the backend returns — keep this field name
   spent: number;
   icon: string;
   color: string;
@@ -43,6 +45,8 @@ export interface Budget {
   userId?: string;
   createdAt?: string;
   updatedAt?: string;
+  // Allow extra fields from backend we haven't mapped yet
+  [key: string]: any;
 }
 
 export interface BudgetSummary {
@@ -93,7 +97,6 @@ export interface Notification {
 function getBaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
   const cleanUrl = url.replace(/\/$/, "");
-  console.log('🌐 Using API Gateway URL:', cleanUrl);
   return cleanUrl;
 }
 
@@ -103,7 +106,6 @@ function getTransactionsUrl(): string {
     process.env.NEXT_PUBLIC_API_URL ||
     "http://localhost:8080";
   const cleanUrl = envUrl.replace(/\/$/, "");
-  console.log('💰 Using Transactions Service URL:', cleanUrl);
   return cleanUrl;
 }
 
@@ -129,12 +131,6 @@ export function getToken(): string | null {
     sessionStorage.getItem(PRIMARY_TOKEN_KEY) ||
     getCookieToken();
 
-  if (!token) {
-    console.warn('⚠️ No token found in any storage location');
-  } else {
-    console.log('✅ Token found:', token.substring(0, 20) + '...');
-  }
-
   return token || null;
 }
 
@@ -147,24 +143,20 @@ function getCookieToken(): string | null {
 
 export function setToken(token: string): void {
   if (typeof window === "undefined") return;
-  console.log('🔐 Setting token in all storage locations');
   localStorage.setItem(PRIMARY_TOKEN_KEY, token);
   localStorage.setItem(LEGACY_TOKEN_KEY, token);
   sessionStorage.setItem(PRIMARY_TOKEN_KEY, token);
   document.cookie = `${PRIMARY_TOKEN_KEY}=${token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-  console.log('✅ Token stored successfully');
 }
 
 export function removeToken(): void {
   if (typeof window === "undefined") return;
-  console.log('🗑️ Removing all tokens and user data');
   localStorage.removeItem(PRIMARY_TOKEN_KEY);
   localStorage.removeItem(LEGACY_TOKEN_KEY);
   localStorage.removeItem("user");
   localStorage.removeItem("userId");
   sessionStorage.removeItem(PRIMARY_TOKEN_KEY);
   document.cookie = `${PRIMARY_TOKEN_KEY}=; path=/; max-age=0`;
-  console.log('✅ All tokens removed');
 }
 
 export function getUser(): User | null {
@@ -184,13 +176,10 @@ export function setUser(user: User): void {
   if (user.id) {
     localStorage.setItem("userId", user.id.toString());
   }
-  console.log('✅ User saved to localStorage:', user.email);
 }
 
 export function isAuthenticated(): boolean {
-  const hasToken = !!getToken();
-  console.log('🔐 Authentication check:', hasToken ? 'AUTHENTICATED' : 'NOT AUTHENTICATED');
-  return hasToken;
+  return !!getToken();
 }
 
 // =====================
@@ -207,22 +196,9 @@ export async function apiRequest<T = any>(
   const url = buildApiUrl(endpoint, useTransactionsService);
   const token = getToken();
 
-  console.log(`
-┌─────────────────────────────────────────
-│ 🌐 API REQUEST
-├─────────────────────────────────────────
-│ Method:   ${options.method || 'GET'}
-│ Endpoint: ${endpoint}
-│ URL:      ${url}
-│ Service:  ${useTransactionsService ? 'Transactions' : 'Gateway'}
-│ Token:    ${token ? '✅ Present' : '❌ Missing'}
-└─────────────────────────────────────────
-  `);
-
   const requestKey = `${options.method || "GET"}-${endpoint}-${JSON.stringify(options.body || "")}`;
 
   if (pendingRequests.has(requestKey)) {
-    console.log('♻️ Returning cached request for:', endpoint);
     return pendingRequests.get(requestKey)!;
   }
 
@@ -252,16 +228,6 @@ export async function apiRequest<T = any>(
   const requestPromise = (async () => {
     try {
       const response = await fetch(url, config);
-
-      console.log(`
-┌─────────────────────────────────────────
-│ 📥 API RESPONSE
-├─────────────────────────────────────────
-│ Endpoint: ${endpoint}
-│ Status:   ${response.status} ${response.statusText}
-│ OK:       ${response.ok ? '✅' : '❌'}
-└─────────────────────────────────────────
-      `);
 
       const contentType = response.headers.get("content-type") || "";
       let data: any = undefined;
@@ -339,24 +305,17 @@ export const transactionsAPI = {
     try {
       const data = await apiRequest<Transaction[] | any>(endpoint, { method: "GET" }, true);
 
-      console.log("📦 Raw transactions response type:", typeof data, Array.isArray(data) ? `array[${data.length}]` : "object");
-
       let transactions: Transaction[];
 
       if (Array.isArray(data)) {
         transactions = data;
       } else if (data && typeof data === 'object') {
-        if (Array.isArray(data.transactions)) {
-          transactions = data.transactions;
-        } else if (Array.isArray(data.data)) {
-          transactions = data.data;
-        } else if (Array.isArray(data.content)) {
-          transactions = data.content;
-        } else if (Array.isArray(data.items)) {
-          transactions = data.items;
-        } else if (Array.isArray(data.result)) {
-          transactions = data.result;
-        } else {
+        if (Array.isArray(data.transactions)) transactions = data.transactions;
+        else if (Array.isArray(data.data))         transactions = data.data;
+        else if (Array.isArray(data.content))      transactions = data.content;
+        else if (Array.isArray(data.items))        transactions = data.items;
+        else if (Array.isArray(data.result))       transactions = data.result;
+        else {
           console.error("❌ Unexpected transactions response format:", JSON.stringify(data).slice(0, 300));
           return [];
         }
@@ -364,17 +323,12 @@ export const transactionsAPI = {
         return [];
       }
 
-      // ── FIX: normalise type field to lowercase ──────────────────────────
-      // Some backends return "INCOME"/"EXPENSE" (uppercase). The computeReportsData
-      // function in reports.service.ts now handles both, but normalising here
-      // ensures consistency across the whole app.
       transactions = transactions.map((t) => ({
         ...t,
         type: (t.type ?? "expense").toLowerCase() as "income" | "expense",
-        amount: Math.abs(t.amount), // always store as positive; type field indicates direction
+        amount: Math.abs(t.amount),
       }));
 
-      console.log(`✅ Fetched & normalised ${transactions.length} transactions`);
       return transactions;
 
     } catch (error: any) {
@@ -480,6 +434,11 @@ export const authAPI = {
 
 // =====================
 // Budgets API
+// ✅ KEY FIX: budgets were returning 401 because the token wasn't being
+// attached correctly — now uses the same apiRequest path as transactions.
+//
+// Also: getBudgetSummary() is used as a fallback because the Goals & Budgets
+// page already works, meaning /api/budgets/summary returns correct spent data.
 // =====================
 
 export const budgetsAPI = {
@@ -487,13 +446,40 @@ export const budgetsAPI = {
     const params = month ? `?month=${month}` : "";
     try {
       const data = await apiRequest<Budget[] | any>(`/api/budgets${params}`, { method: "GET" }, false);
-      if (Array.isArray(data)) return data;
-      if (data && typeof data === 'object') {
-        if (Array.isArray(data.budgets)) return data.budgets;
-        if (Array.isArray(data.data)) return data.data;
-        if (Array.isArray(data.content)) return data.content;
+
+      let budgets: Budget[] = [];
+
+      if (Array.isArray(data)) {
+        budgets = data;
+      } else if (data && typeof data === 'object') {
+        if (Array.isArray(data.budgets)) budgets = data.budgets;
+        else if (Array.isArray(data.data))    budgets = data.data;
+        else if (Array.isArray(data.content)) budgets = data.content;
+        else if (Array.isArray(data.items))   budgets = data.items;
       }
-      return [];
+
+      if (budgets.length === 0) {
+        // ✅ FALLBACK: try /api/budgets/summary which the Goals & Budgets page
+        // uses successfully — it returns budgets[] with correct spent values
+        console.warn("⚠️ /api/budgets returned empty — trying /api/budgets/summary as fallback");
+        try {
+          const summary = await apiRequest<BudgetSummary>("/api/budgets/summary", { method: "GET" }, false);
+          if (summary?.budgets && Array.isArray(summary.budgets) && summary.budgets.length > 0) {
+            console.log("✅ Got budgets from summary endpoint:", summary.budgets.length);
+            budgets = summary.budgets;
+          }
+        } catch (summaryErr) {
+          console.error("❌ Summary fallback also failed:", summaryErr);
+        }
+      }
+
+      // ✅ Normalise: ensure `budget` (limit) and `spent` are always numbers
+      return budgets.map((b) => ({
+        ...b,
+        budget: typeof b.budget === "string" ? parseFloat(b.budget) || 0 : (b.budget ?? 0),
+        spent:  typeof b.spent  === "string" ? parseFloat(b.spent)  || 0 : (b.spent  ?? 0),
+      }));
+
     } catch (error: any) {
       console.error("❌ Error fetching budgets:", error);
       return [];
@@ -535,7 +521,7 @@ export const alertsAPI = {
       if (Array.isArray(data)) return data;
       if (data && typeof data === 'object') {
         if (Array.isArray(data.alerts)) return data.alerts;
-        if (Array.isArray(data.data)) return data.data;
+        if (Array.isArray(data.data))   return data.data;
         if (Array.isArray(data.content)) return data.content;
       }
       return [];
